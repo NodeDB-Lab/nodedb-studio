@@ -1,0 +1,23 @@
+[package]
+name = "nodedb-studio"
+description = "NodeDB Studio — GUI client for NodeDB"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[[bin]]
+name = "nodedb-studio"
+path = "src/main.rs"
+
+[dependencies]
+nodedb-client = { workspace = true }
+nodedb-types = { workspace = true }
+dioxus = { workspace = true }
+tokio = { workspace = true }
+serde = { workspace = true }
+sonic-rs = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

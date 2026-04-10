@@ -1,0 +1,42 @@
+[workspace]
+members = [
+  "nodedb-studio",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.0.0-beta.1"
+edition = "2024"
+rust-version = "1.94"
+license = "Apache-2.0"
+repository = "https://github.com/NodeDB-Lab/nodedb-studio"
+homepage = "https://nodedb.dev"
+
+[workspace.dependencies]
+# Internal
+nodedb-client = { version = "0.0.0-beta.1" }
+nodedb-types = { version = "0.0.0-beta.1" }
+
+# UI
+dioxus = { version = "0.6", features = ["desktop", "web"] }
+
+# Async
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+sonic-rs = "0.5"
+
+# Error handling
+thiserror = "2.0"
+tracing = "0.1"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+lto = "thin"
+strip = true
