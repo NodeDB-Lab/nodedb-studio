@@ -1,0 +1,14 @@
+/*
+ * NodeDB-Studio global stylesheet.
+ *
+ * Phase 1 placeholder. The faithful port of the mockup's design tokens
+ * (light/dark custom properties) and component classes lands in Phase 2.
+ */
+
+:root {
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+body {
+  margin: 0;
+}
