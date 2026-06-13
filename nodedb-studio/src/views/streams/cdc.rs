@@ -1,22 +1,26 @@
-//! Streams · CDC: a live tail of change events. Payloads are data strings, so
-//! their braces need no rsx escaping.
+//! Streams · CDC: a live tail of change events. Payloads are native documents
+//! (see `data::mock`); each is serialized to JSON here, at the view, for
+//! display — the same seam the real Explorer will use on `Value`s from the
+//! client.
 
 use dioxus::prelude::*;
 
+use crate::data::mock;
+
 #[component]
 pub fn StreamsCdc() -> Element {
-    // (time, op, op-css, collection, payload)
-    let rows = [
-        ("04:23:18.041", "INSERT", "ins", "events", "{ \"_id\": \"evt_01HMNJ…\", \"type\": \"page_view\", \"user_id\": \"u_44182\", \"props\": { \"path\": \"/dashboard\" } }"),
-        ("04:23:18.039", "UPDATE", "upd", "sessions", "{ \"_id\": \"s_88209\", \"last_seen\": \"2026-06-13T04:23:18Z\" } ⤳ +1 field"),
-        ("04:23:18.037", "INSERT", "ins", "events", "{ \"_id\": \"evt_01HMNJ…\", \"type\": \"click\", \"user_id\": \"u_77103\", \"props\": { \"el\": \"#cta-buy\" } }"),
-        ("04:23:18.035", "INSERT", "ins", "orders", "{ \"id\": 442004, \"user_id\": \"u_77103\", \"total\": 89.40, \"currency\": \"USD\" }"),
-        ("04:23:18.033", "DELETE", "del", "sessions_cache", "{ \"key\": \"session:u_91002\" }"),
-        ("04:23:18.031", "INSERT", "ins", "events", "{ \"_id\": \"evt_01HMNJ…\", \"type\": \"scroll\", \"user_id\": \"u_12998\" }"),
-        ("04:23:18.028", "UPDATE", "upd", "users", "{ \"_id\": \"u_44182\", \"last_login\": \"2026-06-13T04:23:18Z\" }"),
-        ("04:23:18.025", "INSERT", "ins", "events", "{ \"_id\": \"evt_01HMNJ…\", \"type\": \"page_view\", \"user_id\": \"u_31001\", \"props\": { \"path\": \"/pricing\" } }"),
-        ("04:23:18.022", "INSERT", "ins", "events", "{ \"_id\": \"evt_01HMNJ…\", \"type\": \"form_submit\", \"user_id\": \"u_44182\", \"props\": { \"form\": \"feedback\" } }"),
-    ];
+    // (time, op-label, op-css, collection, payload-json)
+    let rows: Vec<(&str, &str, &str, &str, String)> = mock::cdc_events()
+        .into_iter()
+        .map(|ev| {
+            let mut payload = sonic_rs::to_string(&ev.payload).unwrap_or_default();
+            if let Some(note) = ev.note {
+                payload.push(' ');
+                payload.push_str(note);
+            }
+            (ev.time, ev.op.label(), ev.op.css(), ev.collection, payload)
+        })
+        .collect();
     rsx! {
         div { class: "live-tail",
             div { class: "tail-toolbar",

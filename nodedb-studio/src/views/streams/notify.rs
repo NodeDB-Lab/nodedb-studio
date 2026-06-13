@@ -1,35 +1,33 @@
-//! Streams · LISTEN/NOTIFY: channel list + a live pub/sub tail.
+//! Streams · LISTEN/NOTIFY: channel list + a live pub/sub tail. Payloads are
+//! native documents (see `data::mock`), serialized to JSON here for display.
 
 use dioxus::prelude::*;
 
+use crate::data::mock;
+
 #[component]
 pub fn StreamsNotify() -> Element {
-    // (channel, listeners, active?)
-    let channels = [
-        ("user_events", "12", true),
-        ("deploy_hooks", "3", false),
-        ("cache_invalidate", "5", false),
-        ("alerts", "8", false),
-        ("jobs_done", "14", false),
-        ("presence_room_1", "22", false),
-    ];
-    // (time, source, payload)
-    let rows = [
-        ("04:23:18.041", "api-server-2", "{\"event\":\"login\",\"user\":\"u_44182\"}"),
-        ("04:23:17.812", "webhook-relay", "{\"event\":\"signup\",\"user\":\"u_99001\",\"plan\":\"pro\"}"),
-        ("04:23:17.501", "api-server-1", "{\"event\":\"profile_update\",\"user\":\"u_77103\"}"),
-        ("04:23:16.998", "analytics", "{\"event\":\"page_view\",\"user\":\"u_44182\",\"path\":\"/pricing\"}"),
-        ("04:23:16.422", "api-server-2", "{\"event\":\"logout\",\"user\":\"u_31001\"}"),
-    ];
+    let channels = mock::notify_channels();
+    // (time, source, payload-json)
+    let rows: Vec<(&str, &str, String)> = mock::notify_messages()
+        .into_iter()
+        .map(|m| {
+            (
+                m.time,
+                m.source,
+                sonic_rs::to_string(&m.payload).unwrap_or_default(),
+            )
+        })
+        .collect();
     rsx! {
         div { style: "display: grid; grid-template-columns: 260px 1fr; overflow: hidden;",
             div { style: "background: var(--bg-secondary); border-right: 0.5px solid var(--border-mid); padding: 10px;",
                 div { class: "eyebrow", style: "padding: 6px 10px;", "Channels (14)" }
-                for (name, count, active) in channels {
-                    div { class: if active { "collection active" } else { "collection" },
+                for c in channels {
+                    div { class: if c.active { "collection active" } else { "collection" },
                         span { class: "ico", "#" }
-                        " {name} "
-                        span { class: "count", "{count}" }
+                        " {c.name} "
+                        span { class: "count", "{c.listeners}" }
                     }
                 }
             }

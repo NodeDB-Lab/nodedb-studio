@@ -7,6 +7,8 @@
 //! reproduced. NodeDB version numbers are undecided (CLAUDE.md §2), so the
 //! server stat is a neutral "dev" placeholder rather than an invented version.
 
+use serde::ser::{Serialize, SerializeMap, Serializer};
+
 use crate::models::collection::{Collection, StorageMode};
 use crate::models::notification::{Notification, NotificationTarget, Severity};
 use crate::state::connection::{Capabilities, Capability};
@@ -230,4 +232,292 @@ pub fn notifications() -> Vec<Notification> {
             unread: false,
         },
     ]
+}
+
+// ── Streams payloads ─────────────────────────────────────────────────────────
+//
+// The CDC and LISTEN/NOTIFY tails show database records. Those records are
+// modelled here as native typed documents (`MockDoc`), mirroring how the real
+// `ConnectionService` will hand back `nodedb_types::Value` documents from the
+// client. The viewers serialize them to JSON via `sonic_rs` purely for display
+// — no JSON strings are carried around as data. `MockDoc` preserves field order
+// (unlike `Value::Object`'s `HashMap`), so the rendered JSON is deterministic.
+
+use FieldValue::{Float, Int, Nested, Str};
+
+/// A scalar (or nested-document) field value inside a [`MockDoc`].
+pub enum FieldValue {
+    Str(&'static str),
+    Int(i64),
+    Float(f64),
+    Nested(MockDoc),
+}
+
+/// An ordered document: `(key, value)` pairs in display order. Stands in for a
+/// `nodedb_types::Value::Object` returned by the client.
+pub struct MockDoc(pub Vec<(&'static str, FieldValue)>);
+
+impl Serialize for MockDoc {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (key, value) in &self.0 {
+            map.serialize_entry(key, value)?;
+        }
+        map.end()
+    }
+}
+
+impl Serialize for FieldValue {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            FieldValue::Str(s) => serializer.serialize_str(s),
+            FieldValue::Int(n) => serializer.serialize_i64(*n),
+            FieldValue::Float(f) => serializer.serialize_f64(*f),
+            FieldValue::Nested(doc) => doc.serialize(serializer),
+        }
+    }
+}
+
+fn doc(fields: Vec<(&'static str, FieldValue)>) -> MockDoc {
+    MockDoc(fields)
+}
+
+/// The change operation in a CDC event.
+#[derive(Clone, Copy)]
+pub enum ChangeOp {
+    Insert,
+    Update,
+    Delete,
+}
+
+impl ChangeOp {
+    /// Uppercase label shown in the op column.
+    pub fn label(self) -> &'static str {
+        match self {
+            ChangeOp::Insert => "INSERT",
+            ChangeOp::Update => "UPDATE",
+            ChangeOp::Delete => "DELETE",
+        }
+    }
+
+    /// CSS modifier class for the op pill.
+    pub fn css(self) -> &'static str {
+        match self {
+            ChangeOp::Insert => "ins",
+            ChangeOp::Update => "upd",
+            ChangeOp::Delete => "del",
+        }
+    }
+}
+
+/// One row in the Streams · CDC live tail.
+pub struct ChangeEvent {
+    pub time: &'static str,
+    pub op: ChangeOp,
+    pub collection: &'static str,
+    pub payload: MockDoc,
+    /// Optional annotation appended after the document (e.g. `⤳ +1 field`).
+    pub note: Option<&'static str>,
+}
+
+/// The CDC change feed, newest first.
+pub fn cdc_events() -> Vec<ChangeEvent> {
+    vec![
+        ChangeEvent {
+            time: "04:23:18.041",
+            op: ChangeOp::Insert,
+            collection: "events",
+            payload: doc(vec![
+                ("_id", Str("evt_01HMNJ…")),
+                ("type", Str("page_view")),
+                ("user_id", Str("u_44182")),
+                ("props", Nested(doc(vec![("path", Str("/dashboard"))]))),
+            ]),
+            note: None,
+        },
+        ChangeEvent {
+            time: "04:23:18.039",
+            op: ChangeOp::Update,
+            collection: "sessions",
+            payload: doc(vec![
+                ("_id", Str("s_88209")),
+                ("last_seen", Str("2026-06-13T04:23:18Z")),
+            ]),
+            note: Some("⤳ +1 field"),
+        },
+        ChangeEvent {
+            time: "04:23:18.037",
+            op: ChangeOp::Insert,
+            collection: "events",
+            payload: doc(vec![
+                ("_id", Str("evt_01HMNJ…")),
+                ("type", Str("click")),
+                ("user_id", Str("u_77103")),
+                ("props", Nested(doc(vec![("el", Str("#cta-buy"))]))),
+            ]),
+            note: None,
+        },
+        ChangeEvent {
+            time: "04:23:18.035",
+            op: ChangeOp::Insert,
+            collection: "orders",
+            payload: doc(vec![
+                ("id", Int(442004)),
+                ("user_id", Str("u_77103")),
+                ("total", Float(89.40)),
+                ("currency", Str("USD")),
+            ]),
+            note: None,
+        },
+        ChangeEvent {
+            time: "04:23:18.033",
+            op: ChangeOp::Delete,
+            collection: "sessions_cache",
+            payload: doc(vec![("key", Str("session:u_91002"))]),
+            note: None,
+        },
+        ChangeEvent {
+            time: "04:23:18.031",
+            op: ChangeOp::Insert,
+            collection: "events",
+            payload: doc(vec![
+                ("_id", Str("evt_01HMNJ…")),
+                ("type", Str("scroll")),
+                ("user_id", Str("u_12998")),
+            ]),
+            note: None,
+        },
+        ChangeEvent {
+            time: "04:23:18.028",
+            op: ChangeOp::Update,
+            collection: "users",
+            payload: doc(vec![
+                ("_id", Str("u_44182")),
+                ("last_login", Str("2026-06-13T04:23:18Z")),
+            ]),
+            note: None,
+        },
+        ChangeEvent {
+            time: "04:23:18.025",
+            op: ChangeOp::Insert,
+            collection: "events",
+            payload: doc(vec![
+                ("_id", Str("evt_01HMNJ…")),
+                ("type", Str("page_view")),
+                ("user_id", Str("u_31001")),
+                ("props", Nested(doc(vec![("path", Str("/pricing"))]))),
+            ]),
+            note: None,
+        },
+        ChangeEvent {
+            time: "04:23:18.022",
+            op: ChangeOp::Insert,
+            collection: "events",
+            payload: doc(vec![
+                ("_id", Str("evt_01HMNJ…")),
+                ("type", Str("form_submit")),
+                ("user_id", Str("u_44182")),
+                ("props", Nested(doc(vec![("form", Str("feedback"))]))),
+            ]),
+            note: None,
+        },
+    ]
+}
+
+/// A LISTEN/NOTIFY channel in the sidebar.
+pub struct NotifyChannel {
+    pub name: &'static str,
+    pub listeners: &'static str,
+    pub active: bool,
+}
+
+/// One row in the LISTEN/NOTIFY live tail.
+pub struct NotifyMessage {
+    pub time: &'static str,
+    pub source: &'static str,
+    pub payload: MockDoc,
+}
+
+/// The notify channel list.
+pub fn notify_channels() -> Vec<NotifyChannel> {
+    let ch = |name, listeners, active| NotifyChannel {
+        name,
+        listeners,
+        active,
+    };
+    vec![
+        ch("user_events", "12", true),
+        ch("deploy_hooks", "3", false),
+        ch("cache_invalidate", "5", false),
+        ch("alerts", "8", false),
+        ch("jobs_done", "14", false),
+        ch("presence_room_1", "22", false),
+    ]
+}
+
+/// The pub/sub message tail for the active channel.
+pub fn notify_messages() -> Vec<NotifyMessage> {
+    vec![
+        NotifyMessage {
+            time: "04:23:18.041",
+            source: "api-server-2",
+            payload: doc(vec![("event", Str("login")), ("user", Str("u_44182"))]),
+        },
+        NotifyMessage {
+            time: "04:23:17.812",
+            source: "webhook-relay",
+            payload: doc(vec![
+                ("event", Str("signup")),
+                ("user", Str("u_99001")),
+                ("plan", Str("pro")),
+            ]),
+        },
+        NotifyMessage {
+            time: "04:23:17.501",
+            source: "api-server-1",
+            payload: doc(vec![
+                ("event", Str("profile_update")),
+                ("user", Str("u_77103")),
+            ]),
+        },
+        NotifyMessage {
+            time: "04:23:16.998",
+            source: "analytics",
+            payload: doc(vec![
+                ("event", Str("page_view")),
+                ("user", Str("u_44182")),
+                ("path", Str("/pricing")),
+            ]),
+        },
+        NotifyMessage {
+            time: "04:23:16.422",
+            source: "api-server-2",
+            payload: doc(vec![("event", Str("logout")), ("user", Str("u_31001"))]),
+        },
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn payload_serializes_with_fields_in_declared_order() {
+        // The orders INSERT row: keys must come out in insertion order, not
+        // the alphabetical/HashMap order a `Value::Object` would impose.
+        let json = sonic_rs::to_string(&cdc_events()[3].payload).unwrap();
+        assert_eq!(
+            json,
+            r#"{"id":442004,"user_id":"u_77103","total":89.4,"currency":"USD"}"#
+        );
+    }
+
+    #[test]
+    fn nested_document_serializes() {
+        let json = sonic_rs::to_string(&cdc_events()[0].payload).unwrap();
+        assert_eq!(
+            json,
+            r#"{"_id":"evt_01HMNJ…","type":"page_view","user_id":"u_44182","props":{"path":"/dashboard"}}"#
+        );
+    }
 }
