@@ -33,8 +33,6 @@
 .env.*.local
 .envrc
 resource
-AGENTS.md
-CLAUDE.md
 .codex
 
 # OS-specific
