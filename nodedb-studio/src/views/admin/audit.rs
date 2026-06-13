@@ -6,11 +6,46 @@ use dioxus::prelude::*;
 pub fn AuditView() -> Element {
     // (when, actor, action, target, pill-css, result)
     let rows = [
-        ("04:18:02", "hatta", "GRANT", "role:writer → aisha", "ok", "ok"),
-        ("03:42:14", "farhan", "CREATE TABLE", "analytics.cohorts", "ok", "ok"),
-        ("03:14:08", "backup-svc", "SNAPSHOT", "full · 2.4GB", "ok", "ok"),
-        ("02:51:22", "mkhairi", "ALTER POLICY", "orders_own_only", "ok", "ok"),
-        ("02:10:01", "hatta", "LOGIN FAIL", "—", "err", "denied · bad pw"),
+        (
+            "04:18:02",
+            "hatta",
+            "GRANT",
+            "role:writer → aisha",
+            "ok",
+            "ok",
+        ),
+        (
+            "03:42:14",
+            "farhan",
+            "CREATE TABLE",
+            "analytics.cohorts",
+            "ok",
+            "ok",
+        ),
+        (
+            "03:14:08",
+            "backup-svc",
+            "SNAPSHOT",
+            "full · 2.4GB",
+            "ok",
+            "ok",
+        ),
+        (
+            "02:51:22",
+            "mkhairi",
+            "ALTER POLICY",
+            "orders_own_only",
+            "ok",
+            "ok",
+        ),
+        (
+            "02:10:01",
+            "hatta",
+            "LOGIN FAIL",
+            "—",
+            "err",
+            "denied · bad pw",
+        ),
         ("01:08:55", "hatta", "LOGIN", "—", "ok", "ok"),
     ];
     rsx! {

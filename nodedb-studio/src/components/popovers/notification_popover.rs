@@ -13,9 +13,15 @@ use crate::state::ui::Popover;
 fn target_route(target: NotificationTarget) -> Route {
     match target {
         NotificationTarget::Sync => Route::Sync {},
-        NotificationTarget::StreamsTopics => Route::Streams { tab: "topics".to_string() },
-        NotificationTarget::StreamsCron => Route::Streams { tab: "cron".to_string() },
-        NotificationTarget::Admin => Route::Admin { tab: "cluster".to_string() },
+        NotificationTarget::StreamsTopics => Route::Streams {
+            tab: "topics".to_string(),
+        },
+        NotificationTarget::StreamsCron => Route::Streams {
+            tab: "cron".to_string(),
+        },
+        NotificationTarget::Admin => Route::Admin {
+            tab: "cluster".to_string(),
+        },
         NotificationTarget::Query => Route::Query {},
     }
 }

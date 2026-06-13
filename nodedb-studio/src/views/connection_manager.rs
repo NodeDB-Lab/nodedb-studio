@@ -84,7 +84,10 @@ fn ConnectionCard(conn: SavedConnection, on_connect: EventHandler<String>) -> El
         ConnStatus::ReadOnly => ("pill warn", "read-only", ""),
         ConnStatus::Offline => ("pill", "offline", "background:var(--text-tertiary)"),
     };
-    let dbs = conn.db_count.map(|n| n.to_string()).unwrap_or_else(|| "—".to_string());
+    let dbs = conn
+        .db_count
+        .map(|n| n.to_string())
+        .unwrap_or_else(|| "—".to_string());
     let ping = conn.ping.clone().unwrap_or_else(|| "—".to_string());
 
     rsx! {

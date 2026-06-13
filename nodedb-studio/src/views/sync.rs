@@ -6,9 +6,36 @@ use dioxus::prelude::*;
 pub fn Sync() -> Element {
     // (peer, addr, role, lag, last_sync, ops, pill-css, status)
     let peers = [
-        ("edge-sg-1", "10.4.12.18", "follower", "12ms", "2s ago", "8.2M / 14.1M", "ok", "healthy"),
-        ("edge-tokyo-1", "", "follower", "88ms", "3s ago", "8.2M / 12.0M", "ok", "healthy"),
-        ("edge-mobile-fleet", "", "edge cluster", "2.4s", "12s ago", "2.1M / 5.4M", "warn", "degraded"),
+        (
+            "edge-sg-1",
+            "10.4.12.18",
+            "follower",
+            "12ms",
+            "2s ago",
+            "8.2M / 14.1M",
+            "ok",
+            "healthy",
+        ),
+        (
+            "edge-tokyo-1",
+            "",
+            "follower",
+            "88ms",
+            "3s ago",
+            "8.2M / 12.0M",
+            "ok",
+            "healthy",
+        ),
+        (
+            "edge-mobile-fleet",
+            "",
+            "edge cluster",
+            "2.4s",
+            "12s ago",
+            "2.1M / 5.4M",
+            "warn",
+            "degraded",
+        ),
     ];
     rsx! {
         div { class: "view active",

@@ -10,7 +10,9 @@ pub fn StreamsLanding() -> Element {
     let nav = use_navigator();
     let open = move |tab: &'static str| {
         move |_| {
-            nav.push(Route::Streams { tab: tab.to_string() });
+            nav.push(Route::Streams {
+                tab: tab.to_string(),
+            });
         }
     };
 

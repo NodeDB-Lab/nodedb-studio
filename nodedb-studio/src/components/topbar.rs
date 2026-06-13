@@ -18,7 +18,11 @@ use crate::state::ui::Popover;
 
 /// Open `which`, or close it if it is already the open popover.
 fn toggled(current: Option<Popover>, which: Popover) -> Option<Popover> {
-    if current == Some(which) { None } else { Some(which) }
+    if current == Some(which) {
+        None
+    } else {
+        Some(which)
+    }
 }
 
 #[component]
@@ -34,7 +38,11 @@ pub fn Topbar() -> Element {
     };
 
     let badge = unread_count(&notifs.read()[..], &c.capabilities);
-    let badge_class = if badge == 0 { "bell-badge zero" } else { "bell-badge" };
+    let badge_class = if badge == 0 {
+        "bell-badge zero"
+    } else {
+        "bell-badge"
+    };
 
     rsx! {
         header { class: "topbar",
