@@ -7,27 +7,27 @@ resolver = "2"
 [workspace.package]
 version = "0.0.0-beta.1"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.96"
 license = "Apache-2.0"
 repository = "https://github.com/NodeDB-Lab/nodedb-studio"
 homepage = "https://nodedb.dev"
 
 [workspace.dependencies]
-# Internal
-nodedb-client = { version = "0.0.0-beta.1" }
-nodedb-types = { version = "0.0.0-beta.1" }
-
-# UI
-dioxus = { version = "0.6", features = ["desktop", "web"] }
-
+# Internal NodeDB crates.
+nodedb-client = "0.3.0"
+nodedb-types = "0.3.0"
 # Async
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+# UI. The `router` feature re-exports the router through dioxus::prelude.
+# Desktop-only for the skeleton.
+dioxus = { version = "0.7", features = ["desktop", "router"] }
 
-# Serialization
+# Serialization. Kept for derive on models/preferences; no runtime parsing
+# happens in the skeleton (mock data is hardcoded Rust).
 serde = { version = "1", features = ["derive"] }
 sonic-rs = "0.5"
 
-# Error handling
+# Error handling / diagnostics
 thiserror = "2.0"
 tracing = "0.1"
 

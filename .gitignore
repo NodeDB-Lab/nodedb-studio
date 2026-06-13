@@ -6,7 +6,6 @@
 /nodedb-data/
 **/*.rs.bk
 *.pdb
-Cargo.lock
 
 # IDE and Editor files
 .vscode/
@@ -34,8 +33,6 @@ Cargo.lock
 .env.*.local
 .envrc
 resource
-AGENTS.md
-CLAUDE.md
 .codex
 
 # OS-specific
@@ -102,3 +99,9 @@ dmypy.json
 .gradle/
 
 .cargo/
+
+# Local reference only — not tracked
+docs/nodedb_lab_studio_mockup_v4.html
+specs/*
+docs/*
+.DS_Store
