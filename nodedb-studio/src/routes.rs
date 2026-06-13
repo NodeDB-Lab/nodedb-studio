@@ -5,7 +5,7 @@
 //! share `StudioLayout`, which renders the persistent chrome (rail, topbar,
 //! statusbar) around the content `Outlet`.
 
-use dioxus::events::Key;
+use dioxus::html::Key;
 use dioxus::prelude::*;
 
 use crate::components::command_palette::CommandPalette;

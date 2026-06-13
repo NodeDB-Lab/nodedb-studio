@@ -7,12 +7,66 @@ pub fn RaftView() -> Element {
     // (node, leader?, match_index, lag, lag_warn, heartbeat, state, state_pill)
     let rows = [
         ("node-1", true, "1,488,201", "—", false, "—", "—", ""),
-        ("node-2", false, "1,488,201", "0", false, "12 ms", "replicating", ""),
-        ("node-3", false, "1,488,198", "3", false, "14 ms", "replicating", ""),
-        ("node-4", false, "1,488,200", "1", false, "15 ms", "replicating", ""),
-        ("node-5", false, "1,486,892", "1,309", true, "88 ms", "catching up", "warn"),
-        ("node-6", false, "1,488,201", "0", false, "11 ms", "replicating", ""),
-        ("node-7", false, "1,488,199", "2", false, "13 ms", "replicating", ""),
+        (
+            "node-2",
+            false,
+            "1,488,201",
+            "0",
+            false,
+            "12 ms",
+            "replicating",
+            "",
+        ),
+        (
+            "node-3",
+            false,
+            "1,488,198",
+            "3",
+            false,
+            "14 ms",
+            "replicating",
+            "",
+        ),
+        (
+            "node-4",
+            false,
+            "1,488,200",
+            "1",
+            false,
+            "15 ms",
+            "replicating",
+            "",
+        ),
+        (
+            "node-5",
+            false,
+            "1,486,892",
+            "1,309",
+            true,
+            "88 ms",
+            "catching up",
+            "warn",
+        ),
+        (
+            "node-6",
+            false,
+            "1,488,201",
+            "0",
+            false,
+            "11 ms",
+            "replicating",
+            "",
+        ),
+        (
+            "node-7",
+            false,
+            "1,488,199",
+            "2",
+            false,
+            "13 ms",
+            "replicating",
+            "",
+        ),
     ];
     rsx! {
         div { class: "subview active",
@@ -38,7 +92,7 @@ pub fn RaftView() -> Element {
                                         if r.1 { span { class: "pill info", "leader" } }
                                     }
                                     td { class: "mono", "{r.2}" }
-                                    td { class: if r.4 { "mono" } else { "mono" }, style: if r.4 { "color:var(--text-warning)" } else { "" }, "{r.3}" }
+                                    td { class: "mono", style: if r.4 { "color:var(--text-warning)" } else { "" }, "{r.3}" }
                                     td { class: "mono", "{r.5}" }
                                     td {
                                         if r.7 == "warn" {

@@ -180,7 +180,7 @@ fn AboutPane() -> Element {
             div { style: "font-family: var(--font-mono); font-size: 11px; line-height: 1.8; margin-top: 14px;",
                 AboutRow { k: "version", v: "dev" }
                 AboutRow { k: "build", v: "2026.06.13" }
-                AboutRow { k: "runtime", v: "dioxus 0.6" }
+                AboutRow { k: "runtime", v: "dioxus 0.7" }
                 AboutRow { k: "platform", v: "darwin-arm64" }
                 AboutRow { k: "license", v: "Apache 2.0" }
             }
