@@ -38,17 +38,22 @@ cargo build --release           # binary at target/release/nodedb-studio
 
 ### Local NodeDB dependency
 
-The crate depends on `nodedb-client` / `nodedb-types`. The published `0.0.0` crates are broken
-placeholders, so the workspace points these at a **local NodeDB checkout** via path deps in the
-root `Cargo.toml`:
+The crate depends on `nodedb-client` / `nodedb-types`, pinned to a published version in the root
+`Cargo.toml`. Until those crates are published, point them at a **local NodeDB checkout** with a
+Cargo patch.
+
+Create `.cargo/config.toml` at the workspace root (it is gitignored, so it stays machine-local and
+never lands in the published manifest):
 
 ```toml
+[patch.crates-io]
 nodedb-client = { path = "../nodedb/nodedb-client" }
 nodedb-types  = { path = "../nodedb/nodedb-types" }
 ```
 
-Adjust those paths if your NodeDB checkout lives elsewhere. (The skeleton does not yet import these
-crates — they compile as dependencies only.)
+Adjust the paths if your NodeDB checkout lives elsewhere, and make sure the version pinned in
+`Cargo.toml` matches your local NodeDB workspace version (see its root `Cargo.toml`). (The skeleton
+does not yet import these crates — they compile as dependencies only.)
 
 ## Project structure
 

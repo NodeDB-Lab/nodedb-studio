@@ -7,25 +7,20 @@ resolver = "2"
 [workspace.package]
 version = "0.0.0-beta.1"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.96"
 license = "Apache-2.0"
 repository = "https://github.com/NodeDB-Lab/nodedb-studio"
 homepage = "https://nodedb.dev"
 
 [workspace.dependencies]
-# Internal. Local path to the NodeDB workspace checkout (../nodedb). The
-# published v0.0.0 crates are broken placeholders, so the skeleton builds
-# against the real local crates instead. Path is machine-specific; adjust if
-# your NodeDB checkout lives elsewhere.
-nodedb-client = { path = "../nodedb/nodedb-client" }
-nodedb-types = { path = "../nodedb/nodedb-types" }
+# Internal NodeDB crates.
+nodedb-client = "0.3.0"
+nodedb-types = "0.3.0"
 # Async
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
-# UI. The `router` feature re-exports dioxus-router through dioxus::prelude,
-# which is the 0.6 idiom (CLAUDE.md predates this and names dioxus-router
-# directly; same crate, just gated behind the feature now). Desktop-only for
-# the skeleton.
-dioxus = { version = "0.6", features = ["desktop", "router"] }
+# UI. The `router` feature re-exports the router through dioxus::prelude.
+# Desktop-only for the skeleton.
+dioxus = { version = "0.7", features = ["desktop", "router"] }
 
 # Serialization. Kept for derive on models/preferences; no runtime parsing
 # happens in the skeleton (mock data is hardcoded Rust).

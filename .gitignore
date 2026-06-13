@@ -6,7 +6,6 @@
 /nodedb-data/
 **/*.rs.bk
 *.pdb
-Cargo.lock
 
 # IDE and Editor files
 .vscode/
