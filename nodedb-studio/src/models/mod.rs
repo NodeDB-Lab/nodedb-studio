@@ -2,5 +2,4 @@
 //! databases, notifications); live UI state lives in `crate::state`.
 
 pub mod collection;
-pub mod database;
 pub mod notification;
