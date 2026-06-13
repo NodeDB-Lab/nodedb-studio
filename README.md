@@ -29,7 +29,9 @@ Heavy widgets (graph/chart/map renderers, code editor) are intentionally static 
 
 ## Building & running
 
-This is a Cargo workspace; the app is the `nodedb-studio` member crate.
+This is a Cargo workspace; the app is the `nodedb-studio` member crate. It requires a recent stable
+Rust toolchain (see `rust-version` in `Cargo.toml`); run `rustup update stable` if Cargo reports your
+toolchain is too old.
 
 ```bash
 cargo run -p nodedb-studio      # opens the desktop window (1440x900)
