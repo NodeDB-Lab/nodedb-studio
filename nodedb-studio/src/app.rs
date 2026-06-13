@@ -12,7 +12,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::components::modal::ModalHost;
+use crate::modals::ModalHost;
 use crate::services::connection_service::{ConnectionService, MockConnectionService};
 use crate::state::connection::ActiveConnection;
 use crate::state::preferences::Preferences;

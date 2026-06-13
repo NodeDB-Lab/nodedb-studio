@@ -5,6 +5,7 @@
 mod app;
 mod components;
 mod data;
+mod modals;
 mod models;
 mod routes;
 mod services;
