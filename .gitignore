@@ -102,3 +102,7 @@ dmypy.json
 .gradle/
 
 .cargo/
+
+# Local reference only — not tracked
+docs/nodedb_lab_studio_mockup_v4.html
+.DS_Store

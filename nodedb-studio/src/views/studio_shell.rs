@@ -1,33 +1,23 @@
 //! The connected state: the studio shell.
 //!
-//! Phase 1 renders a minimal placeholder that reflects per-connection identity
-//! and proves Disconnect returns to the Connection Manager. The real shell
-//! (rail + topbar + statusbar) and the internal `Route` tree land in Phase 3.
+//! Provides the studio-scoped UI signals (which popover is open, whether the
+//! command palette is open) and mounts the router. The router renders
+//! `StudioLayout`, which consumes these signals. `App` mounts this only while
+//! connected, so the router never coexists with the Connection Manager.
 
 use dioxus::prelude::*;
 
-use crate::state::connection::ActiveConnection;
+use crate::routes::Route;
+use crate::state::ui::Popover;
 
 #[component]
 pub fn Studio() -> Element {
-    let mut active = use_context::<Signal<Option<ActiveConnection>>>();
-
-    // Studio is only mounted by `App` when a connection is active, so the
-    // session is always present here.
-    let conn = active
-        .read()
-        .clone()
-        .expect("Studio is rendered only while connected");
+    // Shared, studio-only UI state. Provided above the router so the layout and
+    // topbar (rendered inside the router) can consume them via context.
+    use_context_provider(|| Signal::new(None::<Popover>));
+    use_context_provider(|| Signal::new(false)); // command palette open
 
     rsx! {
-        div { class: "studio",
-            h1 { "{conn.name}" }
-            p { "{conn.user} · {conn.role} · db: {conn.current_database}" }
-            button {
-                class: "btn",
-                onclick: move |_| active.set(None),
-                "Disconnect"
-            }
-        }
+        Router::<Route> {}
     }
 }

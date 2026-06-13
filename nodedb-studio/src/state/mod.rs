@@ -6,3 +6,4 @@ pub mod connection;
 pub mod connections_registry;
 pub mod notifications;
 pub mod preferences;
+pub mod ui;

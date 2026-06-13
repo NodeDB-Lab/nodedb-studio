@@ -3,8 +3,10 @@
 //! Entry point: configures the desktop window and launches the root `App`.
 
 mod app;
+mod components;
 mod data;
 mod models;
+mod routes;
 mod services;
 mod state;
 mod views;

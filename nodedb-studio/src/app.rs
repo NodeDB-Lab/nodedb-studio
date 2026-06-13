@@ -12,9 +12,11 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
+use crate::components::modal::ModalHost;
 use crate::services::connection_service::{ConnectionService, MockConnectionService};
 use crate::state::connection::ActiveConnection;
 use crate::state::preferences::Preferences;
+use crate::state::ui::ModalKind;
 use crate::views::connection_manager::ConnectionManager;
 use crate::views::studio_shell::Studio;
 
@@ -36,6 +38,9 @@ pub fn App() -> Element {
     use_context_provider(|| Signal::new(registry));
     use_context_provider(|| Signal::new(notifications));
     use_context_provider(|| Signal::new(Preferences::default()));
+    // Modal state is provided here (not in Studio) because Preferences is
+    // reachable while disconnected and via Cmd+, in either state.
+    use_context_provider(|| Signal::new(None::<ModalKind>));
 
     let active = use_context::<Signal<Option<ActiveConnection>>>();
 
@@ -46,5 +51,7 @@ pub fn App() -> Element {
         } else {
             ConnectionManager {}
         }
+        // Overlays everything; renders nothing when no modal is open.
+        ModalHost {}
     }
 }
