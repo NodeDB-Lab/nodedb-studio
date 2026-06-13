@@ -38,7 +38,7 @@ impl StorageMode {
     }
 
     /// Stable machine key (used for CSS hooks / data attributes ported from
-    /// the mockup, e.g. a `data-mode` value).
+    /// the mockup, e.g. a `data-engine` value).
     pub fn key(self) -> &'static str {
         match self {
             StorageMode::Document => "document",
@@ -51,6 +51,21 @@ impl StorageMode {
             StorageMode::Fts => "fts",
         }
     }
+
+    /// Single-letter glyph shown on the collection row (Spatial uses `P` so it
+    /// doesn't collide with Strict's `S`, matching the mockup).
+    pub fn icon_letter(self) -> char {
+        match self {
+            StorageMode::Document => 'D',
+            StorageMode::Strict => 'S',
+            StorageMode::Vector => 'V',
+            StorageMode::Graph => 'G',
+            StorageMode::Timeseries => 'T',
+            StorageMode::Kv => 'K',
+            StorageMode::Spatial => 'P',
+            StorageMode::Fts => 'F',
+        }
+    }
 }
 
 /// A single collection within a database.
@@ -58,6 +73,7 @@ impl StorageMode {
 pub struct Collection {
     pub name: String,
     pub mode: StorageMode,
-    /// Approximate item count, for the sidebar badge. Mock-only for now.
-    pub count: u64,
+    /// Pre-formatted item count for display (e.g. "2.4M", "12,481"). A display
+    /// string in the skeleton; a real client would carry a numeric count.
+    pub count: String,
 }

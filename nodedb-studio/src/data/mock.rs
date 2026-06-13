@@ -7,6 +7,7 @@
 //! reproduced. NodeDB version numbers are undecided (CLAUDE.md §2), so the
 //! server stat is a neutral "dev" placeholder rather than an invented version.
 
+use crate::models::collection::{Collection, StorageMode};
 use crate::models::notification::{Notification, NotificationTarget, Severity};
 use crate::state::connection::{Capabilities, Capability};
 use crate::state::connections_registry::{ConnStatus, ConnectionProfile, SavedConnection};
@@ -129,6 +130,32 @@ pub fn connections() -> Vec<SavedConnection> {
             server: "dev".into(),
             profile: None,
         },
+    ]
+}
+
+/// Explorer collections, in sidebar display order (grouped by storage mode).
+/// One NodeDB instance exposes all eight modes; these are not separate engines.
+pub fn explorer_collections() -> Vec<Collection> {
+    let c = |name: &str, mode, count: &str| Collection {
+        name: name.to_string(),
+        mode,
+        count: count.to_string(),
+    };
+    vec![
+        c("users", StorageMode::Document, "12,481"),
+        c("events", StorageMode::Document, "2.4M"),
+        c("sessions", StorageMode::Document, "88,209"),
+        c("orders", StorageMode::Strict, "442,003"),
+        c("invoices", StorageMode::Strict, "95,818"),
+        c("doc_embeddings", StorageMode::Vector, "1.1M"),
+        c("product_embeds", StorageMode::Vector, "88,400"),
+        c("social_graph", StorageMode::Graph, "3.2M"),
+        c("metrics", StorageMode::Timeseries, "48M"),
+        c("sensor_temps", StorageMode::Timeseries, "5.1M"),
+        c("sessions_cache", StorageMode::Kv, "18,200"),
+        c("feature_flags", StorageMode::Kv, "42"),
+        c("store_locations", StorageMode::Spatial, "2,108"),
+        c("articles_idx", StorageMode::Fts, "241,005"),
     ]
 }
 
