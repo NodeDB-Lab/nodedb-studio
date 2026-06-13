@@ -79,6 +79,7 @@ pub fn NotificationPopover() -> Element {
                                 let item_class = if n.unread { "notif-item" } else { "notif-item read" };
                                 rsx! {
                                     div {
+                                        key: "{id}",
                                         class: "{item_class}",
                                         onclick: move |_| {
                                             for x in notifs.write().iter_mut() {

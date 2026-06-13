@@ -106,4 +106,5 @@ dmypy.json
 # Local reference only — not tracked
 docs/nodedb_lab_studio_mockup_v4.html
 specs/*
+docs/*
 .DS_Store

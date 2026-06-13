@@ -122,7 +122,7 @@ pub fn connections() -> Vec<SavedConnection> {
         },
         SavedConnection {
             name: "test-nodedb".into(),
-            meta: "nodedb · localhost:5433".into(),
+            meta: "nodedb · localhost:2480".into(),
             sub: String::new(),
             status: ConnStatus::Offline,
             db_count: None,

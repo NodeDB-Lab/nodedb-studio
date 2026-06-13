@@ -41,6 +41,7 @@ pub fn DatabasePopover() -> Element {
                         let item_class = if db == current { "db-popover-item current" } else { "db-popover-item" };
                         rsx! {
                             div {
+                                key: "{name}",
                                 class: "{item_class}",
                                 onclick: move |_| {
                                     if let Some(c) = active.write().as_mut() {
