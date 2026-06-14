@@ -1,19 +1,14 @@
 //! Notification popover: capability-filtered, grouped list with a bell badge,
 //! mark-all-read, and click-to-navigate.
 //!
-//! The rendered list is fetched through the async `ConnectionService` seam via
-//! `use_resource`, then mapped to `AsyncState` and rendered through the shared
-//! `AsyncView` — the canonical async-UI pattern. Capability filtering is applied
-//! to the `Ok` payload *before* `AsyncState::from_value`, so `Empty` reflects
-//! what THIS connection can see (not the raw feed). The Error state offers a
-//! Retry gated on `StudioError::is_retriable()`, wired to `Resource::restart()`.
-//!
-//! The topbar bell badge derives from a separate global `Signal<Vec<Notification>>`
-//! seeded in `app.rs`; mark-all-read / per-item clicks mutate that signal so the
-//! badge stays in sync. Converging the badge and this list onto one source is
-//! deferred to a later phase.
-
-use std::rc::Rc;
+//! Single source of truth: both this popover and the topbar bell badge read the
+//! one shared `Signal<AsyncState<Vec<Notification>>>` store (seeded once at the
+//! seam in `app.rs`). The popover `project`s that store through capability
+//! filtering — so `Empty` reflects what THIS connection sees — then renders the
+//! `Loading`/`Empty`/`Error` states through the shared `AsyncView` and the loaded
+//! list itself. Mark-all-read / per-item clicks MUTATE the store, so the badge
+//! and the list never diverge. The Error-state Retry reloads the feed via the
+//! shared `Resource` handle, gated on `StudioError::is_retriable()`.
 
 use dioxus::prelude::*;
 
@@ -21,9 +16,8 @@ use crate::components::async_view::AsyncView;
 use crate::models::notification::{Notification, NotificationTarget};
 use crate::routes::Route;
 use crate::services::async_state::AsyncState;
-use crate::services::connection_service::ConnectionService;
 use crate::state::connection::{ActiveConnection, Capabilities};
-use crate::state::notifications::visible;
+use crate::state::notifications::{mark_all_read, mark_read, visible};
 use crate::state::ui::Popover;
 
 /// Where a notification navigates when clicked.
@@ -45,11 +39,12 @@ fn target_route(target: NotificationTarget) -> Route {
 
 #[component]
 pub fn NotificationPopover() -> Element {
-    // Global signal kept for mark-all-read + per-item read + topbar badge sync.
-    let mut notifs = use_context::<Signal<Vec<Notification>>>();
+    // The one shared store (mutated here for mark-all-read + per-item read) and
+    // the shared reload handle backing the Error-state Retry.
+    let mut store = use_context::<Signal<AsyncState<Vec<Notification>>>>();
+    let mut reload = use_context::<Resource<()>>();
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let active = use_context::<Signal<Option<ActiveConnection>>>();
-    let service = use_context::<Rc<dyn ConnectionService>>();
     let nav = use_navigator();
 
     // Capability gate (unchanged): no connection -> render nothing.
@@ -58,30 +53,18 @@ pub fn NotificationPopover() -> Element {
         None => return rsx! {},
     };
 
-    // Fetch the feed through the async seam. Clone the Rc BEFORE the async block;
-    // never hold a signal/Resource guard across `.await`.
-    let mut feed = use_resource(move || {
-        let service = service.clone();
-        async move { service.notifications().await } // Result<Vec<Notification>, StudioError>
-    });
-
-    // Clone the resource value out of its guard (StudioError is Clone), mapping
-    // the Ok payload to the capability-filtered list so `Empty` reflects what THIS
-    // connection sees — then derive every UI state from one `AsyncState`. This is
-    // the same `from_value` mapping the unit tests exercise; the render path and
-    // the tests share one code path.
-    let state: AsyncState<Vec<Notification>> = {
-        let mapped = feed
-            .read()
-            .clone()
-            .map(|res| res.map(|list| visible(&list[..], &caps).cloned().collect::<Vec<_>>()));
-        AsyncState::from_value(mapped)
-    }; // guard dropped here — nothing held across the render below
+    // Project the shared store through capability filtering into an owned view
+    // state: `Empty` re-derives from the filtered list, so it reflects what THIS
+    // connection sees. The read guard is dropped at the end of this statement —
+    // nothing is held across the render below.
+    let view: AsyncState<Vec<Notification>> = store
+        .read()
+        .project(|raw| visible(raw, &caps).cloned().collect());
 
     // Build the grouped list ONLY for the Loaded case (preserves first-seen order).
     let mut groups: Vec<(String, Vec<Notification>)> = Vec::new();
     let mut unread = 0usize;
-    if let Some(items) = state.loaded() {
+    if let Some(items) = view.loaded() {
         unread = items.iter().filter(|n| n.unread).count();
         for n in items {
             match groups.iter_mut().find(|(g, _)| g == &n.group) {
@@ -103,8 +86,10 @@ pub fn NotificationPopover() -> Element {
                 h4 { "Notifications " span { class: "count", "{count_label}" } }
                 button {
                     onclick: move |_| {
-                        // Mark-all-read mutates the GLOBAL signal so the topbar badge updates.
-                        for n in notifs.write().iter_mut() { n.unread = false; }
+                        // Mutate the shared store; the badge re-derives from it.
+                        if let Some(items) = store.write().loaded_mut() {
+                            mark_all_read(items);
+                        }
                     },
                     "Mark all read"
                 }
@@ -112,12 +97,12 @@ pub fn NotificationPopover() -> Element {
             div { class: "notif-list",
                 // Loading / Empty / Error -> shared AsyncView, driven by AsyncState.
                 AsyncView {
-                    loading: state.is_loading(),
-                    empty: state.is_empty(),
-                    error: state.error_message(),
-                    retriable: state.is_retriable(),
+                    loading: view.is_loading(),
+                    empty: view.is_empty(),
+                    error: view.error_message(),
+                    retriable: view.is_retriable(),
                     empty_message: "No notifications for this connection".to_string(),
-                    on_retry: move |_| feed.restart(),
+                    on_retry: move |_| reload.restart(),
                 }
                 // Loaded -> the existing grouped list markup.
                 if !groups.is_empty() {
@@ -133,8 +118,8 @@ pub fn NotificationPopover() -> Element {
                                         key: "{id}",
                                         class: "{item_class}",
                                         onclick: move |_| {
-                                            for x in notifs.write().iter_mut() {
-                                                if x.id == id { x.unread = false; }
+                                            if let Some(items) = store.write().loaded_mut() {
+                                                mark_read(items, &id);
                                             }
                                             popover.set(None);
                                             nav.push(route.clone());

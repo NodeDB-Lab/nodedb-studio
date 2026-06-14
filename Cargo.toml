@@ -13,8 +13,11 @@ repository = "https://github.com/NodeDB-Lab/nodedb-studio"
 homepage = "https://nodedb.dev"
 
 [workspace.dependencies]
-# Internal NodeDB crates.
-nodedb-client = { version = "0.3.0", features = ["native"] }
+# Internal NodeDB crates. The `native` feature (real client transport) is
+# enabled in the phase that first constructs a NativeClient — it drags in a
+# TLS + C-toolchain build tree (tokio-rustls, aws-lc-rs, cmake), so it is not
+# carried while the seam impl is an inert stub.
+nodedb-client = "0.3.0"
 nodedb-types = "0.3.0"
 # Async
 async-trait = "0.1"

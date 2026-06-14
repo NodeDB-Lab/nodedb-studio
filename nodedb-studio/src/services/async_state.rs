@@ -82,6 +82,29 @@ impl<T> AsyncState<T> {
             _ => None,
         }
     }
+
+    /// Mutable access to the loaded payload, for in-place updates on a shared
+    /// store (e.g. marking notifications read). `None` in any non-loaded state.
+    pub fn loaded_mut(&mut self) -> Option<&mut T> {
+        match self {
+            AsyncState::Loaded(t) => Some(t),
+            _ => None,
+        }
+    }
+
+    /// Project the loaded payload into a view-specific shape, re-deriving `Empty`
+    /// when the projection is empty (via `from_value`). Lets a view read a shared
+    /// raw store and apply its own filter — e.g. capability filtering — while
+    /// keeping `Loading`/`Empty`/`Error` correct. The non-loaded states are
+    /// carried through unchanged (`StudioError` is `Clone`).
+    pub fn project<U: IsEmpty>(&self, f: impl FnOnce(&T) -> U) -> AsyncState<U> {
+        match self {
+            AsyncState::Loading => AsyncState::Loading,
+            AsyncState::Empty => AsyncState::Empty,
+            AsyncState::Error(e) => AsyncState::Error(e.clone()),
+            AsyncState::Loaded(t) => AsyncState::from_value(Some(Ok(f(t)))),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -145,5 +168,48 @@ mod tests {
         assert!(s.error_message().is_some());
         assert!(!s.is_retriable());
         assert!(!s.is_loading());
+    }
+
+    #[test]
+    fn loaded_mut_edits_in_place() {
+        let mut s = AsyncState::from_value(Some(Ok(vec![1u8, 2, 3])));
+        if let Some(v) = s.loaded_mut() {
+            v.push(4);
+        }
+        assert_eq!(s.loaded(), Some(&vec![1u8, 2, 3, 4]));
+        // Non-loaded states yield no handle.
+        let mut loading = AsyncState::<Vec<u8>>::Loading;
+        assert!(loading.loaded_mut().is_none());
+    }
+
+    #[test]
+    fn project_carries_non_loaded_states() {
+        // Loading / Empty / Error pass through unchanged.
+        let loading = AsyncState::<Vec<u8>>::Loading;
+        assert!(loading.project(|v: &Vec<u8>| v.clone()).is_loading());
+
+        let empty = AsyncState::from_value(Some(Ok(Vec::<u8>::new())));
+        assert!(empty.project(|v: &Vec<u8>| v.clone()).is_empty());
+
+        let err = AsyncState::<Vec<u8>>::from_value(Some(Err(StudioError::NotConnected)));
+        assert!(
+            err.project(|v: &Vec<u8>| v.clone())
+                .error_message()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn project_filters_loaded_and_redrives_empty() {
+        // A filter that keeps elements -> Loaded with the filtered set.
+        let s = AsyncState::from_value(Some(Ok(vec![1u8, 2, 3, 4])));
+        let evens = s.project(|v: &Vec<u8>| v.iter().copied().filter(|n| n % 2 == 0).collect());
+        assert_eq!(evens.loaded(), Some(&vec![2u8, 4]));
+
+        // A filter that drops everything -> re-derives Empty (not Loaded(empty)).
+        let s = AsyncState::from_value(Some(Ok(vec![1u8, 3, 5])));
+        let evens: AsyncState<Vec<u8>> =
+            s.project(|v| v.iter().copied().filter(|n| n % 2 == 0).collect());
+        assert!(evens.is_empty());
     }
 }
