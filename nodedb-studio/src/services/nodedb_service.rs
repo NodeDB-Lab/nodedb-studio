@@ -1,9 +1,7 @@
-//! The real-client-backed seam impl. Phase 1: inert stub.
-//!
-//! Holds an `Option<NativeClient>` (None until Phase 2 connects). While the
-//! client is None, every method returns `StudioError::NotConnected` — never
-//! a panic or todo!(). Phase 2 (CONN-01..07) fills the client via
-//! ConnectionBuilder; that wiring is explicitly out of scope here.
+//! The real-client-backed `ConnectionService` impl. Currently an inert stub:
+//! every method returns `StudioError::NotConnected` until a real connection is
+//! opened. Holds an `Option<NativeClient>` so the type is forward-compatible
+//! with the future `ConnectionBuilder` wiring — no panic or `todo!()` in the interim.
 
 use async_trait::async_trait;
 use nodedb_client::NativeClient;
@@ -16,8 +14,8 @@ use crate::state::connections_registry::SavedConnection;
 
 #[derive(Default)]
 pub struct NodeDbConnectionService {
-    /// None until a real connection is opened in Phase 2 (ConnectionBuilder
-    /// fills this). The field exists now so the seam type is forward-compatible.
+    /// None until a real connection is opened. Field kept for forward-compatibility
+    /// with the future `ConnectionBuilder` wiring.
     #[allow(dead_code)]
     client: Option<NativeClient>,
 }

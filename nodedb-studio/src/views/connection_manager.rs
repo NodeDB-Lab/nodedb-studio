@@ -57,7 +57,7 @@ pub fn ConnectionManager() -> Element {
                                         if let Ok(session) = service.connect(&name).await {
                                             active.set(Some(session));
                                         }
-                                        // Phase 2 / CONN-03 surfaces the Err case as an error state.
+                                        // Err case (e.g. offline): surfaced in a later wiring phase.
                                     });
                                 }
                             },

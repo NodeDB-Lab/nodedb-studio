@@ -45,13 +45,13 @@ pub struct AsyncViewProps {
     pub empty_message: String,
 }
 
-// Consumed by the notification popover (01-04) and later wired views.
+// Consumed by the notification popover and later wired views.
 #[component]
 pub fn AsyncView(props: AsyncViewProps) -> Element {
     if props.loading {
         return rsx! { div { class: "async-loading", "Loading…" } };
     }
-    if let Some(msg) = props.error.clone() {
+    if let Some(msg) = props.error {
         return rsx! {
             div { class: "async-error",
                 div { class: "async-error-msg", "{msg}" }

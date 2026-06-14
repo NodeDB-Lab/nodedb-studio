@@ -32,9 +32,8 @@ pub fn App() -> Element {
     // real client can replace the mock without touching consumers.
     let service: Rc<dyn ConnectionService> = Rc::new(MockConnectionService);
 
-    // Prove the real-client stub is instantiable and object-safe behind the
-    // seam (SEAM-02). Not the active impl this phase — Phase 2 swaps it in —
-    // but constructing it here guarantees it compiles against the trait.
+    // Compile-time check: the real-client stub must be instantiable and
+    // object-safe behind the seam trait. Not the active impl yet — the mock is.
     let _real: Rc<dyn ConnectionService> = Rc::new(NodeDbConnectionService::default());
 
     use_context_provider(|| service.clone());

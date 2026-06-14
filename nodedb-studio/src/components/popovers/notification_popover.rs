@@ -120,7 +120,7 @@ pub fn NotificationPopover() -> Element {
                     on_retry: move |_| feed.restart(),
                 }
                 // Loaded -> the existing grouped list markup.
-                if state.loaded().is_some() {
+                if !groups.is_empty() {
                     for (group_name, items) in groups {
                         div { class: "notif-group-label", "{group_name}" }
                         for n in items {
