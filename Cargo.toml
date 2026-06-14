@@ -14,9 +14,10 @@ homepage = "https://nodedb.dev"
 
 [workspace.dependencies]
 # Internal NodeDB crates.
-nodedb-client = "0.3.0"
+nodedb-client = { version = "0.3.0", features = ["native"] }
 nodedb-types = "0.3.0"
 # Async
+async-trait = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 # UI. The `router` feature re-exports the router through dioxus::prelude.
 # Desktop-only for the skeleton.

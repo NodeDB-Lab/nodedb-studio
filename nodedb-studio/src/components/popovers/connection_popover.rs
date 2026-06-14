@@ -55,7 +55,13 @@ pub fn ConnectionPopover() -> Element {
                             class: "{item_class}",
                             onclick: move |_| {
                                 if !disabled {
-                                    if let Some(s) = svc.connect(&name) { active.set(Some(s)); }
+                                    // Async at the seam: clone svc + name into the task,
+                                    // set `active` (Copy) only after the await resolves.
+                                    let svc = svc.clone();
+                                    let name = name.clone();
+                                    spawn(async move {
+                                        if let Ok(s) = svc.connect(&name).await { active.set(Some(s)); }
+                                    });
                                     popover.set(None);
                                 }
                             },

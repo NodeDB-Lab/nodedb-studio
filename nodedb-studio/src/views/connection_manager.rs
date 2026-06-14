@@ -50,9 +50,15 @@ pub fn ConnectionManager() -> Element {
                             on_connect: {
                                 let service = service.clone();
                                 move |name: String| {
-                                    if let Some(session) = service.connect(&name) {
-                                        active.set(Some(session));
-                                    }
+                                    // Async at the seam: clone the Rc into the task and
+                                    // set `active` (Copy) only after the await resolves.
+                                    let service = service.clone();
+                                    spawn(async move {
+                                        if let Ok(session) = service.connect(&name).await {
+                                            active.set(Some(session));
+                                        }
+                                        // Phase 2 / CONN-03 surfaces the Err case as an error state.
+                                    });
                                 }
                             },
                         }

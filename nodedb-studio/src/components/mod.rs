@@ -1,5 +1,6 @@
 //! Reusable studio chrome components.
 
+pub mod async_view;
 pub mod command_palette;
 pub mod modal;
 pub mod popovers;
