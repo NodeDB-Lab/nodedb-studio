@@ -1,22 +1,17 @@
 //! Notification popover: capability-filtered, grouped list with a bell badge,
 //! mark-all-read, and click-to-navigate.
 //!
-//! SEAM-04 render-path proof: the rendered list is fetched through the async
-//! `ConnectionService` seam via `use_resource` (reading `Rc<dyn ConnectionService>`
-//! from context), and the four UI states are surfaced exactly as the
-//! `AsyncState`/`AsyncView` primitive (01-03) prescribes — Loading / Empty /
-//! Error render via the shared `AsyncView`, Loaded renders the existing grouped
-//! list. The Error state offers a Retry gated on `StudioError::is_retriable()`,
-//! wired to `Resource::restart()`.
+//! The rendered list is fetched through the async `ConnectionService` seam via
+//! `use_resource`, then mapped to `AsyncState` and rendered through the shared
+//! `AsyncView` — the canonical async-UI pattern. Capability filtering is applied
+//! to the `Ok` payload *before* `AsyncState::from_value`, so `Empty` reflects
+//! what THIS connection can see (not the raw feed). The Error state offers a
+//! Retry gated on `StudioError::is_retriable()`, wired to `Resource::restart()`.
 //!
-//! Reconciliation with 01-02's app.rs seeding: plan 01-02 seeds a global
-//! `Signal<Vec<Notification>>` that `topbar.rs` reads for the unread bell badge.
-//! That signal and the topbar badge are LEFT UNCHANGED here — the badge keeps
-//! deriving from the app.rs-seeded signal, and mark-all-read / per-item clicks
-//! still mutate it so the badge stays in sync. The popover ADDITIONALLY
-//! self-fetches via `use_resource` as the live proof of the async pattern. The
-//! minor redundancy (badge from signal, list from resource) is intentional and
-//! acceptable for Phase 1; later phases converge the two onto one source.
+//! The topbar bell badge derives from a separate global `Signal<Vec<Notification>>`
+//! seeded in `app.rs`; mark-all-read / per-item clicks mutate that signal so the
+//! badge stays in sync. Converging the badge and this list onto one source is
+//! deferred to a later phase.
 
 use std::rc::Rc;
 
@@ -25,6 +20,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::AsyncView;
 use crate::models::notification::{Notification, NotificationTarget};
 use crate::routes::Route;
+use crate::services::async_state::AsyncState;
 use crate::services::connection_service::ConnectionService;
 use crate::state::connection::{ActiveConnection, Capabilities};
 use crate::state::notifications::visible;
@@ -62,47 +58,30 @@ pub fn NotificationPopover() -> Element {
         None => return rsx! {},
     };
 
-    // SEAM-04 PROOF: fetch the feed through the async seam. Clone the Rc BEFORE
-    // the async block; never hold a signal/Resource guard across `.await`.
+    // Fetch the feed through the async seam. Clone the Rc BEFORE the async block;
+    // never hold a signal/Resource guard across `.await`.
     let mut feed = use_resource(move || {
         let service = service.clone();
         async move { service.notifications().await } // Result<Vec<Notification>, StudioError>
     });
 
-    // Map the resource read -> the four AsyncState states (mirrors
-    // AsyncState::from_value: None->Loading, Some(Err)->Error,
-    // Some(Ok(empty))->Empty, Some(Ok(data))->Loaded). StudioError is not Clone,
-    // so derive (message, retriable) by reference while the guard is held, clone
-    // ONLY the Ok Vec (Notification is Clone), then DROP the guard before render.
-    let mut loading = false;
-    let mut empty = false;
-    let mut error_msg: Option<String> = None;
-    let mut retriable = false;
-    let mut loaded: Option<Vec<Notification>> = None;
-    {
-        let read = feed.read();
-        match &*read {
-            None => loading = true,
-            Some(Err(e)) => {
-                error_msg = Some(e.to_string()); // Display
-                retriable = e.is_retriable(); // gates Retry
-            }
-            Some(Ok(list)) => {
-                // Capability-filter here so Empty reflects what THIS connection sees.
-                let vis: Vec<Notification> = visible(&list[..], &caps).cloned().collect();
-                if vis.is_empty() {
-                    empty = true;
-                } else {
-                    loaded = Some(vis);
-                }
-            }
-        }
-    } // guard dropped here — nothing held across the render below
+    // Clone the resource value out of its guard (StudioError is Clone), mapping
+    // the Ok payload to the capability-filtered list so `Empty` reflects what THIS
+    // connection sees — then derive every UI state from one `AsyncState`. This is
+    // the same `from_value` mapping the unit tests exercise; the render path and
+    // the tests share one code path.
+    let state: AsyncState<Vec<Notification>> = {
+        let mapped = feed
+            .read()
+            .clone()
+            .map(|res| res.map(|list| visible(&list[..], &caps).cloned().collect::<Vec<_>>()));
+        AsyncState::from_value(mapped)
+    }; // guard dropped here — nothing held across the render below
 
     // Build the grouped list ONLY for the Loaded case (preserves first-seen order).
     let mut groups: Vec<(String, Vec<Notification>)> = Vec::new();
     let mut unread = 0usize;
-    if let Some(ref items) = loaded {
+    if let Some(items) = state.loaded() {
         unread = items.iter().filter(|n| n.unread).count();
         for n in items {
             match groups.iter_mut().find(|(g, _)| g == &n.group) {
@@ -131,17 +110,17 @@ pub fn NotificationPopover() -> Element {
                 }
             }
             div { class: "notif-list",
-                // Loading / Empty / Error -> shared AsyncView (the proof).
+                // Loading / Empty / Error -> shared AsyncView, driven by AsyncState.
                 AsyncView {
-                    loading,
-                    empty,
-                    error: error_msg.clone(),
-                    retriable,
+                    loading: state.is_loading(),
+                    empty: state.is_empty(),
+                    error: state.error_message(),
+                    retriable: state.is_retriable(),
                     empty_message: "No notifications for this connection".to_string(),
                     on_retry: move |_| feed.restart(),
                 }
                 // Loaded -> the existing grouped list markup.
-                if loaded.is_some() {
+                if state.loaded().is_some() {
                     for (group_name, items) in groups {
                         div { class: "notif-group-label", "{group_name}" }
                         for n in items {
@@ -184,7 +163,6 @@ pub fn NotificationPopover() -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::services::async_state::AsyncState;
     use crate::services::error::StudioError;
 
     #[test]

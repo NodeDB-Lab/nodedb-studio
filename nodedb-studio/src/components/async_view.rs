@@ -5,24 +5,24 @@
 //! states to this component. Keeps every wired view from re-implementing the
 //! spinner / empty / error+retry markup.
 //!
-//! Calling convention (wired up by plan 01-04):
+//! Calling convention: build one `AsyncState<T>` via `from_value` and drive both
+//! this component and the loaded markup from it — no inline match arms:
 //! ```ignore
-//! match AsyncState::from_value(resource.read().clone()) {
-//!     AsyncState::Loaded(data) => rsx! { /* caller's own markup for `data` */ },
-//!     other => rsx! {
-//!         AsyncView {
-//!             loading: matches!(other, AsyncState::Loading),
-//!             empty: matches!(other, AsyncState::Empty),
-//!             error: match &other { AsyncState::Error(e) => Some(e.to_string()), _ => None },
-//!             retriable: matches!(&other, AsyncState::Error(e) if e.is_retriable()),
-//!             on_retry: move |_| resource.restart(),
-//!         }
+//! let state = AsyncState::from_value(resource.read().clone());
+//! rsx! {
+//!     AsyncView {
+//!         loading: state.is_loading(),
+//!         empty: state.is_empty(),
+//!         error: state.error_message(),
+//!         retriable: state.is_retriable(),
+//!         on_retry: move |_| resource.restart(),
 //!     }
+//!     if let Some(data) = state.loaded() { /* caller's own markup for `data` */ }
 //! }
 //! ```
 //! Discrete props (rather than the generic `AsyncState<T>`) are used because
-//! Dioxus props must be `Clone + PartialEq`; `StudioError` is neither, and `T`
-//! is unconstrained — so the caller decodes the state and passes flags.
+//! Dioxus props must be `Clone + PartialEq`; `StudioError`/`T` need not be — so
+//! the caller decodes the state via the accessors and passes plain flags.
 
 use dioxus::prelude::*;
 

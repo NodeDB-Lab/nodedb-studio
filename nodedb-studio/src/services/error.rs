@@ -9,8 +9,10 @@ use nodedb_types::error::ErrorDetails;
 use thiserror::Error;
 
 // The seam's Result error: returned by every `ConnectionService` method and
-// consumed by the views in later plans (01-03..04).
-#[derive(Debug, Error)]
+// consumed by the views. `Clone` so a `Resource` read can be cloned out of its
+// guard and mapped through `AsyncState::from_value` (the canonical render path);
+// `NodeDbError` is itself `Clone`, so this is a cheap, lossless derive.
+#[derive(Debug, Clone, Error)]
 pub enum StudioError {
     #[error("connection error: {0}")]
     Connection(#[source] NodeDbError),
