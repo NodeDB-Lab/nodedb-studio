@@ -71,3 +71,91 @@ pub fn AsyncView(props: AsyncViewProps) -> Element {
     // Loaded: the caller renders its own markup; AsyncView renders nothing.
     rsx! {}
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // SSR the given root component to HTML. The rsx is built INSIDE the component
+    // (i.e. within the VirtualDom runtime) because `AsyncView`'s default
+    // `EventHandler` prop can only be constructed while a runtime is in scope.
+    fn render(app: fn() -> Element) -> String {
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    #[test]
+    fn loading_renders_spinner() {
+        fn app() -> Element {
+            rsx! { AsyncView { loading: true, empty: false, error: None } }
+        }
+        let html = render(app);
+        assert!(html.contains("async-loading"));
+        assert!(html.contains("Loading"));
+    }
+
+    #[test]
+    fn empty_renders_message() {
+        fn app() -> Element {
+            rsx! {
+                AsyncView {
+                    loading: false,
+                    empty: true,
+                    error: None,
+                    empty_message: "Nothing here".to_string(),
+                }
+            }
+        }
+        let html = render(app);
+        assert!(html.contains("async-empty"));
+        assert!(html.contains("Nothing here"));
+    }
+
+    #[test]
+    fn retriable_error_shows_retry() {
+        fn app() -> Element {
+            rsx! {
+                AsyncView {
+                    loading: false,
+                    empty: false,
+                    error: Some("boom".to_string()),
+                    retriable: true,
+                }
+            }
+        }
+        let html = render(app);
+        assert!(html.contains("async-error"));
+        assert!(html.contains("boom"));
+        assert!(html.contains("Retry"));
+    }
+
+    #[test]
+    fn non_retriable_error_hides_retry() {
+        fn app() -> Element {
+            rsx! {
+                AsyncView {
+                    loading: false,
+                    empty: false,
+                    error: Some("boom".to_string()),
+                    retriable: false,
+                }
+            }
+        }
+        let html = render(app);
+        assert!(html.contains("async-error"));
+        assert!(html.contains("boom"));
+        assert!(!html.contains("Retry"));
+    }
+
+    #[test]
+    fn loaded_renders_nothing() {
+        fn app() -> Element {
+            rsx! { AsyncView { loading: false, empty: false, error: None } }
+        }
+        let html = render(app);
+        assert!(!html.contains("async-loading"));
+        assert!(!html.contains("async-empty"));
+        assert!(!html.contains("async-error"));
+    }
+}
