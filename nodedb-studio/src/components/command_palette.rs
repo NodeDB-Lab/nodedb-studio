@@ -67,7 +67,10 @@ pub fn CommandPalette() -> Element {
                     div { class: "palette-item", onclick: {
                             let svc = switch_svc.clone();
                             move |_| {
-                                if let Some(s) = svc.connect("staging-cluster") { active.set(Some(s)); }
+                                let svc = svc.clone();
+                                spawn(async move {
+                                    if let Ok(s) = svc.connect("staging-cluster").await { active.set(Some(s)); }
+                                });
                                 open.set(false);
                             }
                         },
@@ -76,7 +79,10 @@ pub fn CommandPalette() -> Element {
                     div { class: "palette-item", onclick: {
                             let svc = switch_svc.clone();
                             move |_| {
-                                if let Some(s) = svc.connect("prod-replica-eu") { active.set(Some(s)); }
+                                let svc = svc.clone();
+                                spawn(async move {
+                                    if let Ok(s) = svc.connect("prod-replica-eu").await { active.set(Some(s)); }
+                                });
                                 open.set(false);
                             }
                         },

@@ -12,6 +12,7 @@ use crate::components::popovers::connection_popover::ConnectionPopover;
 use crate::components::popovers::database_popover::DatabasePopover;
 use crate::components::popovers::notification_popover::NotificationPopover;
 use crate::models::notification::Notification;
+use crate::services::async_state::AsyncState;
 use crate::state::connection::ActiveConnection;
 use crate::state::notifications::unread_count;
 use crate::state::ui::Popover;
@@ -30,14 +31,19 @@ pub fn Topbar() -> Element {
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let mut palette = use_context::<Signal<bool>>();
     let active = use_context::<Signal<Option<ActiveConnection>>>();
-    let notifs = use_context::<Signal<Vec<Notification>>>();
+    let notifs = use_context::<Signal<AsyncState<Vec<Notification>>>>();
 
     let conn = active.read();
     let Some(c) = conn.as_ref() else {
         return rsx! {};
     };
 
-    let badge = unread_count(&notifs.read()[..], &c.capabilities);
+    // Badge derives from the shared store: 0 until the feed loads, then the
+    // capability-filtered unread count over the loaded items.
+    let badge = notifs
+        .read()
+        .loaded()
+        .map_or(0, |items| unread_count(items, &c.capabilities));
     let badge_class = if badge == 0 {
         "bell-badge zero"
     } else {

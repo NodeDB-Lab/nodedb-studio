@@ -13,14 +13,20 @@ repository = "https://github.com/NodeDB-Lab/nodedb-studio"
 homepage = "https://nodedb.dev"
 
 [workspace.dependencies]
-# Internal NodeDB crates.
+# Internal NodeDB crates. The `native` feature (real client transport) is
+# enabled in the phase that first constructs a NativeClient — it drags in a
+# TLS + C-toolchain build tree (tokio-rustls, aws-lc-rs, cmake), so it is not
+# carried while the seam impl is an inert stub.
 nodedb-client = "0.3.0"
 nodedb-types = "0.3.0"
 # Async
+async-trait = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 # UI. The `router` feature re-exports the router through dioxus::prelude.
 # Desktop-only for the skeleton.
 dioxus = { version = "0.7", features = ["desktop", "router"] }
+# Test-only: render components to a string for render-level assertions.
+dioxus-ssr = "0.7"
 
 # Serialization. Kept for derive on models/preferences; no runtime parsing
 # happens in the skeleton (mock data is hardcoded Rust).
