@@ -22,11 +22,29 @@ impl<T> IsEmpty for Vec<T> {
 /// states. Wired views call `from_value` directly (cloning the resource value
 /// out of its guard — `StudioError` is `Clone`) and then drive `AsyncView` via
 /// the accessors below, so no view re-implements the match arms inline.
+///
+/// `Clone` allows this to be a Dioxus prop. `PartialEq` is hand-written so we
+/// do not depend on `NodeDbError: PartialEq` — errors compare equal by their
+/// `Display` output, which is cheap and sufficient for prop diffing.
+#[derive(Clone)]
 pub enum AsyncState<T> {
     Loading,
     Empty,
     Loaded(T),
     Error(StudioError),
+}
+
+impl<T: PartialEq> PartialEq for AsyncState<T> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (AsyncState::Loading, AsyncState::Loading) => true,
+            (AsyncState::Empty, AsyncState::Empty) => true,
+            (AsyncState::Loaded(a), AsyncState::Loaded(b)) => a == b,
+            // Compare errors by Display — avoids requiring NodeDbError: PartialEq.
+            (AsyncState::Error(a), AsyncState::Error(b)) => a.to_string() == b.to_string(),
+            _ => false,
+        }
+    }
 }
 
 impl<T: IsEmpty> AsyncState<T> {

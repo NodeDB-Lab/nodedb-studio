@@ -6,7 +6,7 @@
 use dioxus::prelude::*;
 
 use crate::routes::Route;
-use crate::services::connection_service::ConnectionService;
+use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
 use crate::state::ui::ModalKind;
 
@@ -15,7 +15,7 @@ pub fn CommandPalette() -> Element {
     let mut open = use_context::<Signal<bool>>();
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
-    let service = use_context::<std::rc::Rc<dyn ConnectionService>>();
+    let service = use_context::<std::rc::Rc<dyn Backend>>();
     let nav = use_navigator();
 
     if !*open.read() {

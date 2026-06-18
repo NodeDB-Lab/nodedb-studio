@@ -10,9 +10,11 @@
 
 use async_trait::async_trait;
 
+use crate::models::cdc::CdcRow;
 use crate::models::notification::Notification;
 use crate::services::connection_service::ConnectionService;
 use crate::services::error::StudioError;
+use crate::services::streams_data::StreamsData;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::SavedConnection;
 
@@ -35,6 +37,17 @@ impl ConnectionService for NodeDbConnectionService {
     }
 
     async fn connect(&self, _name: &str) -> Result<ActiveConnection, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn mark_all_read(&self) -> Result<(), StudioError> {
+        Err(StudioError::NotConnected)
+    }
+}
+
+#[async_trait(?Send)]
+impl StreamsData for NodeDbConnectionService {
+    async fn cdc_feed(&self) -> Result<Vec<CdcRow>, StudioError> {
         Err(StudioError::NotConnected)
     }
 }
@@ -60,6 +73,10 @@ mod tests {
             svc.connect("anything").await,
             Err(StudioError::NotConnected)
         ));
+        assert!(matches!(
+            svc.mark_all_read().await,
+            Err(StudioError::NotConnected)
+        ));
     }
 
     #[test]
@@ -67,5 +84,11 @@ mod tests {
         // Compile-time guarantee: the stub coerces to the seam trait object,
         // exactly as `app.rs` provides it via context.
         let _s: Rc<dyn ConnectionService> = Rc::new(NodeDbConnectionService);
+    }
+
+    #[test]
+    fn stub_is_object_safe_behind_backend() {
+        use crate::services::backend::Backend;
+        let _b: Rc<dyn Backend> = Rc::new(NodeDbConnectionService);
     }
 }

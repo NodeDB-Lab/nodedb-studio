@@ -5,7 +5,7 @@
 //!   - Connected    -> `Studio`
 //!
 //! Global state is exposed as fine-grained signals via context. The backend
-//! seam is a `dyn ConnectionService` behind an `Rc`, so swapping the mock for a
+//! seam is a `dyn Backend` behind an `Rc`, so swapping the mock for a
 //! real NodeDB client later is a one-line change here.
 
 use std::rc::Rc;
@@ -15,7 +15,8 @@ use dioxus::prelude::*;
 use crate::modals::ModalHost;
 use crate::models::notification::Notification;
 use crate::services::async_state::AsyncState;
-use crate::services::connection_service::{ConnectionService, MockConnectionService};
+use crate::services::backend::Backend;
+use crate::services::connection_service::MockConnectionService;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::SavedConnection;
 use crate::state::preferences::Preferences;
@@ -30,7 +31,7 @@ const STYLES: Asset = asset!("/assets/styles.css");
 pub fn App() -> Element {
     // The single seam to the outside world. Provided as a trait object so a
     // real client can replace the mock without touching consumers.
-    let service: Rc<dyn ConnectionService> = Rc::new(MockConnectionService);
+    let service: Rc<dyn Backend> = Rc::new(MockConnectionService::ready());
     // The real-client stub's instantiability + object-safety behind the seam is
     // proven by `nodedb_service::tests::stub_is_object_safe_behind_rc`, so it is
     // not constructed here on every render.

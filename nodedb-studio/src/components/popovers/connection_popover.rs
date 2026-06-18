@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::services::connection_service::ConnectionService;
+use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::{ConnStatus, SavedConnection};
 use crate::state::ui::{ModalKind, Popover};
@@ -16,7 +16,7 @@ pub fn ConnectionPopover() -> Element {
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let registry = use_context::<Signal<Vec<SavedConnection>>>();
-    let service = use_context::<Rc<dyn ConnectionService>>();
+    let service = use_context::<Rc<dyn Backend>>();
 
     let conn = active.read();
     let Some(c) = conn.as_ref() else {

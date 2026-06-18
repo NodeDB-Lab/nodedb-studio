@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::services::connection_service::ConnectionService;
+use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::{ConnStatus, SavedConnection};
 use crate::state::ui::ModalKind;
@@ -15,7 +15,7 @@ pub fn ConnectionManager() -> Element {
     let registry = use_context::<Signal<Vec<SavedConnection>>>();
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
-    let service = use_context::<Rc<dyn ConnectionService>>();
+    let service = use_context::<Rc<dyn Backend>>();
 
     rsx! {
         div { class: "conn-manager",
