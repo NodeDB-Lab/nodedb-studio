@@ -21,7 +21,7 @@ nodedb-client = "0.3.0"
 nodedb-types = "0.3.0"
 # Async
 async-trait = "0.1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 # UI. The `router` feature re-exports the router through dioxus::prelude.
 # Desktop-only for the skeleton.
 dioxus = { version = "0.7", features = ["desktop", "router"] }

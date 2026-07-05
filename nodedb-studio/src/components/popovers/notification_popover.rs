@@ -10,12 +10,15 @@
 //! and the list never diverge. The Error-state Retry reloads the feed via the
 //! shared `Resource` handle, gated on `StudioError::is_retriable()`.
 
+use std::rc::Rc;
+
 use dioxus::prelude::*;
 
 use crate::components::async_view::AsyncView;
 use crate::models::notification::{Notification, NotificationTarget};
 use crate::routes::Route;
 use crate::services::async_state::AsyncState;
+use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, Capabilities};
 use crate::state::notifications::{mark_all_read, mark_read, visible};
 use crate::state::ui::Popover;
@@ -45,6 +48,7 @@ pub fn NotificationPopover() -> Element {
     let mut reload = use_context::<Resource<()>>();
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let active = use_context::<Signal<Option<ActiveConnection>>>();
+    let backend = use_context::<Rc<dyn Backend>>();
     let nav = use_navigator();
 
     // Capability gate (unchanged): no connection -> render nothing.
@@ -86,10 +90,24 @@ pub fn NotificationPopover() -> Element {
                 h4 { "Notifications " span { class: "count", "{count_label}" } }
                 button {
                     onclick: move |_| {
-                        // Mutate the shared store; the badge re-derives from it.
+                        // In-memory update first for snappy UI (write guard dropped
+                        // before the block ends, never held across an await).
                         if let Some(items) = store.write().loaded_mut() {
                             mark_all_read(items);
                         }
+                        // Persist through the seam so the badge stays cleared on
+                        // any subsequent reload (fixes POP-03). The spawn avoids
+                        // holding any signal guard across the await.
+                        // On success, reconcile the shared feed so the real client's
+                        // persisted state is reflected (reload.restart() re-fetches).
+                        let backend = backend.clone();
+                        let mut reload = reload;
+                        spawn(async move {
+                            match backend.mark_all_read().await {
+                                Ok(()) => reload.restart(),
+                                Err(e) => tracing::warn!("mark_all_read failed: {e}"),
+                            }
+                        });
                     },
                     "Mark all read"
                 }

@@ -3034,6 +3034,8 @@ dependencies = [
 [[package]]
 name = "nodedb-client"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4c775d84d70535bfa1e4f70fcd185b7f555385ef2122f5ec588c418e0a63ed5"
 dependencies = [
  "async-trait",
  "nodedb-types",
@@ -3046,6 +3048,8 @@ dependencies = [
 [[package]]
 name = "nodedb-codec"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a21422d579c2ac16e5237e4cd1144262dd4641d072345b4a891844fc1cd557a8"
 dependencies = [
  "lz4_flex",
  "nalgebra",
@@ -3078,6 +3082,8 @@ dependencies = [
 [[package]]
 name = "nodedb-types"
 version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77145a5667abbe3726f46b50ff60ea5cb771fc4fcc782904ee2b03f9b46c2c00"
 dependencies = [
  "aes-gcm",
  "bytemuck",
