@@ -37,7 +37,7 @@ impl<'a> Row<'a> {
             .get(idx)
             .map(String::as_str)
             .ok_or_else(|| StudioError::UnexpectedColumns {
-                expected: name.to_string(),
+                expected: format!("row to have at least {} cells", idx + 1),
                 got: format!("row has {} cells", self.cells.len()),
             })
     }
@@ -137,5 +137,17 @@ mod tests {
         let t = table(&["name"], &[&["x"]]);
         let out = decode_rows(&t, &["name"], |r| Ok(r.field("nope")?.to_string()));
         assert!(out.is_err());
+    }
+
+    #[test]
+    fn short_row_is_an_error() {
+        let t = table(&["name", "owner", "id"], &[&["probe_docs", "admin"]]);
+        let out = decode_rows(&t, &["name", "owner", "id"], |r| {
+            Ok(r.field("id")?.to_string())
+        });
+        assert!(
+            matches!(out, Err(StudioError::UnexpectedColumns { .. })),
+            "expected UnexpectedColumns for short row, got {out:?}"
+        );
     }
 }
