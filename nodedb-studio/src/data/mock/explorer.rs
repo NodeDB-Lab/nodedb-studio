@@ -1,13 +1,9 @@
 //! Explorer fixtures: grouped collections, list rows, and detail bodies.
-//!
-//! `record_detail` is exercised by `ExplorerData`'s mock/stub impls but has no
-//! caller yet outside `#[cfg(test)]` (the Explorer views aren't wired to the
-//! seam until a later task), so it needs `#[allow(dead_code)]` in the interim.
 
 use crate::models::collection::{Collection, StorageMode};
 use crate::models::explorer::{CollectionGroup, RecordDetail, RecordRow};
 
-#[allow(dead_code)]
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 fn collection(name: &str, mode: StorageMode, count: &str) -> Collection {
     Collection {
         name: name.to_string(),
@@ -17,7 +13,7 @@ fn collection(name: &str, mode: StorageMode, count: &str) -> Collection {
 }
 
 /// Grouped in the canonical `StorageMode` display order.
-#[allow(dead_code)]
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn collection_groups() -> Vec<CollectionGroup> {
     vec![
         CollectionGroup {
@@ -59,7 +55,7 @@ pub fn collection_groups() -> Vec<CollectionGroup> {
 }
 
 /// List rows for a collection. Deterministic and keyed by `id`.
-#[allow(dead_code)]
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn records(collection: &str) -> Vec<RecordRow> {
     (0..6)
         .map(|i| RecordRow {
@@ -74,7 +70,7 @@ pub fn records(collection: &str) -> Vec<RecordRow> {
 }
 
 /// Detail body for one record.
-#[allow(dead_code)]
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn record_detail(collection: &str, id: &str) -> RecordDetail {
     RecordDetail {
         id: id.to_string(),

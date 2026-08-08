@@ -10,29 +10,25 @@ use async_trait::async_trait;
 use crate::models::explorer::{CollectionGroup, RecordDetail, RecordRow};
 use crate::services::error::StudioError;
 
-// Object-safety and mock/stub conformance are proven by the tests below and by
-// `nodedb_service::tests::stub_is_object_safe_behind_backend`, but nothing
-// outside `#[cfg(test)]` calls these methods yet: wiring the Explorer sidebar,
-// list and detail panel to the seam is a later task. The `#[allow(dead_code)]`s
-// go away with that wiring.
 #[async_trait(?Send)]
 pub trait ExplorerData {
     /// Sidebar contents: collections grouped by storage mode, in display order.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
     async fn collection_groups(&self) -> Result<Vec<CollectionGroup>, StudioError>;
 
     /// List-pane rows for one collection.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
     async fn records(&self, collection: &str) -> Result<Vec<RecordRow>, StudioError>;
 
     /// Detail-panel contents for one record.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
     async fn record_detail(&self, collection: &str, id: &str) -> Result<RecordDetail, StudioError>;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::collection::StorageMode;
     use crate::services::async_state::AsyncState;
     use crate::services::connection_service::MockConnectionService;
 
@@ -47,6 +43,23 @@ mod tests {
                 "an empty group would render a header with no rows"
             );
         }
+        // The sidebar renders groups in this exact sequence; it must track
+        // `StorageMode`'s own declared (canonical display) order.
+        let expected_order = [
+            StorageMode::Document,
+            StorageMode::Strict,
+            StorageMode::Vector,
+            StorageMode::Graph,
+            StorageMode::Timeseries,
+            StorageMode::Kv,
+            StorageMode::Spatial,
+            StorageMode::Fts,
+        ];
+        let modes: Vec<StorageMode> = groups.iter().map(|g| g.mode).collect();
+        assert_eq!(
+            modes, expected_order,
+            "groups must render in StorageMode's canonical display order"
+        );
     }
 
     #[tokio::test]
@@ -86,5 +99,35 @@ mod tests {
         let svc = MockConnectionService::erroring();
         let s = AsyncState::from_value(Some(svc.collection_groups().await));
         assert!(s.error_message().is_some());
+    }
+
+    #[tokio::test]
+    async fn record_detail_ready_returns_the_requested_id() {
+        let svc = MockConnectionService::ready();
+        let detail = svc
+            .record_detail("users", "u1")
+            .await
+            .expect("ready yields a detail");
+        assert_eq!(detail.id, "u1");
+    }
+
+    #[tokio::test]
+    async fn record_detail_erroring_is_err() {
+        let svc = MockConnectionService::erroring();
+        assert!(svc.record_detail("users", "u1").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn record_detail_empty_still_returns_the_requested_record() {
+        // `record_detail` reads a single record, not a list: "no rows" has no
+        // meaning here, so the mock folds `MockBehavior::Empty` into the same
+        // success path as `Ready` rather than inventing an absent/empty detail.
+        // Pinned here so a later refactor cannot silently change that meaning.
+        let svc = MockConnectionService::empty();
+        let detail = svc
+            .record_detail("users", "u1")
+            .await
+            .expect("empty behaviour still returns a detail for a single-value read");
+        assert_eq!(detail.id, "u1");
     }
 }
