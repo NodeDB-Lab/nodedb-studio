@@ -230,6 +230,7 @@ mod tests {
 mod lifecycle_tests {
     use super::*;
     use crate::services::connection_service::MockConnectionService;
+    use crate::services::mock_behavior::MockBehavior;
 
     #[tokio::test]
     async fn session_group_is_studio_scoped() {
@@ -331,5 +332,71 @@ mod lifecycle_tests {
         let svc = MockConnectionService::erroring();
         let s = svc.open_stream_session("cdc").await.expect("session");
         assert!(svc.cdc_batch(&s, 10).await.is_err());
+    }
+
+    /// Regression: `cdc_batch` used to record `cdc_read_end` from the
+    /// computed batch *before* consulting `self.behavior`, so an erroring
+    /// read still moved the cursor as if it had delivered every row. A
+    /// following commit then promoted that phantom offset into
+    /// `cdc_committed`, silently skipping events the caller never saw. This
+    /// simulates the same session's connection recovering (shared cursor
+    /// cells, `Erroring` swapped for `Ready`) and proves the events are
+    /// still there to read.
+    #[tokio::test]
+    async fn erroring_read_then_commit_does_not_skip_events_once_reads_recover() {
+        let erroring = MockConnectionService::erroring();
+        let s = erroring
+            .open_stream_session("cdc")
+            .await
+            .expect("open is not a read");
+        assert!(
+            erroring.cdc_batch(&s, 10).await.is_err(),
+            "read fails as configured"
+        );
+        erroring
+            .commit_stream_offsets(&s)
+            .await
+            .expect("commit always succeeds, even after a failed read");
+
+        let recovered = erroring.with_shared_cursor(MockBehavior::Ready);
+        let after = recovered
+            .cdc_batch(&s, 10)
+            .await
+            .expect("the recovered read succeeds");
+        assert!(
+            !after.is_empty(),
+            "a commit after a failed read must not have advanced the cursor \
+             past events the caller never saw"
+        );
+    }
+
+    /// Same regression as above, for the `Empty` behaviour: an empty read
+    /// delivers zero rows, so a following commit must leave the cursor
+    /// exactly where it was, not wherever the (discarded) full batch would
+    /// have ended.
+    #[tokio::test]
+    async fn empty_read_then_commit_does_not_skip_events_once_reads_recover() {
+        let empty = MockConnectionService::empty();
+        let s = empty
+            .open_stream_session("cdc")
+            .await
+            .expect("open is not a read");
+        let first = empty.cdc_batch(&s, 10).await.expect("empty read is Ok");
+        assert!(first.is_empty(), "Empty behaviour delivers no rows");
+        empty
+            .commit_stream_offsets(&s)
+            .await
+            .expect("commit always succeeds, even after an empty read");
+
+        let recovered = empty.with_shared_cursor(MockBehavior::Ready);
+        let after = recovered
+            .cdc_batch(&s, 10)
+            .await
+            .expect("the recovered read succeeds");
+        assert!(
+            !after.is_empty(),
+            "a commit after an empty read must not have advanced the cursor \
+             past events the caller never saw"
+        );
     }
 }

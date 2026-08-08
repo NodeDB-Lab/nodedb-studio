@@ -115,6 +115,22 @@ impl MockConnectionService {
             cdc_read_end: Rc::default(),
         }
     }
+
+    /// Test-only: a clone that shares this instance's CDC cursor cells but
+    /// answers reads with a different `MockBehavior`. Lets a test simulate a
+    /// single session whose connection recovers after an error (or stops
+    /// being empty), without losing whatever the cursor already recorded —
+    /// which is exactly the scenario the commit-after-a-failed-read
+    /// regression needs to observe.
+    #[cfg(test)]
+    pub(crate) fn with_shared_cursor(&self, behavior: MockBehavior) -> Self {
+        Self {
+            behavior,
+            all_read: self.all_read.clone(),
+            cdc_committed: self.cdc_committed.clone(),
+            cdc_read_end: self.cdc_read_end.clone(),
+        }
+    }
 }
 
 #[async_trait(?Send)]
@@ -178,10 +194,16 @@ impl StreamsData for MockConnectionService {
             .skip(start)
             .take(limit)
             .collect();
-        // Record how far this read reached, but do NOT advance the committed
-        // offset: re-reading without a commit must return the same rows.
-        self.cdc_read_end.set(start + batch.len());
-        apply(self.behavior, move || batch).await
+        // Run the behaviour first: `Erroring` returns before the cursor is
+        // touched (the `?`), and `Empty` delivers no rows. Only what was
+        // actually delivered may move `cdc_read_end` — otherwise a commit
+        // after a failed or empty read would promote a phantom offset into
+        // `cdc_committed` and silently skip events the caller never saw.
+        let delivered = apply(self.behavior, move || batch).await?;
+        // Do NOT advance the committed offset here: re-reading without a
+        // commit must return the same rows.
+        self.cdc_read_end.set(start + delivered.len());
+        Ok(delivered)
     }
 
     async fn commit_stream_offsets(&self, _session: &StreamSession) -> Result<(), StudioError> {

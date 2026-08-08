@@ -12,19 +12,21 @@
 
 use crate::models::streams::{MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, Topic};
 
-/// Materialized views known to the cluster.
+/// Materialized views known to the cluster. `id` deliberately differs from
+/// `name` (a `mv-N` handle vs. the human-readable view name) so a later bug
+/// that keys a list by the wrong field is visible instead of invisible.
 #[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn materialized_views() -> Vec<MaterializedView> {
     vec![
         MaterializedView {
-            id: "mv_top_users_24h".into(),
+            id: "mv-1".into(),
             name: "mv_top_users_24h".into(),
             source: "events".into(),
             refresh_mode: "incremental".into(),
             rows: "12,481".into(),
         },
         MaterializedView {
-            id: "mv_daily_revenue".into(),
+            id: "mv-2".into(),
             name: "mv_daily_revenue".into(),
             source: "orders".into(),
             refresh_mode: "scheduled".into(),
@@ -33,12 +35,13 @@ pub fn materialized_views() -> Vec<MaterializedView> {
     ]
 }
 
-/// Durable, replayable topics with their consumer lag.
+/// Durable, replayable topics with their consumer lag. `id` deliberately
+/// differs from `name`, same reasoning as `materialized_views`.
 #[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn topics() -> Vec<Topic> {
     vec![
         Topic {
-            id: "order_placed".into(),
+            id: "topic-1".into(),
             name: "order_placed".into(),
             partitions: "8".into(),
             messages: "2.4M".into(),
@@ -47,7 +50,7 @@ pub fn topics() -> Vec<Topic> {
             lag: "142ms".into(),
         },
         Topic {
-            id: "user_signup".into(),
+            id: "topic-2".into(),
             name: "user_signup".into(),
             partitions: "4".into(),
             messages: "88,209".into(),
@@ -56,7 +59,7 @@ pub fn topics() -> Vec<Topic> {
             lag: "22ms".into(),
         },
         Topic {
-            id: "payment_failed".into(),
+            id: "topic-3".into(),
             name: "payment_failed".into(),
             partitions: "2".into(),
             messages: "12,488".into(),
@@ -69,26 +72,27 @@ pub fn topics() -> Vec<Topic> {
 
 /// Cron-style scheduled jobs. Deliberately mixes a failed job in with
 /// successful ones so fixture-content tests can't be satisfied by an
-/// accidentally-uniform status column.
+/// accidentally-uniform status column. `id` deliberately differs from `name`,
+/// same reasoning as `materialized_views`.
 #[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn scheduled_jobs() -> Vec<ScheduledJob> {
     vec![
         ScheduledJob {
-            id: "nightly_rollup".into(),
+            id: "job-1".into(),
             name: "nightly_rollup".into(),
             cron: "0 2 * * *".into(),
             last_status: "success".into(),
             next_run: "in 2h 14m".into(),
         },
         ScheduledJob {
-            id: "session_cleanup".into(),
+            id: "job-2".into(),
             name: "session_cleanup".into(),
             cron: "*/15 * * * *".into(),
             last_status: "success".into(),
             next_run: "in 11m".into(),
         },
         ScheduledJob {
-            id: "vector_reindex".into(),
+            id: "job-3".into(),
             name: "vector_reindex".into(),
             cron: "0 4 * * 0".into(),
             last_status: "failed · oom".into(),
@@ -97,22 +101,23 @@ pub fn scheduled_jobs() -> Vec<ScheduledJob> {
     ]
 }
 
-/// LISTEN/NOTIFY channels.
+/// LISTEN/NOTIFY channels. `id` deliberately differs from `name`, same
+/// reasoning as `materialized_views`.
 #[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn notify_channel_rows() -> Vec<NotifyChannel> {
     vec![
         NotifyChannel {
-            id: "user_events".into(),
+            id: "channel-1".into(),
             name: "user_events".into(),
             subscribers: "12".into(),
         },
         NotifyChannel {
-            id: "deploy_hooks".into(),
+            id: "channel-2".into(),
             name: "deploy_hooks".into(),
             subscribers: "3".into(),
         },
         NotifyChannel {
-            id: "cache_invalidate".into(),
+            id: "channel-3".into(),
             name: "cache_invalidate".into(),
             subscribers: "5".into(),
         },
@@ -137,29 +142,33 @@ mod tests {
     use super::*;
 
     #[test]
-    fn materialized_views_have_unique_ids() {
+    fn materialized_views_have_unique_ids_distinct_from_name() {
         let rows = materialized_views();
         assert_unique_ids(&rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>());
+        assert_ids_distinct_from_names(rows.iter().map(|r| (r.id.as_str(), r.name.as_str())));
     }
 
     #[test]
-    fn topics_have_unique_ids() {
+    fn topics_have_unique_ids_distinct_from_name() {
         let rows = topics();
         assert_unique_ids(&rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>());
+        assert_ids_distinct_from_names(rows.iter().map(|r| (r.id.as_str(), r.name.as_str())));
     }
 
     #[test]
-    fn scheduled_jobs_have_unique_ids_and_a_mixed_status() {
+    fn scheduled_jobs_have_unique_ids_distinct_from_name_and_a_mixed_status() {
         let rows = scheduled_jobs();
         assert_unique_ids(&rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>());
+        assert_ids_distinct_from_names(rows.iter().map(|r| (r.id.as_str(), r.name.as_str())));
         assert!(rows.iter().any(|j| j.last_status == "success"));
         assert!(rows.iter().any(|j| j.last_status.starts_with("failed")));
     }
 
     #[test]
-    fn notify_channel_rows_have_unique_ids() {
+    fn notify_channel_rows_have_unique_ids_distinct_from_name() {
         let rows = notify_channel_rows();
         assert_unique_ids(&rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>());
+        assert_ids_distinct_from_names(rows.iter().map(|r| (r.id.as_str(), r.name.as_str())));
     }
 
     #[test]
@@ -174,5 +183,18 @@ mod tests {
         sorted.sort_unstable();
         sorted.dedup();
         assert_eq!(sorted.len(), ids.len(), "ids must be unique");
+    }
+
+    /// A list keyed by the wrong field (e.g. `name` instead of `id`) still
+    /// passes `assert_unique_ids` when the fixture happens to have `id ==
+    /// name`, so that mistake stays invisible. Fixtures here deliberately
+    /// give every row a distinct `id`/`name` pair to make it visible.
+    fn assert_ids_distinct_from_names<'a>(rows: impl Iterator<Item = (&'a str, &'a str)>) {
+        let mut saw_any = false;
+        for (id, name) in rows {
+            saw_any = true;
+            assert_ne!(id, name, "id must not equal name: {id}");
+        }
+        assert!(saw_any, "fixture must not be empty");
     }
 }
