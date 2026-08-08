@@ -105,3 +105,6 @@ docs/nodedb_lab_studio_mockup_v4.html
 specs/*
 docs/*
 .DS_Store
+
+# Subagent-driven-development scratch (ledger, briefs, review packages)
+.superpowers/
