@@ -6,5 +6,6 @@ pub mod backend;
 pub mod connection_service;
 pub mod decode;
 pub mod error;
+pub mod mock_behavior;
 pub mod nodedb_service;
 pub mod streams_data;

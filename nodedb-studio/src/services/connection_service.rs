@@ -15,6 +15,7 @@ use crate::data::mock;
 use crate::models::cdc::CdcRow;
 use crate::models::notification::Notification;
 use crate::services::error::StudioError;
+use crate::services::mock_behavior::{MockBehavior, apply};
 use crate::services::streams_data::{StreamsData, cdc_rows_from_mock};
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::{Credentials, SavedConnection};
@@ -45,19 +46,6 @@ pub trait ConnectionService {
     /// server-side; the mock persists it in-process so the unread badge does not
     /// revert on reload (POP-03).
     async fn mark_all_read(&self) -> Result<(), StudioError>;
-}
-
-/// Drives which result the mock returns, so every screen's four async states are
-/// reachable in demos and tests.
-// Variants are public API for demos and tests; not all are used in the app binary.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub enum MockBehavior {
-    #[default]
-    Ready,
-    #[allow(dead_code)]
-    Empty,
-    #[allow(dead_code)]
-    Erroring,
 }
 
 /// Hardcoded implementation used by the skeleton. Data is identical to before;
@@ -95,6 +83,14 @@ impl MockConnectionService {
     pub fn erroring() -> Self {
         Self {
             behavior: MockBehavior::Erroring,
+            all_read: Rc::default(),
+        }
+    }
+    /// Every read resolves after `d`, so the Loading state is observable.
+    #[allow(dead_code)]
+    pub fn delayed(d: std::time::Duration) -> Self {
+        Self {
+            behavior: MockBehavior::Delayed(d),
             all_read: Rc::default(),
         }
     }
@@ -140,13 +136,7 @@ impl ConnectionService for MockConnectionService {
 #[async_trait(?Send)]
 impl StreamsData for MockConnectionService {
     async fn cdc_feed(&self) -> Result<Vec<CdcRow>, StudioError> {
-        match self.behavior {
-            MockBehavior::Ready => Ok(cdc_rows_from_mock()),
-            MockBehavior::Empty => Ok(Vec::new()),
-            MockBehavior::Erroring => Err(StudioError::from(
-                nodedb_client::NodeDbError::node_unreachable("mock"),
-            )),
-        }
+        apply(self.behavior, cdc_rows_from_mock).await
     }
 }
 
