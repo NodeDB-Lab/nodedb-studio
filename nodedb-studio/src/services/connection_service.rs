@@ -27,7 +27,7 @@ use crate::models::workbench::{QueryPlan, ResultSet, SchemaNode};
 use crate::services::admin_data::AdminData;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
-use crate::services::mock_behavior::{MockBehavior, apply};
+use crate::services::mock_behavior::{MockBehavior, apply, apply_one};
 use crate::services::streams_data::{StreamsData, cdc_rows_from_mock};
 use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
@@ -155,17 +155,21 @@ impl MockConnectionService {
 #[async_trait(?Send)]
 impl ConnectionService for MockConnectionService {
     async fn list_connections(&self) -> Result<Vec<SavedConnection>, StudioError> {
-        Ok(mock::connections())
+        apply(self.behavior, mock::connections).await
     }
 
     async fn notifications(&self) -> Result<Vec<Notification>, StudioError> {
-        let mut notifs = mock::notifications();
-        if self.all_read.get() {
-            for n in &mut notifs {
-                n.unread = false;
+        let all_read = self.all_read.get();
+        apply(self.behavior, move || {
+            let mut notifs = mock::notifications();
+            if all_read {
+                for n in &mut notifs {
+                    n.unread = false;
+                }
             }
-        }
-        Ok(notifs)
+            notifs
+        })
+        .await
     }
 
     async fn mark_all_read(&self) -> Result<(), StudioError> {
@@ -178,40 +182,29 @@ impl ConnectionService for MockConnectionService {
         name: &str,
         creds: &Credentials,
     ) -> Result<ActiveConnection, StudioError> {
+        // The blank-username guard must run before any behaviour branch: a
+        // caller with bad input gets `MissingUsername`, never a behaviour
+        // error, even when the service is configured `Erroring`.
         if creds.username.trim().is_empty() {
             return Err(StudioError::MissingUsername);
         }
-        mock::connections()
-            .into_iter()
-            .find(|c| c.name == name)
-            .and_then(|c| c.open())
-            .ok_or(StudioError::NotConnected)
+        let name = name.to_string();
+        let session = apply_one(self.behavior, move || {
+            mock::connections()
+                .into_iter()
+                .find(|c| c.name == name)
+                .and_then(|c| c.open())
+        })
+        .await?;
+        session.ok_or(StudioError::NotConnected)
     }
 
     async fn nav_badges(&self) -> Result<NavBadges, StudioError> {
-        match self.behavior {
-            MockBehavior::Erroring => Err(StudioError::from(
-                nodedb_client::NodeDbError::node_unreachable("mock"),
-            )),
-            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::nav_badges()),
-            MockBehavior::Delayed(d) => {
-                tokio::time::sleep(d).await;
-                Ok(mock::nav_badges())
-            }
-        }
+        apply_one(self.behavior, mock::nav_badges).await
     }
 
     async fn session_info(&self) -> Result<SessionInfo, StudioError> {
-        match self.behavior {
-            MockBehavior::Erroring => Err(StudioError::from(
-                nodedb_client::NodeDbError::node_unreachable("mock"),
-            )),
-            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::session_info()),
-            MockBehavior::Delayed(d) => {
-                tokio::time::sleep(d).await;
-                Ok(mock::session_info())
-            }
-        }
+        apply_one(self.behavior, mock::session_info).await
     }
 
     async fn databases(&self) -> Result<Vec<String>, StudioError> {
@@ -299,16 +292,9 @@ impl ExplorerData for MockConnectionService {
     }
 
     async fn record_detail(&self, collection: &str, id: &str) -> Result<RecordDetail, StudioError> {
-        match self.behavior {
-            MockBehavior::Erroring => Err(StudioError::from(
-                nodedb_client::NodeDbError::node_unreachable("mock"),
-            )),
-            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::record_detail(collection, id)),
-            MockBehavior::Delayed(d) => {
-                tokio::time::sleep(d).await;
-                Ok(mock::record_detail(collection, id))
-            }
-        }
+        let c = collection.to_string();
+        let i = id.to_string();
+        apply_one(self.behavior, move || mock::record_detail(&c, &i)).await
     }
 }
 
@@ -342,29 +328,13 @@ impl AdminData for MockConnectionService {
 #[async_trait(?Send)]
 impl WorkbenchData for MockConnectionService {
     async fn run_query(&self, sql: &str) -> Result<ResultSet, StudioError> {
-        match self.behavior {
-            MockBehavior::Erroring => Err(StudioError::from(
-                nodedb_client::NodeDbError::node_unreachable("mock"),
-            )),
-            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::result_set(sql)),
-            MockBehavior::Delayed(d) => {
-                tokio::time::sleep(d).await;
-                Ok(mock::result_set(sql))
-            }
-        }
+        let s = sql.to_string();
+        apply_one(self.behavior, move || mock::result_set(&s)).await
     }
 
     async fn explain(&self, sql: &str) -> Result<QueryPlan, StudioError> {
-        match self.behavior {
-            MockBehavior::Erroring => Err(StudioError::from(
-                nodedb_client::NodeDbError::node_unreachable("mock"),
-            )),
-            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::query_plan(sql)),
-            MockBehavior::Delayed(d) => {
-                tokio::time::sleep(d).await;
-                Ok(mock::query_plan(sql))
-            }
-        }
+        let s = sql.to_string();
+        apply_one(self.behavior, move || mock::query_plan(&s)).await
     }
 
     async fn schema_tree(&self) -> Result<Vec<SchemaNode>, StudioError> {
@@ -375,16 +345,7 @@ impl WorkbenchData for MockConnectionService {
 #[async_trait(?Send)]
 impl ViewersData for MockConnectionService {
     async fn sub_graph(&self) -> Result<SubGraph, StudioError> {
-        match self.behavior {
-            MockBehavior::Erroring => Err(StudioError::from(
-                nodedb_client::NodeDbError::node_unreachable("mock"),
-            )),
-            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::sub_graph()),
-            MockBehavior::Delayed(d) => {
-                tokio::time::sleep(d).await;
-                Ok(mock::sub_graph())
-            }
-        }
+        apply_one(self.behavior, mock::sub_graph).await
     }
 
     async fn vector_points(&self) -> Result<Vec<VectorPoint>, StudioError> {
@@ -450,6 +411,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_connections_empty_behavior_returns_no_rows() {
+        let svc = MockConnectionService::empty();
+        let conns = svc.list_connections().await.expect("empty behaviour is Ok");
+        assert!(conns.is_empty());
+    }
+
+    #[tokio::test]
+    async fn list_connections_erroring_is_retriable_error() {
+        let svc = MockConnectionService::erroring();
+        let err = svc
+            .list_connections()
+            .await
+            .expect_err("erroring must fail");
+        assert!(err.is_retriable());
+    }
+
+    #[tokio::test]
+    async fn notifications_empty_behavior_returns_no_rows() {
+        let svc = MockConnectionService::empty();
+        let notifs = svc.notifications().await.expect("empty behaviour is Ok");
+        assert!(notifs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn notifications_erroring_is_retriable_error() {
+        let svc = MockConnectionService::erroring();
+        let err = svc.notifications().await.expect_err("erroring must fail");
+        assert!(err.is_retriable());
+    }
+
+    #[tokio::test]
     async fn mock_connect_known_name_returns_session() {
         let svc = MockConnectionService::ready();
         let creds = Credentials {
@@ -500,6 +492,47 @@ mod tests {
             password: None,
         };
         assert!(svc.connect(&name, &creds).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn connect_erroring_is_retriable_error() {
+        let svc = MockConnectionService::erroring();
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
+        let err = svc
+            .connect("staging-cluster", &creds)
+            .await
+            .expect_err("erroring must fail");
+        assert!(err.is_retriable());
+    }
+
+    #[tokio::test]
+    async fn connect_delayed_still_resolves() {
+        let svc = MockConnectionService::delayed(std::time::Duration::from_millis(5));
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
+        assert!(svc.connect("staging-cluster", &creds).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn connect_checks_missing_username_before_consulting_behavior() {
+        // A blank username must surface `MissingUsername` even when the
+        // service is configured `Erroring` — the guard must not become
+        // skippable by routing `connect` through the behaviour matcher.
+        let svc = MockConnectionService::erroring();
+        let creds = Credentials {
+            username: "   ".into(),
+            password: None,
+        };
+        let out = svc.connect("staging-cluster", &creds).await;
+        assert!(
+            matches!(out, Err(StudioError::MissingUsername)),
+            "blank username must win over the configured Erroring behavior"
+        );
     }
 
     #[tokio::test]
@@ -558,7 +591,7 @@ mod tests {
         let svc = MockConnectionService::ready();
         let b = svc.nav_badges().await.expect("badges");
         assert_eq!(b.query, 3);
-        assert_eq!(b.streams, 2);
+        assert_eq!(b.streams, 6);
     }
 
     #[tokio::test]

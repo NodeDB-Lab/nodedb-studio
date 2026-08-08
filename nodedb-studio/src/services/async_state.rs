@@ -4,6 +4,10 @@
 //! testable. Every later wiring phase maps a `use_resource` result into an
 //! `AsyncState<T>` via `from_value` and hands it to the `AsyncView` component.
 
+use crate::models::explorer::RecordDetail;
+use crate::models::shell::{NavBadges, SessionInfo};
+use crate::models::viewers::SubGraph;
+use crate::models::workbench::{QueryPlan, ResultSet};
 use crate::services::error::StudioError;
 
 /// Anything that can report emptiness, so `from_value` can distinguish a
@@ -15,6 +19,48 @@ pub trait IsEmpty {
 impl<T> IsEmpty for Vec<T> {
     fn is_empty(&self) -> bool {
         Vec::is_empty(self)
+    }
+}
+
+// Single-value seam reads have no "empty" shape: a fetched value is never
+// "empty", it either arrived or it errored (`MockBehavior::Empty` folds into
+// `Ready` for these — see `record_detail`/`run_query` precedent). Each impl is
+// listed explicitly, deliberately not a blanket `impl<T> IsEmpty for T`, so a
+// future single-value model must opt in here rather than silently inheriting
+// a meaning that may not fit it.
+impl IsEmpty for SessionInfo {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for NavBadges {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for RecordDetail {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for ResultSet {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for QueryPlan {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for SubGraph {
+    fn is_empty(&self) -> bool {
+        false
     }
 }
 
@@ -215,6 +261,55 @@ mod tests {
                 .error_message()
                 .is_some()
         );
+    }
+
+    #[test]
+    fn single_value_seam_models_are_loaded_not_empty() {
+        // Before their `IsEmpty` impls existed, these six single-value seam
+        // models could not satisfy `AsyncState<T>::from_value`'s `T: IsEmpty`
+        // bound at all, so they could never be rendered through `AsyncView`.
+        // Each must map a fetched value straight to `Loaded`, never `Empty`.
+        let session_info = AsyncState::from_value(Some(Ok(SessionInfo {
+            database: String::new(),
+            role: String::new(),
+            server_version: String::new(),
+            timezone: String::new(),
+            read_only: false,
+        })));
+        assert!(matches!(session_info, AsyncState::Loaded(_)));
+
+        let nav_badges = AsyncState::from_value(Some(Ok(NavBadges {
+            query: 0,
+            streams: 0,
+        })));
+        assert!(matches!(nav_badges, AsyncState::Loaded(_)));
+
+        let record_detail = AsyncState::from_value(Some(Ok(RecordDetail {
+            id: String::new(),
+            title: String::new(),
+            body_json: String::new(),
+            footer: String::new(),
+        })));
+        assert!(matches!(record_detail, AsyncState::Loaded(_)));
+
+        let result_set = AsyncState::from_value(Some(Ok(ResultSet {
+            columns: Vec::new(),
+            rows: Vec::new(),
+            elapsed_ms: 0,
+            scanned: String::new(),
+        })));
+        assert!(matches!(result_set, AsyncState::Loaded(_)));
+
+        let query_plan = AsyncState::from_value(Some(Ok(QueryPlan {
+            text: String::new(),
+        })));
+        assert!(matches!(query_plan, AsyncState::Loaded(_)));
+
+        let sub_graph = AsyncState::from_value(Some(Ok(SubGraph {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+        })));
+        assert!(matches!(sub_graph, AsyncState::Loaded(_)));
     }
 
     #[test]
