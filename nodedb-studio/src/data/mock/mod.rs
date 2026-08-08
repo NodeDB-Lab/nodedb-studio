@@ -9,8 +9,10 @@
 mod cdc;
 mod connections;
 mod docs;
+mod explorer;
 mod notify;
 
 pub use cdc::{ChangeOp, cdc_events};
 pub use connections::{connections, explorer_collections, notifications};
+pub use explorer::{collection_groups, record_detail, records};
 pub use notify::{notify_channels, notify_messages};

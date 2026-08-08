@@ -6,8 +6,9 @@
 //! trait on the mock + stub — additive, never a reshape of existing methods.
 
 use crate::services::connection_service::ConnectionService;
+use crate::services::explorer_data::ExplorerData;
 use crate::services::streams_data::StreamsData;
 
-pub trait Backend: ConnectionService + StreamsData {}
+pub trait Backend: ConnectionService + StreamsData + ExplorerData {}
 
-impl<T: ConnectionService + StreamsData> Backend for T {}
+impl<T: ConnectionService + StreamsData + ExplorerData> Backend for T {}
