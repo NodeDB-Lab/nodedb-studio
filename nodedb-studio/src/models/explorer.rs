@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use crate::models::collection::{Collection, StorageMode};
 
 /// One storage-mode group in the Explorer sidebar. `mode` is the stable key.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CollectionGroup {
     pub mode: StorageMode,

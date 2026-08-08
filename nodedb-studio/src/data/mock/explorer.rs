@@ -3,7 +3,6 @@
 use crate::models::collection::{Collection, StorageMode};
 use crate::models::explorer::{CollectionGroup, RecordDetail, RecordRow};
 
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 fn collection(name: &str, mode: StorageMode, count: &str) -> Collection {
     Collection {
         name: name.to_string(),
@@ -13,7 +12,6 @@ fn collection(name: &str, mode: StorageMode, count: &str) -> Collection {
 }
 
 /// Grouped in the canonical `StorageMode` display order.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn collection_groups() -> Vec<CollectionGroup> {
     vec![
         CollectionGroup {

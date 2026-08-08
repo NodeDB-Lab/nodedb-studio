@@ -13,7 +13,6 @@ use crate::services::error::StudioError;
 #[async_trait(?Send)]
 pub trait ExplorerData {
     /// Sidebar contents: collections grouped by storage mode, in display order.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
     async fn collection_groups(&self) -> Result<Vec<CollectionGroup>, StudioError>;
 
     /// List-pane rows for one collection.

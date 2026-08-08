@@ -1,0 +1,123 @@
+//! Structural gate: views/components/modals must read data through the
+//! backend seam (`services::backend::Backend`), never straight from
+//! `data::mock`. Reaching past the seam is exactly the bug the seam exists
+//! to prevent — a screen that "works" against mock data but silently breaks
+//! (or never connects) once a real `Backend` impl lands.
+//!
+//! This is a plain filesystem/text scan, not a `syn`-based check: the crate
+//! has no lib target (bin-only, see AGENTS.md), so an integration test here
+//! cannot `use` crate items at all. Scanning source text is the only option
+//! available at this layer, and it is enough to catch the pattern we care
+//! about (`data::mock` / `mock::` reference-by-name).
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+/// Directories (relative to the crate root) that must stay seam-only.
+const SCANNED_ROOTS: &[&str] = &["src/views", "src/components", "src/modals"];
+
+/// The one documented exception. `views/streams/notify.rs` renders
+/// `models::streams::NotifyChannel`/`NotifyMessage`, but those seam models
+/// are missing the `active` and `source` fields the current notify view
+/// renders (a gap flagged in Task 6's review). Rewiring notify would force a
+/// UI redesign decision that is deliberately deferred rather than papered
+/// over here. Remove this exception the moment notify is rewired to the
+/// seam — at that point this test must go back to zero exceptions.
+const ALLOWED_EXCEPTIONS: &[&str] = &["views/streams/notify.rs"];
+
+/// Recursively collect every `.rs` file under `dir`.
+fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            collect_rs_files(&path, out);
+        } else if path.extension().is_some_and(|ext| ext == "rs") {
+            out.push(path);
+        }
+    }
+}
+
+/// Strip a trailing `//` line comment (if any) so matches inside comments do
+/// not count as violations. This is a simple substring split, not a real
+/// tokenizer — sufficient here because none of the scanned files put `//`
+/// inside a string literal ahead of real code on the same line.
+fn code_part(line: &str) -> &str {
+    match line.find("//") {
+        Some(idx) => &line[..idx],
+        None => line,
+    }
+}
+
+fn references_mock(line: &str) -> bool {
+    let code = code_part(line);
+    code.contains("data::mock") || code.contains("mock::")
+}
+
+#[test]
+fn views_components_and_modals_read_only_through_the_seam() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let mut files = Vec::new();
+    for root in SCANNED_ROOTS {
+        collect_rs_files(&manifest_dir.join(root), &mut files);
+    }
+    assert!(
+        !files.is_empty(),
+        "expected to find .rs files under {SCANNED_ROOTS:?} — scan roots may be wrong"
+    );
+
+    let src_dir = manifest_dir.join("src");
+    let mut violations: Vec<String> = Vec::new();
+
+    for file in &files {
+        let rel = file
+            .strip_prefix(&src_dir)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        if ALLOWED_EXCEPTIONS.contains(&rel.as_str()) {
+            continue;
+        }
+
+        let Ok(contents) = fs::read_to_string(file) else {
+            continue;
+        };
+        for (idx, line) in contents.lines().enumerate() {
+            if references_mock(line) {
+                violations.push(format!("{rel}:{} : {}", idx + 1, line.trim()));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "found {} reference(s) to data::mock outside the allowed exception \
+         ({:?}) — views/components/modals must read through `services::backend::Backend`, \
+         not `data::mock` directly:\n{}",
+        violations.len(),
+        ALLOWED_EXCEPTIONS,
+        violations.join("\n")
+    );
+}
+
+#[test]
+fn the_documented_exception_still_exists_and_still_needs_it() {
+    // Guards against the exception silently becoming stale: if
+    // `views/streams/notify.rs` stops referencing `data::mock`, the
+    // exception entry above is dead and must be deleted along with this
+    // test's assumption.
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let notify = manifest_dir.join("src/views/streams/notify.rs");
+    let contents = fs::read_to_string(&notify)
+        .unwrap_or_else(|e| panic!("expected {} to exist: {e}", notify.display()));
+    let still_uses_mock = contents.lines().any(references_mock);
+    assert!(
+        still_uses_mock,
+        "views/streams/notify.rs no longer references data::mock — remove it from \
+         ALLOWED_EXCEPTIONS in this test file, the exception is no longer needed"
+    );
+}
