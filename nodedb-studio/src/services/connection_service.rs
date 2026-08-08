@@ -16,6 +16,9 @@ use crate::models::admin::{AuditEntry, ClusterNode, RaftGroup, RlsPolicy, ShardR
 use crate::models::cdc::CdcRow;
 use crate::models::explorer::{CollectionGroup, RecordDetail, RecordRow};
 use crate::models::notification::Notification;
+use crate::models::streams::{
+    MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
+};
 use crate::services::admin_data::AdminData;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
@@ -63,6 +66,12 @@ pub trait ConnectionService {
 pub struct MockConnectionService {
     behavior: MockBehavior,
     all_read: Rc<Cell<bool>>,
+    /// Offset the next `cdc_batch` reads from. Only `commit_stream_offsets`
+    /// advances it, mirroring the server: reads are idempotent.
+    cdc_committed: Rc<Cell<usize>>,
+    /// How far the most recent `cdc_batch` read. Commit promotes this into
+    /// `cdc_committed`.
+    cdc_read_end: Rc<Cell<usize>>,
 }
 
 // Constructors are public API for demos and tests; not all are used in the app binary.
@@ -72,6 +81,8 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Ready,
             all_read: Rc::default(),
+            cdc_committed: Rc::default(),
+            cdc_read_end: Rc::default(),
         }
     }
     /// Every read returns an empty collection.
@@ -80,6 +91,8 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Empty,
             all_read: Rc::default(),
+            cdc_committed: Rc::default(),
+            cdc_read_end: Rc::default(),
         }
     }
     /// Every read fails with a retriable server error.
@@ -88,6 +101,8 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Erroring,
             all_read: Rc::default(),
+            cdc_committed: Rc::default(),
+            cdc_read_end: Rc::default(),
         }
     }
     /// Every read resolves after `d`, so the Loading state is observable.
@@ -96,6 +111,8 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Delayed(d),
             all_read: Rc::default(),
+            cdc_committed: Rc::default(),
+            cdc_read_end: Rc::default(),
         }
     }
 }
@@ -141,6 +158,61 @@ impl ConnectionService for MockConnectionService {
 impl StreamsData for MockConnectionService {
     async fn cdc_feed(&self) -> Result<Vec<CdcRow>, StudioError> {
         apply(self.behavior, cdc_rows_from_mock).await
+    }
+
+    async fn open_stream_session(&self, stream: &str) -> Result<StreamSession, StudioError> {
+        Ok(StreamSession {
+            stream: stream.to_string(),
+            group: format!("studio_{stream}"),
+        })
+    }
+
+    async fn cdc_batch(
+        &self,
+        _session: &StreamSession,
+        limit: usize,
+    ) -> Result<Vec<CdcRow>, StudioError> {
+        let start = self.cdc_committed.get();
+        let batch: Vec<CdcRow> = cdc_rows_from_mock()
+            .into_iter()
+            .skip(start)
+            .take(limit)
+            .collect();
+        // Record how far this read reached, but do NOT advance the committed
+        // offset: re-reading without a commit must return the same rows.
+        self.cdc_read_end.set(start + batch.len());
+        apply(self.behavior, move || batch).await
+    }
+
+    async fn commit_stream_offsets(&self, _session: &StreamSession) -> Result<(), StudioError> {
+        self.cdc_committed.set(self.cdc_read_end.get());
+        Ok(())
+    }
+
+    async fn close_stream_session(&self, _session: &StreamSession) -> Result<(), StudioError> {
+        self.cdc_committed.set(0);
+        self.cdc_read_end.set(0);
+        Ok(())
+    }
+
+    async fn materialized_views(&self) -> Result<Vec<MaterializedView>, StudioError> {
+        apply(self.behavior, mock::materialized_views).await
+    }
+
+    async fn topics(&self) -> Result<Vec<Topic>, StudioError> {
+        apply(self.behavior, mock::topics).await
+    }
+
+    async fn scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, StudioError> {
+        apply(self.behavior, mock::scheduled_jobs).await
+    }
+
+    async fn notify_channels(&self) -> Result<Vec<NotifyChannel>, StudioError> {
+        apply(self.behavior, mock::notify_channel_rows).await
+    }
+
+    async fn notify_messages(&self) -> Result<Vec<NotifyMessage>, StudioError> {
+        apply(self.behavior, mock::notify_message_rows).await
     }
 }
 

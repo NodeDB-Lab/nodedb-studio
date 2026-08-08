@@ -14,6 +14,9 @@ use crate::models::admin::{AuditEntry, ClusterNode, RaftGroup, RlsPolicy, ShardR
 use crate::models::cdc::CdcRow;
 use crate::models::explorer::{CollectionGroup, RecordDetail, RecordRow};
 use crate::models::notification::Notification;
+use crate::models::streams::{
+    MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
+};
 use crate::services::admin_data::AdminData;
 use crate::services::connection_service::ConnectionService;
 use crate::services::error::StudioError;
@@ -56,6 +59,46 @@ impl ConnectionService for NodeDbConnectionService {
 #[async_trait(?Send)]
 impl StreamsData for NodeDbConnectionService {
     async fn cdc_feed(&self) -> Result<Vec<CdcRow>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn open_stream_session(&self, _stream: &str) -> Result<StreamSession, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn cdc_batch(
+        &self,
+        _session: &StreamSession,
+        _limit: usize,
+    ) -> Result<Vec<CdcRow>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn commit_stream_offsets(&self, _session: &StreamSession) -> Result<(), StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn close_stream_session(&self, _session: &StreamSession) -> Result<(), StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn materialized_views(&self) -> Result<Vec<MaterializedView>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn topics(&self) -> Result<Vec<Topic>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn notify_channels(&self) -> Result<Vec<NotifyChannel>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn notify_messages(&self) -> Result<Vec<NotifyMessage>, StudioError> {
         Err(StudioError::NotConnected)
     }
 }
@@ -131,6 +174,48 @@ mod tests {
         ));
         assert!(matches!(
             svc.mark_all_read().await,
+            Err(StudioError::NotConnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn stub_streams_lifecycle_and_lists_are_not_connected() {
+        let svc = NodeDbConnectionService;
+        let session = StreamSession {
+            stream: "cdc".into(),
+            group: "studio_cdc".into(),
+        };
+        assert!(matches!(
+            svc.open_stream_session("cdc").await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.cdc_batch(&session, 10).await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.commit_stream_offsets(&session).await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.close_stream_session(&session).await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.materialized_views().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(svc.topics().await, Err(StudioError::NotConnected)));
+        assert!(matches!(
+            svc.scheduled_jobs().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.notify_channels().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.notify_messages().await,
             Err(StudioError::NotConnected)
         ));
     }

@@ -6,3 +6,4 @@ pub mod cdc;
 pub mod collection;
 pub mod explorer;
 pub mod notification;
+pub mod streams;
