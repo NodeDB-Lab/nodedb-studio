@@ -17,7 +17,7 @@ pub struct Table {
 }
 
 /// One row, addressable by column name.
-#[allow(dead_code)]
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub struct Row<'a> {
     columns: &'a [String],
     cells: &'a [String],
@@ -25,7 +25,7 @@ pub struct Row<'a> {
 
 impl<'a> Row<'a> {
     /// The cell under `name`, or an error naming the column that is missing.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
     pub fn field(&self, name: &str) -> Result<&'a str, StudioError> {
         let idx = self.columns.iter().position(|c| c == name).ok_or_else(|| {
             StudioError::UnexpectedColumns {
@@ -48,7 +48,7 @@ impl<'a> Row<'a> {
 ///
 /// The assertion is the point: it turns the server's silent session-variable
 /// fallback into a typed error rather than an empty result set.
-#[allow(dead_code)]
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn decode_rows<T>(
     table: &Table,
     expect: &[&str],
