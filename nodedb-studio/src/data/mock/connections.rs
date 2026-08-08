@@ -198,11 +198,14 @@ pub fn notifications() -> Vec<Notification> {
 }
 
 /// Nav-rail badge counts: pending items on the Query and Streams entries.
+/// These must agree with the hardcoded literals in `components::rail` until
+/// that later phase swaps the rail onto this seam method, so the eventual
+/// wiring is a visual no-op.
 #[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn nav_badges() -> NavBadges {
     NavBadges {
         query: 3,
-        streams: 2,
+        streams: 6,
     }
 }
 
