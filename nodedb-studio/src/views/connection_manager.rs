@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
-use crate::state::connections_registry::{ConnStatus, SavedConnection};
+use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
 use crate::state::ui::ModalKind;
 
 #[component]
@@ -49,12 +49,25 @@ pub fn ConnectionManager() -> Element {
                             conn: conn.clone(),
                             on_connect: {
                                 let service = service.clone();
+                                // TODO(later phase): the connect form has no username field
+                                // yet, so identity is taken from the saved profile rather
+                                // than a user-entered value. Replace once the connect modal
+                                // collects credentials explicitly.
+                                let creds = Credentials {
+                                    username: conn
+                                        .profile
+                                        .as_ref()
+                                        .map(|p| p.user.clone())
+                                        .unwrap_or_default(),
+                                    password: None,
+                                };
                                 move |name: String| {
                                     // Async at the seam: clone the Rc into the task and
                                     // set `active` (Copy) only after the await resolves.
                                     let service = service.clone();
+                                    let creds = creds.clone();
                                     spawn(async move {
-                                        if let Ok(session) = service.connect(&name).await {
+                                        if let Ok(session) = service.connect(&name, &creds).await {
                                             active.set(Some(session));
                                         }
                                         // Err case (e.g. offline): surfaced in a later wiring phase.

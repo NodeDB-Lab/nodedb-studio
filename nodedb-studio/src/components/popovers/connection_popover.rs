@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
-use crate::state::connections_registry::{ConnStatus, SavedConnection};
+use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
 use crate::state::ui::{ModalKind, Popover};
 
 #[component]
@@ -50,6 +50,17 @@ pub fn ConnectionPopover() -> Element {
                     };
                     let svc = service.clone();
                     let item_class = if disabled { "cp-item disabled" } else { "cp-item" };
+                    // TODO(later phase): the switch popover has no username field yet, so
+                    // identity is taken from the saved profile rather than a user-entered
+                    // value. Replace once the connect modal collects credentials explicitly.
+                    let creds = Credentials {
+                        username: sc
+                            .profile
+                            .as_ref()
+                            .map(|p| p.user.clone())
+                            .unwrap_or_default(),
+                        password: None,
+                    };
                     rsx! {
                         div {
                             class: "{item_class}",
@@ -59,8 +70,9 @@ pub fn ConnectionPopover() -> Element {
                                     // set `active` (Copy) only after the await resolves.
                                     let svc = svc.clone();
                                     let name = name.clone();
+                                    let creds = creds.clone();
                                     spawn(async move {
-                                        if let Ok(s) = svc.connect(&name).await { active.set(Some(s)); }
+                                        if let Ok(s) = svc.connect(&name, &creds).await { active.set(Some(s)); }
                                     });
                                     popover.set(None);
                                 }

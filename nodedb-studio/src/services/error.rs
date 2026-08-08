@@ -36,6 +36,9 @@ pub enum StudioError {
     #[error("unexpected result columns: expected [{expected}], got [{got}]")]
     #[allow(dead_code)]
     UnexpectedColumns { expected: String, got: String },
+    /// Connect was attempted without an explicit username.
+    #[error("a username is required to connect")]
+    MissingUsername,
 }
 
 impl StudioError {
@@ -43,7 +46,9 @@ impl StudioError {
     /// `NotConnected` is never retriable (it is studio-originated, not transient).
     pub fn is_retriable(&self) -> bool {
         match self {
-            StudioError::NotConnected | StudioError::UnexpectedColumns { .. } => false,
+            StudioError::NotConnected
+            | StudioError::UnexpectedColumns { .. }
+            | StudioError::MissingUsername => false,
             StudioError::Connection(e)
             | StudioError::Auth(e)
             | StudioError::NotFound(e)

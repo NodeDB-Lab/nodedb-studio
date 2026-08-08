@@ -69,3 +69,12 @@ impl SavedConnection {
         })
     }
 }
+
+/// Identity supplied at connect time. Studio never defaults the username: the
+/// client would silently fall back to `admin`, so a blank field must be a
+/// validation error surfaced in the connect form.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Credentials {
+    pub username: String,
+    pub password: Option<String>,
+}

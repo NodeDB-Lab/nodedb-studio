@@ -16,7 +16,7 @@ use crate::services::connection_service::ConnectionService;
 use crate::services::error::StudioError;
 use crate::services::streams_data::StreamsData;
 use crate::state::connection::ActiveConnection;
-use crate::state::connections_registry::SavedConnection;
+use crate::state::connections_registry::{Credentials, SavedConnection};
 
 // The Phase-2 seam impl: its trait conformance and object-safety are proven by
 // the tests below, but the mock is still the active injected service, so this
@@ -36,7 +36,11 @@ impl ConnectionService for NodeDbConnectionService {
         Err(StudioError::NotConnected)
     }
 
-    async fn connect(&self, _name: &str) -> Result<ActiveConnection, StudioError> {
+    async fn connect(
+        &self,
+        _name: &str,
+        _creds: &Credentials,
+    ) -> Result<ActiveConnection, StudioError> {
         Err(StudioError::NotConnected)
     }
 
@@ -69,8 +73,12 @@ mod tests {
             svc.notifications().await,
             Err(StudioError::NotConnected)
         ));
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
         assert!(matches!(
-            svc.connect("anything").await,
+            svc.connect("anything", &creds).await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(

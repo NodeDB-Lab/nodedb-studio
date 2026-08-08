@@ -17,7 +17,7 @@ use crate::models::notification::Notification;
 use crate::services::error::StudioError;
 use crate::services::streams_data::{StreamsData, cdc_rows_from_mock};
 use crate::state::connection::ActiveConnection;
-use crate::state::connections_registry::SavedConnection;
+use crate::state::connections_registry::{Credentials, SavedConnection};
 
 /// Async because the real client talks to NodeDB over the network. The Dioxus
 /// runtime is single-threaded, so `?Send` is correct (and `use_resource` has no
@@ -32,9 +32,14 @@ pub trait ConnectionService {
     /// The full notification feed (capability gating happens at render time).
     async fn notifications(&self) -> Result<Vec<Notification>, StudioError>;
 
-    /// Open a session by saved-connection name. `StudioError::NotConnected` if
-    /// the name is unknown or the connection is offline.
-    async fn connect(&self, name: &str) -> Result<ActiveConnection, StudioError>;
+    /// Open a session by saved-connection name using an explicit identity.
+    /// `StudioError::MissingUsername` if the username is blank;
+    /// `StudioError::NotConnected` if the name is unknown or offline.
+    async fn connect(
+        &self,
+        name: &str,
+        creds: &Credentials,
+    ) -> Result<ActiveConnection, StudioError>;
 
     /// Mark every notification read. A seam write: the real client persists this
     /// server-side; the mock persists it in-process so the unread badge does not
@@ -116,7 +121,14 @@ impl ConnectionService for MockConnectionService {
         Ok(())
     }
 
-    async fn connect(&self, name: &str) -> Result<ActiveConnection, StudioError> {
+    async fn connect(
+        &self,
+        name: &str,
+        creds: &Credentials,
+    ) -> Result<ActiveConnection, StudioError> {
+        if creds.username.trim().is_empty() {
+            return Err(StudioError::MissingUsername);
+        }
         mock::connections()
             .into_iter()
             .find(|c| c.name == name)
@@ -180,18 +192,54 @@ mod tests {
     #[tokio::test]
     async fn mock_connect_known_name_returns_session() {
         let svc = MockConnectionService::ready();
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
         // `staging-cluster` is a connectable Online mock connection (data/mock.rs).
-        let session = svc.connect("staging-cluster").await;
+        let session = svc.connect("staging-cluster", &creds).await;
         assert!(session.is_ok());
     }
 
     #[tokio::test]
     async fn mock_connect_unknown_name_is_not_connected() {
         let svc = MockConnectionService::ready();
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
         assert!(matches!(
-            svc.connect("does-not-exist").await,
+            svc.connect("does-not-exist", &creds).await,
             Err(StudioError::NotConnected)
         ));
+    }
+
+    #[tokio::test]
+    async fn connect_rejects_blank_username() {
+        let svc = MockConnectionService::ready();
+        let creds = Credentials {
+            username: "   ".into(),
+            password: None,
+        };
+        let out = svc.connect("local-dev", &creds).await;
+        assert!(
+            matches!(out, Err(StudioError::MissingUsername)),
+            "blank username must be rejected, never defaulted to admin"
+        );
+    }
+
+    #[tokio::test]
+    async fn connect_accepts_explicit_username() {
+        let svc = MockConnectionService::ready();
+        let name = mock::connections()
+            .first()
+            .map(|c| c.name.clone())
+            .expect("fixture must have at least one connection");
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
+        assert!(svc.connect(&name, &creds).await.is_ok());
     }
 
     #[tokio::test]

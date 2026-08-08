@@ -8,6 +8,7 @@ use dioxus::prelude::*;
 use crate::routes::Route;
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
+use crate::state::connections_registry::{Credentials, SavedConnection};
 use crate::state::ui::ModalKind;
 
 #[component]
@@ -16,6 +17,7 @@ pub fn CommandPalette() -> Element {
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let service = use_context::<std::rc::Rc<dyn Backend>>();
+    let registry = use_context::<Signal<Vec<SavedConnection>>>();
     let nav = use_navigator();
 
     if !*open.read() {
@@ -25,6 +27,22 @@ pub fn CommandPalette() -> Element {
     // Switch connection by name, then close. `service` is an Rc (not Copy), so
     // each switch handler clones it.
     let switch_svc = service.clone();
+
+    // TODO(later phase): the palette has no username field yet, so identity is
+    // taken from the saved profile rather than a user-entered value. Replace
+    // once the connect modal collects credentials explicitly.
+    let creds_for = |name: &str| -> Credentials {
+        Credentials {
+            username: registry
+                .peek()
+                .iter()
+                .find(|c| c.name == name)
+                .and_then(|c| c.profile.as_ref())
+                .map(|p| p.user.clone())
+                .unwrap_or_default(),
+            password: None,
+        }
+    };
 
     rsx! {
         div {
@@ -66,10 +84,12 @@ pub fn CommandPalette() -> Element {
                     div { class: "palette-section", "Connections" }
                     div { class: "palette-item", onclick: {
                             let svc = switch_svc.clone();
+                            let creds = creds_for("staging-cluster");
                             move |_| {
                                 let svc = svc.clone();
+                                let creds = creds.clone();
                                 spawn(async move {
-                                    if let Ok(s) = svc.connect("staging-cluster").await { active.set(Some(s)); }
+                                    if let Ok(s) = svc.connect("staging-cluster", &creds).await { active.set(Some(s)); }
                                 });
                                 open.set(false);
                             }
@@ -78,10 +98,12 @@ pub fn CommandPalette() -> Element {
                     }
                     div { class: "palette-item", onclick: {
                             let svc = switch_svc.clone();
+                            let creds = creds_for("prod-replica-eu");
                             move |_| {
                                 let svc = svc.clone();
+                                let creds = creds.clone();
                                 spawn(async move {
-                                    if let Ok(s) = svc.connect("prod-replica-eu").await { active.set(Some(s)); }
+                                    if let Ok(s) = svc.connect("prod-replica-eu", &creds).await { active.set(Some(s)); }
                                 });
                                 open.set(false);
                             }
