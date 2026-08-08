@@ -73,8 +73,55 @@ impl SavedConnection {
 /// Identity supplied at connect time. Studio never defaults the username: the
 /// client would silently fall back to `admin`, so a blank field must be a
 /// validation error surfaced in the connect form.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+///
+/// `Debug` is hand-written, not derived: a derived impl would print
+/// `password` verbatim once the connect form starts populating it. The
+/// redaction marker is rendered unconditionally (`Some` and `None` look
+/// identical) so a `{:?}` print cannot even leak whether a password was set.
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct Credentials {
     pub username: String,
     pub password: Option<String>,
+}
+
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Credentials")
+            .field("username", &self.username)
+            .field("password", &"<redacted>")
+            .finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn debug_never_leaks_a_populated_password() {
+        let creds = Credentials {
+            username: "alice".into(),
+            password: Some("hunter2".into()),
+        };
+        let printed = format!("{creds:?}");
+        assert!(!printed.contains("hunter2"), "password leaked: {printed}");
+        assert!(printed.contains("<redacted>"));
+    }
+
+    #[test]
+    fn debug_reads_identically_whether_a_password_is_set_or_not() {
+        // The redaction marker must not double as a presence/absence signal.
+        let with_password = Credentials {
+            username: "alice".into(),
+            password: Some("hunter2".into()),
+        };
+        let without_password = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
+        assert_eq!(
+            format!("{with_password:?}"),
+            format!("{without_password:?}")
+        );
+    }
 }
