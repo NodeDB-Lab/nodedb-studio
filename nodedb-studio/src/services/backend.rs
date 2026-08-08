@@ -9,11 +9,15 @@ use crate::services::admin_data::AdminData;
 use crate::services::connection_service::ConnectionService;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::streams_data::StreamsData;
+use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
 
 pub trait Backend:
-    ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData
+    ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData + ViewersData
 {
 }
 
-impl<T: ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData> Backend for T {}
+impl<T: ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData + ViewersData>
+    Backend for T
+{
+}

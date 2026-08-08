@@ -17,12 +17,16 @@ use crate::models::notification::Notification;
 use crate::models::streams::{
     MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
 };
+use crate::models::viewers::{
+    FtsHit, SeriesPoint, SpatialFeature, SubGraph, SyncPeer, VectorPoint,
+};
 use crate::models::workbench::{QueryPlan, ResultSet, SchemaNode};
 use crate::services::admin_data::AdminData;
 use crate::services::connection_service::ConnectionService;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::streams_data::StreamsData;
+use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::{Credentials, SavedConnection};
@@ -164,6 +168,33 @@ impl WorkbenchData for NodeDbConnectionService {
     }
 }
 
+#[async_trait(?Send)]
+impl ViewersData for NodeDbConnectionService {
+    async fn sub_graph(&self) -> Result<SubGraph, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn vector_points(&self) -> Result<Vec<VectorPoint>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn series(&self, _metric: &str) -> Result<Vec<SeriesPoint>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn spatial_features(&self) -> Result<Vec<SpatialFeature>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn fts_hits(&self, _query: &str) -> Result<Vec<FtsHit>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn sync_peers(&self) -> Result<Vec<SyncPeer>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
@@ -250,6 +281,35 @@ mod tests {
         ));
         assert!(matches!(
             svc.schema_tree().await,
+            Err(StudioError::NotConnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn stub_viewer_reads_are_not_connected() {
+        let svc = NodeDbConnectionService;
+        assert!(matches!(
+            svc.sub_graph().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.vector_points().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.series("qps").await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.spatial_features().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.fts_hits("nodedb").await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.sync_peers().await,
             Err(StudioError::NotConnected)
         ));
     }

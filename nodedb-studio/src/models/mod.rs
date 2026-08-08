@@ -7,4 +7,5 @@ pub mod collection;
 pub mod explorer;
 pub mod notification;
 pub mod streams;
+pub mod viewers;
 pub mod workbench;

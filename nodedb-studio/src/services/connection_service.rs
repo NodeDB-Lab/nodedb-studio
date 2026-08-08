@@ -19,12 +19,16 @@ use crate::models::notification::Notification;
 use crate::models::streams::{
     MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
 };
+use crate::models::viewers::{
+    FtsHit, SeriesPoint, SpatialFeature, SubGraph, SyncPeer, VectorPoint,
+};
 use crate::models::workbench::{QueryPlan, ResultSet, SchemaNode};
 use crate::services::admin_data::AdminData;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::mock_behavior::{MockBehavior, apply};
 use crate::services::streams_data::{StreamsData, cdc_rows_from_mock};
+use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::{Credentials, SavedConnection};
@@ -322,6 +326,44 @@ impl WorkbenchData for MockConnectionService {
 
     async fn schema_tree(&self) -> Result<Vec<SchemaNode>, StudioError> {
         apply(self.behavior, mock::schema_tree).await
+    }
+}
+
+#[async_trait(?Send)]
+impl ViewersData for MockConnectionService {
+    async fn sub_graph(&self) -> Result<SubGraph, StudioError> {
+        match self.behavior {
+            MockBehavior::Erroring => Err(StudioError::from(
+                nodedb_client::NodeDbError::node_unreachable("mock"),
+            )),
+            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::sub_graph()),
+            MockBehavior::Delayed(d) => {
+                tokio::time::sleep(d).await;
+                Ok(mock::sub_graph())
+            }
+        }
+    }
+
+    async fn vector_points(&self) -> Result<Vec<VectorPoint>, StudioError> {
+        apply(self.behavior, mock::vector_points).await
+    }
+
+    async fn series(&self, metric: &str) -> Result<Vec<SeriesPoint>, StudioError> {
+        let m = metric.to_string();
+        apply(self.behavior, move || mock::series(&m)).await
+    }
+
+    async fn spatial_features(&self) -> Result<Vec<SpatialFeature>, StudioError> {
+        apply(self.behavior, mock::spatial_features).await
+    }
+
+    async fn fts_hits(&self, query: &str) -> Result<Vec<FtsHit>, StudioError> {
+        let q = query.to_string();
+        apply(self.behavior, move || mock::fts_hits(&q)).await
+    }
+
+    async fn sync_peers(&self) -> Result<Vec<SyncPeer>, StudioError> {
+        apply(self.behavior, mock::sync_peers).await
     }
 }
 
