@@ -17,8 +17,8 @@ homepage = "https://nodedb.dev"
 # enabled in the phase that first constructs a NativeClient — it drags in a
 # TLS + C-toolchain build tree (tokio-rustls, aws-lc-rs, cmake), so it is not
 # carried while the seam impl is an inert stub.
-nodedb-client = "0.3.0"
-nodedb-types = "0.3.0"
+nodedb-client = "0.4.0"
+nodedb-types = "0.4.0"
 # Async
 async-trait = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
