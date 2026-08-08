@@ -6,12 +6,14 @@
 //! reproduced. NodeDB version numbers are undecided (CLAUDE.md §2), so the
 //! server stat is a neutral "dev" placeholder rather than an invented version.
 
+mod admin;
 mod cdc;
 mod connections;
 mod docs;
 mod explorer;
 mod notify;
 
+pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_ranges, users};
 pub use cdc::{ChangeOp, cdc_events};
 pub use connections::{connections, explorer_collections, notifications};
 pub use explorer::{collection_groups, record_detail, records};
