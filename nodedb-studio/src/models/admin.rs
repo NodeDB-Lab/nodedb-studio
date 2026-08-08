@@ -1,6 +1,8 @@
 //! Admin-tier models. String fields mirror the wire, which returns every
-//! scalar as a string; booleans are parsed at the seam so views never see
-//! the server's "t"/"f" encoding.
+//! scalar as a string. `is_superuser` and `enabled` are already plain `bool`
+//! here: the real seam implementation will decode the server's "t"/"f"
+//! encoding into these fields at that boundary, so views never have to see
+//! the wire representation.
 
 use serde::{Deserialize, Serialize};
 

@@ -83,14 +83,24 @@ pub fn users() -> Vec<UserRow> {
 /// Row-level-security policies.
 #[allow(dead_code)] // SEAM-UNWIRED(task-10)
 pub fn rls_policies() -> Vec<RlsPolicy> {
-    vec![RlsPolicy {
-        id: "tenant_isolation".into(),
-        name: "tenant_isolation".into(),
-        collection: "orders".into(),
-        kind: "select".into(),
-        mode: "permissive".into(),
-        enabled: true,
-    }]
+    vec![
+        RlsPolicy {
+            id: "tenant_isolation".into(),
+            name: "tenant_isolation".into(),
+            collection: "orders".into(),
+            kind: "select".into(),
+            mode: "permissive".into(),
+            enabled: true,
+        },
+        RlsPolicy {
+            id: "pii_masking".into(),
+            name: "pii_masking".into(),
+            collection: "users".into(),
+            kind: "select".into(),
+            mode: "restrictive".into(),
+            enabled: false,
+        },
+    ]
 }
 
 /// Audit log entries.

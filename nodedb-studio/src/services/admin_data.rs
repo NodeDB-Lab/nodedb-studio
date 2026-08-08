@@ -67,16 +67,130 @@ mod tests {
         assert_eq!(total, v.len(), "{what} ids must be unique");
     }
 
+    // Each method gets its own empty/erroring pair rather than one combined
+    // check per behaviour: `apply(self.behavior, mock::x)` and a mis-wired
+    // `Ok(mock::x())` both satisfy a single shared assertion, so every method
+    // needs its own proof that it actually reads `self.behavior`.
+
     #[tokio::test]
-    async fn unbacked_screens_flow_through_the_same_seam() {
-        // Cluster/raft/shards have rich mock data and a NotConnected stub,
-        // exactly like every other domain. Neither is special-cased.
+    async fn cluster_nodes_empty_is_empty() {
         let svc = MockConnectionService::empty();
         let s = AsyncState::from_value(Some(svc.cluster_nodes().await));
         assert!(s.is_empty());
+    }
 
+    #[tokio::test]
+    async fn cluster_nodes_erroring_is_err() {
+        let svc = MockConnectionService::erroring();
+        let s = AsyncState::from_value(Some(svc.cluster_nodes().await));
+        assert!(s.error_message().is_some());
+    }
+
+    #[tokio::test]
+    async fn raft_groups_empty_is_empty() {
+        let svc = MockConnectionService::empty();
+        let s = AsyncState::from_value(Some(svc.raft_groups().await));
+        assert!(s.is_empty());
+    }
+
+    #[tokio::test]
+    async fn raft_groups_erroring_is_err() {
         let svc = MockConnectionService::erroring();
         let s = AsyncState::from_value(Some(svc.raft_groups().await));
         assert!(s.error_message().is_some());
+    }
+
+    #[tokio::test]
+    async fn shard_ranges_empty_is_empty() {
+        let svc = MockConnectionService::empty();
+        let s = AsyncState::from_value(Some(svc.shard_ranges().await));
+        assert!(s.is_empty());
+    }
+
+    #[tokio::test]
+    async fn shard_ranges_erroring_is_err() {
+        let svc = MockConnectionService::erroring();
+        let s = AsyncState::from_value(Some(svc.shard_ranges().await));
+        assert!(s.error_message().is_some());
+    }
+
+    #[tokio::test]
+    async fn users_empty_is_empty() {
+        let svc = MockConnectionService::empty();
+        let s = AsyncState::from_value(Some(svc.users().await));
+        assert!(s.is_empty());
+    }
+
+    #[tokio::test]
+    async fn users_erroring_is_err() {
+        let svc = MockConnectionService::erroring();
+        let s = AsyncState::from_value(Some(svc.users().await));
+        assert!(s.error_message().is_some());
+    }
+
+    #[tokio::test]
+    async fn rls_policies_empty_is_empty() {
+        let svc = MockConnectionService::empty();
+        let s = AsyncState::from_value(Some(svc.rls_policies().await));
+        assert!(s.is_empty());
+    }
+
+    #[tokio::test]
+    async fn rls_policies_erroring_is_err() {
+        let svc = MockConnectionService::erroring();
+        let s = AsyncState::from_value(Some(svc.rls_policies().await));
+        assert!(s.error_message().is_some());
+    }
+
+    #[tokio::test]
+    async fn audit_entries_empty_is_empty() {
+        let svc = MockConnectionService::empty();
+        let s = AsyncState::from_value(Some(svc.audit_entries().await));
+        assert!(s.is_empty());
+    }
+
+    #[tokio::test]
+    async fn audit_entries_erroring_is_err() {
+        let svc = MockConnectionService::erroring();
+        let s = AsyncState::from_value(Some(svc.audit_entries().await));
+        assert!(s.error_message().is_some());
+    }
+
+    #[tokio::test]
+    async fn users_fixture_marks_admin_superuser_and_alice_not() {
+        let svc = MockConnectionService::ready();
+        let users = svc.users().await.expect("users");
+        let admin = users
+            .iter()
+            .find(|u| u.id == "admin")
+            .expect("fixture has an `admin` user");
+        let alice = users
+            .iter()
+            .find(|u| u.id == "alice")
+            .expect("fixture has an `alice` user");
+        assert!(admin.is_superuser, "admin fixture must be a superuser");
+        assert!(!alice.is_superuser, "alice fixture must not be a superuser");
+    }
+
+    #[tokio::test]
+    async fn rls_policies_fixture_enabled_flags_match_intent() {
+        let svc = MockConnectionService::ready();
+        let policies = svc.rls_policies().await.expect("rls");
+        let tenant_isolation = policies
+            .iter()
+            .find(|p| p.id == "tenant_isolation")
+            .expect("fixture has a `tenant_isolation` policy");
+        let pii_masking = policies
+            .iter()
+            .find(|p| p.id == "pii_masking")
+            .expect("fixture has a `pii_masking` policy");
+        assert!(
+            tenant_isolation.enabled,
+            "tenant_isolation must be enabled in the fixture"
+        );
+        assert!(
+            !pii_masking.enabled,
+            "pii_masking must be disabled in the fixture"
+        );
     }
 }
