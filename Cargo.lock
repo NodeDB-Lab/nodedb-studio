@@ -3033,9 +3033,9 @@ dependencies = [
 
 [[package]]
 name = "nodedb-client"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4c775d84d70535bfa1e4f70fcd185b7f555385ef2122f5ec588c418e0a63ed5"
+checksum = "e21742bfa5b8c994f8083114d0af7a169d40e6b14689bb6320c8ace890f423a8"
 dependencies = [
  "async-trait",
  "nodedb-types",
@@ -3047,9 +3047,9 @@ dependencies = [
 
 [[package]]
 name = "nodedb-codec"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a21422d579c2ac16e5237e4cd1144262dd4641d072345b4a891844fc1cd557a8"
+checksum = "72f97fb96fa7d564aa91dd2a0a28f4491584a454f39f1fdf5799cdeb9dc1d486"
 dependencies = [
  "lz4_flex",
  "nalgebra",
@@ -3081,9 +3081,9 @@ dependencies = [
 
 [[package]]
 name = "nodedb-types"
-version = "0.3.0"
+version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "77145a5667abbe3726f46b50ff60ea5cb771fc4fcc782904ee2b03f9b46c2c00"
+checksum = "f93c489ddea61e73f6e623254ed664665495414ae757e106b8e1eedaea249025"
 dependencies = [
  "aes-gcm",
  "bytemuck",
@@ -6429,18 +6429,18 @@ checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
 
 [[package]]
 name = "zerompk"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ed7119bccd8297686328e73233a8c839645e742e16c2b8e94a48bda9f118729"
+checksum = "b5fdec1c176abb9ac7f1e1f40aa05c2c2a01984e895787b5f2e0b6c9c1ad7f20"
 dependencies = [
  "zerompk_derive",
 ]
 
 [[package]]
 name = "zerompk_derive"
-version = "0.5.0"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cec68b6d21b4d29083199a2b2f42fb23712cfdf3bdb221b86c2485c6b6c4248"
+checksum = "02586870c5f30b25cf5a2eae9ab9ba29d2023ca79ee267e3c13ad0ec57b24765"
 dependencies = [
  "proc-macro2",
  "quote",
