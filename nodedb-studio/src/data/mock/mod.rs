@@ -13,6 +13,7 @@ mod docs;
 mod explorer;
 mod notify;
 mod streams;
+mod workbench;
 
 pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_ranges, users};
 pub use cdc::{ChangeOp, cdc_events};
@@ -22,3 +23,4 @@ pub use notify::{notify_channels, notify_messages};
 pub use streams::{
     materialized_views, notify_channel_rows, notify_message_rows, scheduled_jobs, topics,
 };
+pub use workbench::{query_plan, result_set, schema_tree};

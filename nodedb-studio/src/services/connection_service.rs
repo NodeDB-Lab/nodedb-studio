@@ -19,11 +19,13 @@ use crate::models::notification::Notification;
 use crate::models::streams::{
     MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
 };
+use crate::models::workbench::{QueryPlan, ResultSet, SchemaNode};
 use crate::services::admin_data::AdminData;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::mock_behavior::{MockBehavior, apply};
 use crate::services::streams_data::{StreamsData, cdc_rows_from_mock};
+use crate::services::workbench_data::WorkbenchData;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::{Credentials, SavedConnection};
 
@@ -287,6 +289,39 @@ impl AdminData for MockConnectionService {
 
     async fn audit_entries(&self) -> Result<Vec<AuditEntry>, StudioError> {
         apply(self.behavior, mock::audit_entries).await
+    }
+}
+
+#[async_trait(?Send)]
+impl WorkbenchData for MockConnectionService {
+    async fn run_query(&self, sql: &str) -> Result<ResultSet, StudioError> {
+        match self.behavior {
+            MockBehavior::Erroring => Err(StudioError::from(
+                nodedb_client::NodeDbError::node_unreachable("mock"),
+            )),
+            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::result_set(sql)),
+            MockBehavior::Delayed(d) => {
+                tokio::time::sleep(d).await;
+                Ok(mock::result_set(sql))
+            }
+        }
+    }
+
+    async fn explain(&self, sql: &str) -> Result<QueryPlan, StudioError> {
+        match self.behavior {
+            MockBehavior::Erroring => Err(StudioError::from(
+                nodedb_client::NodeDbError::node_unreachable("mock"),
+            )),
+            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::query_plan(sql)),
+            MockBehavior::Delayed(d) => {
+                tokio::time::sleep(d).await;
+                Ok(mock::query_plan(sql))
+            }
+        }
+    }
+
+    async fn schema_tree(&self) -> Result<Vec<SchemaNode>, StudioError> {
+        apply(self.behavior, mock::schema_tree).await
     }
 }
 

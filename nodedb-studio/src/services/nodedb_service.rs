@@ -17,11 +17,13 @@ use crate::models::notification::Notification;
 use crate::models::streams::{
     MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
 };
+use crate::models::workbench::{QueryPlan, ResultSet, SchemaNode};
 use crate::services::admin_data::AdminData;
 use crate::services::connection_service::ConnectionService;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::streams_data::StreamsData;
+use crate::services::workbench_data::WorkbenchData;
 use crate::state::connection::ActiveConnection;
 use crate::state::connections_registry::{Credentials, SavedConnection};
 
@@ -147,6 +149,21 @@ impl AdminData for NodeDbConnectionService {
     }
 }
 
+#[async_trait(?Send)]
+impl WorkbenchData for NodeDbConnectionService {
+    async fn run_query(&self, _sql: &str) -> Result<ResultSet, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn explain(&self, _sql: &str) -> Result<QueryPlan, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn schema_tree(&self) -> Result<Vec<SchemaNode>, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
@@ -216,6 +233,23 @@ mod tests {
         ));
         assert!(matches!(
             svc.notify_messages().await,
+            Err(StudioError::NotConnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn stub_workbench_reads_are_not_connected() {
+        let svc = NodeDbConnectionService;
+        assert!(matches!(
+            svc.run_query("SELECT 1").await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.explain("SELECT 1").await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.schema_tree().await,
             Err(StudioError::NotConnected)
         ));
     }

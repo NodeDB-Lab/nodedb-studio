@@ -11,3 +11,4 @@ pub mod explorer_data;
 pub mod mock_behavior;
 pub mod nodedb_service;
 pub mod streams_data;
+pub mod workbench_data;
