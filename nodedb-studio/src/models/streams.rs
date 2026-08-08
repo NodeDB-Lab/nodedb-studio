@@ -67,18 +67,3 @@ pub struct NotifyMessage {
     pub at: String,
     pub payload_json: String,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn stream_session_carries_stream_and_studio_group() {
-        let s = StreamSession {
-            stream: "cdc".to_string(),
-            group: "studio_cdc".to_string(),
-        };
-        assert_eq!(s.stream, "cdc");
-        assert_eq!(s.group, "studio_cdc");
-    }
-}

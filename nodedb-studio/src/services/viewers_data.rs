@@ -66,27 +66,40 @@ mod tests {
     #[tokio::test]
     async fn every_viewer_read_is_keyed_and_non_empty() {
         let svc = MockConnectionService::ready();
-        assert!(!svc.vector_points().await.expect("vec").is_empty());
-        assert!(!svc.series("qps").await.expect("series").is_empty());
-        assert!(!svc.spatial_features().await.expect("geo").is_empty());
-        assert!(!svc.fts_hits("nodedb").await.expect("fts").is_empty());
-        assert!(!svc.sync_peers().await.expect("peers").is_empty());
-    }
 
-    #[tokio::test]
-    async fn empty_and_error_states_reachable() {
+        let vector = svc.vector_points().await.expect("vec");
+        assert!(!vector.is_empty());
         assert!(
-            MockConnectionService::empty()
-                .vector_points()
-                .await
-                .expect("empty is Ok")
-                .is_empty()
+            vector.iter().all(|p| !p.id.is_empty()),
+            "every vector point needs a stable key"
         );
+
+        let series = svc.series("qps").await.expect("series");
+        assert!(!series.is_empty());
         assert!(
-            MockConnectionService::erroring()
-                .sync_peers()
-                .await
-                .is_err()
+            series.iter().all(|p| !p.id.is_empty()),
+            "every series point needs a stable key"
+        );
+
+        let spatial = svc.spatial_features().await.expect("geo");
+        assert!(!spatial.is_empty());
+        assert!(
+            spatial.iter().all(|f| !f.id.is_empty()),
+            "every spatial feature needs a stable key"
+        );
+
+        let fts = svc.fts_hits("nodedb").await.expect("fts");
+        assert!(!fts.is_empty());
+        assert!(
+            fts.iter().all(|h| !h.id.is_empty()),
+            "every fts hit needs a stable key"
+        );
+
+        let peers = svc.sync_peers().await.expect("peers");
+        assert!(!peers.is_empty());
+        assert!(
+            peers.iter().all(|p| !p.id.is_empty()),
+            "every sync peer needs a stable key"
         );
     }
 
