@@ -16,6 +16,7 @@ use crate::models::admin::{AuditEntry, ClusterNode, RaftGroup, RlsPolicy, ShardR
 use crate::models::cdc::CdcRow;
 use crate::models::explorer::{CollectionGroup, RecordDetail, RecordRow};
 use crate::models::notification::Notification;
+use crate::models::shell::{NavBadges, SessionInfo};
 use crate::models::streams::{
     MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
 };
@@ -59,6 +60,18 @@ pub trait ConnectionService {
     /// server-side; the mock persists it in-process so the unread badge does not
     /// revert on reload (POP-03).
     async fn mark_all_read(&self) -> Result<(), StudioError>;
+
+    /// Badge counts for the nav rail's Query and Streams entries.
+    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    async fn nav_badges(&self) -> Result<NavBadges, StudioError>;
+
+    /// The active session summary shown in the statusbar.
+    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    async fn session_info(&self) -> Result<SessionInfo, StudioError>;
+
+    /// All databases visible on the active connection.
+    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    async fn databases(&self) -> Result<Vec<String>, StudioError>;
 }
 
 /// Hardcoded implementation used by the skeleton. Data is identical to before;
@@ -173,6 +186,36 @@ impl ConnectionService for MockConnectionService {
             .find(|c| c.name == name)
             .and_then(|c| c.open())
             .ok_or(StudioError::NotConnected)
+    }
+
+    async fn nav_badges(&self) -> Result<NavBadges, StudioError> {
+        match self.behavior {
+            MockBehavior::Erroring => Err(StudioError::from(
+                nodedb_client::NodeDbError::node_unreachable("mock"),
+            )),
+            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::nav_badges()),
+            MockBehavior::Delayed(d) => {
+                tokio::time::sleep(d).await;
+                Ok(mock::nav_badges())
+            }
+        }
+    }
+
+    async fn session_info(&self) -> Result<SessionInfo, StudioError> {
+        match self.behavior {
+            MockBehavior::Erroring => Err(StudioError::from(
+                nodedb_client::NodeDbError::node_unreachable("mock"),
+            )),
+            MockBehavior::Ready | MockBehavior::Empty => Ok(mock::session_info()),
+            MockBehavior::Delayed(d) => {
+                tokio::time::sleep(d).await;
+                Ok(mock::session_info())
+            }
+        }
+    }
+
+    async fn databases(&self) -> Result<Vec<String>, StudioError> {
+        apply(self.behavior, mock::databases).await
     }
 }
 
@@ -457,6 +500,130 @@ mod tests {
             password: None,
         };
         assert!(svc.connect(&name, &creds).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn session_info_populates_the_statusbar() {
+        let svc = MockConnectionService::ready();
+        let s = svc.session_info().await.expect("session info");
+        assert!(!s.database.is_empty());
+        assert!(!s.role.is_empty());
+        assert!(!s.server_version.is_empty());
+        assert!(!s.timezone.is_empty());
+    }
+
+    #[tokio::test]
+    async fn session_info_reports_the_fixture_values() {
+        // Independently-authored expectations (not derived from the call under
+        // test), so this can actually fail if the fixture drifts.
+        let svc = MockConnectionService::ready();
+        let s = svc.session_info().await.expect("session info");
+        assert_eq!(s.database, "analytics");
+        assert_eq!(s.role, "admin");
+        assert!(!s.read_only, "fixture session is a read-write admin");
+    }
+
+    #[tokio::test]
+    async fn session_info_empty_behavior_still_returns_the_fixture() {
+        // Single-value reads have no "empty" shape, so Empty folds into Ready
+        // — matching the `record_detail` / `run_query` precedent.
+        let svc = MockConnectionService::empty();
+        let s = svc.session_info().await.expect("empty folds into ready");
+        assert_eq!(s.database, "analytics");
+    }
+
+    #[tokio::test]
+    async fn session_info_erroring_is_retriable_error() {
+        let svc = MockConnectionService::erroring();
+        let err = svc.session_info().await.expect_err("erroring must fail");
+        assert!(err.is_retriable());
+    }
+
+    #[tokio::test]
+    async fn session_info_delayed_still_resolves() {
+        let svc = MockConnectionService::delayed(std::time::Duration::from_millis(5));
+        let s = svc.session_info().await.expect("delayed still resolves");
+        assert_eq!(s.role, "admin");
+    }
+
+    #[tokio::test]
+    async fn nav_badges_come_from_the_seam() {
+        let svc = MockConnectionService::ready();
+        let b = svc.nav_badges().await.expect("badges");
+        assert!(b.query > 0 || b.streams > 0, "fixture should show badges");
+    }
+
+    #[tokio::test]
+    async fn nav_badges_reports_the_fixture_counts() {
+        let svc = MockConnectionService::ready();
+        let b = svc.nav_badges().await.expect("badges");
+        assert_eq!(b.query, 3);
+        assert_eq!(b.streams, 2);
+    }
+
+    #[tokio::test]
+    async fn nav_badges_empty_behavior_still_returns_the_fixture() {
+        let svc = MockConnectionService::empty();
+        let b = svc.nav_badges().await.expect("empty folds into ready");
+        assert!(b.query > 0 || b.streams > 0);
+    }
+
+    #[tokio::test]
+    async fn nav_badges_erroring_is_retriable_error() {
+        let svc = MockConnectionService::erroring();
+        let err = svc.nav_badges().await.expect_err("erroring must fail");
+        assert!(err.is_retriable());
+    }
+
+    #[tokio::test]
+    async fn nav_badges_delayed_still_resolves() {
+        let svc = MockConnectionService::delayed(std::time::Duration::from_millis(5));
+        let b = svc.nav_badges().await.expect("delayed still resolves");
+        assert_eq!(b.query, 3);
+    }
+
+    #[tokio::test]
+    async fn databases_are_unique() {
+        let svc = MockConnectionService::ready();
+        let mut dbs = svc.databases().await.expect("databases");
+        let total = dbs.len();
+        dbs.sort();
+        dbs.dedup();
+        assert_eq!(total, dbs.len());
+    }
+
+    #[tokio::test]
+    async fn databases_fixture_has_more_than_one_entry() {
+        // Pins the precondition `databases_are_unique` relies on: with a
+        // single-entry fixture the dedup check above could never fire.
+        let svc = MockConnectionService::ready();
+        let dbs = svc.databases().await.expect("databases");
+        assert!(
+            dbs.len() > 1,
+            "fixture must list more than one database for the dedup check to be meaningful"
+        );
+        assert!(dbs.contains(&"analytics".to_string()));
+    }
+
+    #[tokio::test]
+    async fn databases_empty_behavior_returns_no_rows() {
+        let svc = MockConnectionService::empty();
+        let dbs = svc.databases().await.expect("mock databases is infallible");
+        assert!(dbs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn databases_erroring_is_retriable_error() {
+        let svc = MockConnectionService::erroring();
+        let err = svc.databases().await.expect_err("erroring must fail");
+        assert!(err.is_retriable());
+    }
+
+    #[tokio::test]
+    async fn databases_delayed_still_returns_the_fixture() {
+        let svc = MockConnectionService::delayed(std::time::Duration::from_millis(5));
+        let dbs = svc.databases().await.expect("delayed still resolves");
+        assert!(!dbs.is_empty());
     }
 
     #[tokio::test]

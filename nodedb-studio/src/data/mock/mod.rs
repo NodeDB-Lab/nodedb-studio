@@ -18,7 +18,9 @@ mod workbench;
 
 pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_ranges, users};
 pub use cdc::{ChangeOp, cdc_events};
-pub use connections::{connections, explorer_collections, notifications};
+pub use connections::{
+    connections, databases, explorer_collections, nav_badges, notifications, session_info,
+};
 pub use explorer::{collection_groups, record_detail, records};
 pub use notify::{notify_channels, notify_messages};
 pub use streams::{

@@ -14,6 +14,7 @@ use crate::models::admin::{AuditEntry, ClusterNode, RaftGroup, RlsPolicy, ShardR
 use crate::models::cdc::CdcRow;
 use crate::models::explorer::{CollectionGroup, RecordDetail, RecordRow};
 use crate::models::notification::Notification;
+use crate::models::shell::{NavBadges, SessionInfo};
 use crate::models::streams::{
     MaterializedView, NotifyChannel, NotifyMessage, ScheduledJob, StreamSession, Topic,
 };
@@ -58,6 +59,18 @@ impl ConnectionService for NodeDbConnectionService {
     }
 
     async fn mark_all_read(&self) -> Result<(), StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn nav_badges(&self) -> Result<NavBadges, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn session_info(&self) -> Result<SessionInfo, StudioError> {
+        Err(StudioError::NotConnected)
+    }
+
+    async fn databases(&self) -> Result<Vec<String>, StudioError> {
         Err(StudioError::NotConnected)
     }
 }
@@ -222,6 +235,23 @@ mod tests {
         ));
         assert!(matches!(
             svc.mark_all_read().await,
+            Err(StudioError::NotConnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn stub_shell_chrome_reads_are_not_connected() {
+        let svc = NodeDbConnectionService;
+        assert!(matches!(
+            svc.nav_badges().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.session_info().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.databases().await,
             Err(StudioError::NotConnected)
         ));
     }

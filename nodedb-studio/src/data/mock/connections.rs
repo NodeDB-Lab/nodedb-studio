@@ -1,5 +1,6 @@
 use crate::models::collection::{Collection, StorageMode};
 use crate::models::notification::{Notification, NotificationTarget, Severity};
+use crate::models::shell::{NavBadges, SessionInfo};
 use crate::state::connection::{Capabilities, Capability};
 use crate::state::connections_registry::{ConnStatus, ConnectionProfile, SavedConnection};
 
@@ -220,5 +221,41 @@ pub fn notifications() -> Vec<Notification> {
             target: NotificationTarget::Query,
             unread: false,
         },
+    ]
+}
+
+/// Nav-rail badge counts: pending items on the Query and Streams entries.
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+pub fn nav_badges() -> NavBadges {
+    NavBadges {
+        query: 3,
+        streams: 2,
+    }
+}
+
+/// The active session summary shown in the statusbar. `server_version` is a
+/// neutral "dev" placeholder: NodeDB version numbers are undecided, so no
+/// specific version is invented here (see the module note in `mod.rs`).
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+pub fn session_info() -> SessionInfo {
+    SessionInfo {
+        database: "analytics".into(),
+        role: "admin".into(),
+        server_version: "dev".into(),
+        timezone: "UTC".into(),
+        read_only: false,
+    }
+}
+
+/// Databases visible on the active connection, matching `local-nodedb-dev`'s
+/// profile above.
+#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+pub fn databases() -> Vec<String> {
+    vec![
+        "analytics".into(),
+        "events_log".into(),
+        "social_graph".into(),
+        "iot_telemetry".into(),
+        "docs_corpus".into(),
     ]
 }
