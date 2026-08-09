@@ -26,5 +26,7 @@ pub use notify::{notify_channels, notify_messages};
 pub use streams::{
     materialized_views, notify_channel_rows, notify_message_rows, scheduled_jobs, topics,
 };
-pub use viewers::{fts_hits, series, spatial_features, sub_graph, sync_peers, vector_points};
-pub use workbench::{query_plan, result_set, schema_tree};
+pub use viewers::{
+    empty_sub_graph, fts_hits, series, spatial_features, sub_graph, sync_peers, vector_points,
+};
+pub use workbench::{empty_result_set, query_plan, result_set, schema_tree};

@@ -183,11 +183,11 @@ impl WorkbenchData for NodeDbConnectionService {
 
 #[async_trait(?Send)]
 impl ViewersData for NodeDbConnectionService {
-    async fn sub_graph(&self) -> Result<SubGraph, StudioError> {
+    async fn sub_graph(&self, _collection: &str) -> Result<SubGraph, StudioError> {
         Err(StudioError::NotConnected)
     }
 
-    async fn vector_points(&self) -> Result<Vec<VectorPoint>, StudioError> {
+    async fn vector_points(&self, _collection: &str) -> Result<Vec<VectorPoint>, StudioError> {
         Err(StudioError::NotConnected)
     }
 
@@ -195,11 +195,14 @@ impl ViewersData for NodeDbConnectionService {
         Err(StudioError::NotConnected)
     }
 
-    async fn spatial_features(&self) -> Result<Vec<SpatialFeature>, StudioError> {
+    async fn spatial_features(
+        &self,
+        _collection: &str,
+    ) -> Result<Vec<SpatialFeature>, StudioError> {
         Err(StudioError::NotConnected)
     }
 
-    async fn fts_hits(&self, _query: &str) -> Result<Vec<FtsHit>, StudioError> {
+    async fn fts_hits(&self, _collection: &str, _query: &str) -> Result<Vec<FtsHit>, StudioError> {
         Err(StudioError::NotConnected)
     }
 
@@ -319,11 +322,11 @@ mod tests {
     async fn stub_viewer_reads_are_not_connected() {
         let svc = NodeDbConnectionService;
         assert!(matches!(
-            svc.sub_graph().await,
+            svc.sub_graph("social").await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.vector_points().await,
+            svc.vector_points("embeddings").await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
@@ -331,11 +334,11 @@ mod tests {
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.spatial_features().await,
+            svc.spatial_features("places").await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.fts_hits("nodedb").await,
+            svc.fts_hits("articles", "nodedb").await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(

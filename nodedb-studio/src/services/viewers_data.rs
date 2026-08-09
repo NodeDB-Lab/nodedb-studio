@@ -1,11 +1,20 @@
 //! Specialized-viewer reads at the backend seam: graph, vector, timeseries,
 //! spatial, FTS, and sync.
 //!
-//! `sub_graph` returns a single `SubGraph` rather than a list: unlike the
-//! other five reads it cannot be expressed as `apply(self.behavior, ...)`,
-//! which only knows how to fold `MockBehavior::Empty` into `Vec::new()`. It
-//! is implemented with the same explicit four-arm match `record_detail` and
-//! `run_query` use.
+//! `sub_graph` returns a single `SubGraph` rather than a list, so it cannot
+//! be expressed as `apply(self.behavior, ...)`, which only knows how to fold
+//! `MockBehavior::Empty` into `Vec::new()`. Its mock implementation instead
+//! uses `apply_one_or_empty`, which lets a single-value read that wraps a
+//! list (a result set's rows, a graph's nodes) decide what a genuinely empty
+//! payload looks like, rather than folding `Empty` into `Ready` the way
+//! `record_detail` does.
+//!
+//! `sub_graph`, `vector_points`, `spatial_features` and `fts_hits` all take a
+//! `collection`: the Explorer already scopes its selection to one collection
+//! per storage mode (graph/vector/spatial), so each viewer's read must be
+//! parameterised the same way `records(collection)` already is. `sync_peers`
+//! is deliberately left unparameterised — it is instance-scoped, not
+//! per-collection.
 
 use async_trait::async_trait;
 
@@ -16,28 +25,29 @@ use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
 pub trait ViewersData {
-    /// One graph viewer's full render input (nodes + edges).
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
-    async fn sub_graph(&self) -> Result<SubGraph, StudioError>;
+    /// One graph viewer's full render input (nodes + edges) for `collection`.
+    #[allow(dead_code)] // SEAM-UNWIRED
+    async fn sub_graph(&self, collection: &str) -> Result<SubGraph, StudioError>;
 
-    /// A 2D projection of vector embeddings for the vector viewer.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
-    async fn vector_points(&self) -> Result<Vec<VectorPoint>, StudioError>;
+    /// A 2D projection of vector embeddings in `collection` for the vector
+    /// viewer.
+    #[allow(dead_code)] // SEAM-UNWIRED
+    async fn vector_points(&self, collection: &str) -> Result<Vec<VectorPoint>, StudioError>;
 
     /// Samples for one timeseries metric.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn series(&self, metric: &str) -> Result<Vec<SeriesPoint>, StudioError>;
 
-    /// Features for the spatial viewer's map.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
-    async fn spatial_features(&self) -> Result<Vec<SpatialFeature>, StudioError>;
+    /// Features for the spatial viewer's map, scoped to `collection`.
+    #[allow(dead_code)] // SEAM-UNWIRED
+    async fn spatial_features(&self, collection: &str) -> Result<Vec<SpatialFeature>, StudioError>;
 
-    /// Full-text-search hits for `query`.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
-    async fn fts_hits(&self, query: &str) -> Result<Vec<FtsHit>, StudioError>;
+    /// Full-text-search hits for `query` within `collection`.
+    #[allow(dead_code)] // SEAM-UNWIRED
+    async fn fts_hits(&self, collection: &str, query: &str) -> Result<Vec<FtsHit>, StudioError>;
 
     /// Sync/replication peers.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn sync_peers(&self) -> Result<Vec<SyncPeer>, StudioError>;
 }
 
@@ -50,7 +60,7 @@ mod tests {
     #[tokio::test]
     async fn subgraph_edges_reference_existing_nodes() {
         let svc = MockConnectionService::ready();
-        let g = svc.sub_graph().await.expect("graph");
+        let g = svc.sub_graph("social").await.expect("graph");
         let ids: Vec<&str> = g.nodes.iter().map(|n| n.id.as_str()).collect();
         assert!(!g.nodes.is_empty() && !g.edges.is_empty());
         for e in &g.edges {
@@ -67,7 +77,7 @@ mod tests {
     async fn every_viewer_read_is_keyed_and_non_empty() {
         let svc = MockConnectionService::ready();
 
-        let vector = svc.vector_points().await.expect("vec");
+        let vector = svc.vector_points("embeddings").await.expect("vec");
         assert!(!vector.is_empty());
         assert!(
             vector.iter().all(|p| !p.id.is_empty()),
@@ -81,14 +91,14 @@ mod tests {
             "every series point needs a stable key"
         );
 
-        let spatial = svc.spatial_features().await.expect("geo");
+        let spatial = svc.spatial_features("places").await.expect("geo");
         assert!(!spatial.is_empty());
         assert!(
             spatial.iter().all(|f| !f.id.is_empty()),
             "every spatial feature needs a stable key"
         );
 
-        let fts = svc.fts_hits("nodedb").await.expect("fts");
+        let fts = svc.fts_hits("articles", "nodedb").await.expect("fts");
         assert!(!fts.is_empty());
         assert!(
             fts.iter().all(|h| !h.id.is_empty()),
@@ -111,32 +121,51 @@ mod tests {
     #[tokio::test]
     async fn sub_graph_ready_returns_nodes_and_edges() {
         let svc = MockConnectionService::ready();
-        let g = svc.sub_graph().await.expect("ready yields a graph");
+        let g = svc.sub_graph("social").await.expect("ready yields a graph");
         assert!(!g.nodes.is_empty(), "fixture must have nodes");
         assert!(!g.edges.is_empty(), "fixture must have edges");
     }
 
     #[tokio::test]
-    async fn sub_graph_empty_behaviour_still_returns_a_graph() {
-        // `sub_graph` reads a single value, not a list: "no rows" has no
-        // meaning here, so the mock folds `MockBehavior::Empty` into the same
-        // success path as `Ready`, mirroring `record_detail` and `run_query`.
-        // Pinned here so a later refactor cannot silently change that meaning.
+    async fn sub_graph_ids_vary_by_collection() {
+        // A wrong-argument bug (e.g. ignoring `collection`) must be visible:
+        // the fixture keys every id off the requested collection.
+        let svc = MockConnectionService::ready();
+        let a = svc.sub_graph("social").await.expect("graph");
+        let b = svc.sub_graph("orders").await.expect("graph");
+        assert_ne!(
+            a.nodes.first().map(|n| n.id.as_str()),
+            b.nodes.first().map(|n| n.id.as_str()),
+            "node ids must key off the requested collection"
+        );
+    }
+
+    #[tokio::test]
+    async fn sub_graph_empty_behaviour_returns_zero_nodes() {
+        // Unlike the truly single-value reads (`record_detail`), a graph's
+        // emptiness is meaningful: a collection with no nodes is a real
+        // outcome for the graph viewer. `MockBehavior::Empty` must therefore
+        // deliver a genuinely empty graph, not fold into `Ready`.
         let svc = MockConnectionService::empty();
         let g = svc
-            .sub_graph()
+            .sub_graph("social")
             .await
-            .expect("empty behaviour still returns a graph for a single-value read");
-        assert!(
-            !g.nodes.is_empty(),
-            "folded-Empty graph must still have nodes"
-        );
+            .expect("empty behaviour is still Ok");
+        assert!(g.nodes.is_empty(), "empty behaviour must yield zero nodes");
+        assert!(g.edges.is_empty(), "empty behaviour must yield zero edges");
+    }
+
+    #[tokio::test]
+    async fn sub_graph_empty_behaviour_reaches_the_empty_state() {
+        let svc = MockConnectionService::empty();
+        let s = AsyncState::from_value(Some(svc.sub_graph("social").await));
+        assert!(s.is_empty());
     }
 
     #[tokio::test]
     async fn sub_graph_erroring_is_err() {
         let svc = MockConnectionService::erroring();
-        assert!(svc.sub_graph().await.is_err());
+        assert!(svc.sub_graph("social").await.is_err());
     }
 
     #[tokio::test]
@@ -144,22 +173,37 @@ mod tests {
         // Expectation authored independently of the fixture body: the fixture
         // alternates clusters "a"/"b", so both must be present.
         let svc = MockConnectionService::ready();
-        let pts = svc.vector_points().await.expect("ready yields points");
+        let pts = svc
+            .vector_points("embeddings")
+            .await
+            .expect("ready yields points");
         assert!(pts.iter().any(|p| p.cluster == "a"));
         assert!(pts.iter().any(|p| p.cluster == "b"));
     }
 
     #[tokio::test]
+    async fn vector_points_ids_vary_by_collection() {
+        let svc = MockConnectionService::ready();
+        let a = svc.vector_points("embeddings").await.expect("vec");
+        let b = svc.vector_points("orders").await.expect("vec");
+        assert_ne!(
+            a.first().map(|p| p.id.as_str()),
+            b.first().map(|p| p.id.as_str()),
+            "vector point ids must key off the requested collection"
+        );
+    }
+
+    #[tokio::test]
     async fn vector_points_empty_is_empty() {
         let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.vector_points().await));
+        let s = AsyncState::from_value(Some(svc.vector_points("embeddings").await));
         assert!(s.is_empty());
     }
 
     #[tokio::test]
     async fn vector_points_erroring_is_err() {
         let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.vector_points().await));
+        let s = AsyncState::from_value(Some(svc.vector_points("embeddings").await));
         assert!(s.error_message().is_some());
     }
 
@@ -190,7 +234,10 @@ mod tests {
     #[tokio::test]
     async fn spatial_features_ready_have_geometry() {
         let svc = MockConnectionService::ready();
-        let feats = svc.spatial_features().await.expect("ready yields features");
+        let feats = svc
+            .spatial_features("places")
+            .await
+            .expect("ready yields features");
         assert!(
             feats.iter().all(|f| !f.geometry_json.is_empty()),
             "every feature must carry display geometry"
@@ -198,23 +245,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn spatial_features_ids_vary_by_collection() {
+        let svc = MockConnectionService::ready();
+        let a = svc.spatial_features("places").await.expect("geo");
+        let b = svc.spatial_features("orders").await.expect("geo");
+        assert_ne!(
+            a.first().map(|f| f.id.as_str()),
+            b.first().map(|f| f.id.as_str()),
+            "spatial feature ids must key off the requested collection"
+        );
+    }
+
+    #[tokio::test]
     async fn spatial_features_empty_is_empty() {
         let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.spatial_features().await));
+        let s = AsyncState::from_value(Some(svc.spatial_features("places").await));
         assert!(s.is_empty());
     }
 
     #[tokio::test]
     async fn spatial_features_erroring_is_err() {
         let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.spatial_features().await));
+        let s = AsyncState::from_value(Some(svc.spatial_features("places").await));
         assert!(s.error_message().is_some());
     }
 
     #[tokio::test]
     async fn fts_hits_ready_excerpts_mention_the_query() {
         let svc = MockConnectionService::ready();
-        let hits = svc.fts_hits("nodedb").await.expect("ready yields hits");
+        let hits = svc
+            .fts_hits("articles", "nodedb")
+            .await
+            .expect("ready yields hits");
         assert!(
             hits.iter().all(|h| h.excerpt.contains("nodedb")),
             "excerpts must reflect the requested query, not a fixed string"
@@ -222,16 +284,28 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fts_hits_ids_vary_by_collection() {
+        let svc = MockConnectionService::ready();
+        let a = svc.fts_hits("articles", "nodedb").await.expect("fts");
+        let b = svc.fts_hits("orders", "nodedb").await.expect("fts");
+        assert_ne!(
+            a.first().map(|h| h.id.as_str()),
+            b.first().map(|h| h.id.as_str()),
+            "fts hit ids must key off the requested collection"
+        );
+    }
+
+    #[tokio::test]
     async fn fts_hits_empty_is_empty() {
         let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.fts_hits("nodedb").await));
+        let s = AsyncState::from_value(Some(svc.fts_hits("articles", "nodedb").await));
         assert!(s.is_empty());
     }
 
     #[tokio::test]
     async fn fts_hits_erroring_is_err() {
         let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.fts_hits("nodedb").await));
+        let s = AsyncState::from_value(Some(svc.fts_hits("articles", "nodedb").await));
         assert!(s.error_message().is_some());
     }
 

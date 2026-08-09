@@ -14,15 +14,15 @@ use crate::services::error::StudioError;
 #[async_trait(?Send)]
 pub trait WorkbenchData {
     /// Execute `sql` and return one page of results.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn run_query(&self, sql: &str) -> Result<ResultSet, StudioError>;
 
     /// The query planner's EXPLAIN output for `sql`.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn explain(&self, sql: &str) -> Result<QueryPlan, StudioError>;
 
     /// The schema tree for the connected database.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn schema_tree(&self) -> Result<Vec<SchemaNode>, StudioError>;
 }
 
@@ -59,16 +59,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn run_query_empty_behaviour_still_returns_a_result_set() {
-        // `run_query` reads a single result set, not a list: "no rows" has no
-        // meaning at this call boundary, so `MockBehavior::Empty` folds into
-        // the same success path as `Ready`, mirroring `record_detail`.
+    async fn run_query_empty_behaviour_returns_zero_rows() {
+        // Unlike the truly single-value reads (`record_detail`, `explain`),
+        // a result set's emptiness is meaningful: "no rows" is the most
+        // common non-error outcome for a query. `MockBehavior::Empty` must
+        // therefore deliver a genuinely empty result set, not fold into
+        // `Ready`.
         let svc = MockConnectionService::empty();
         let rs = svc
             .run_query("SELECT 1")
             .await
-            .expect("empty behaviour still returns a result set for a single-value read");
-        assert!(!rs.columns.is_empty());
+            .expect("empty behaviour is still Ok");
+        assert!(rs.rows.is_empty(), "empty behaviour must yield zero rows");
+    }
+
+    #[tokio::test]
+    async fn run_query_empty_behaviour_reaches_the_empty_state() {
+        let svc = MockConnectionService::empty();
+        let s = AsyncState::from_value(Some(svc.run_query("SELECT 1").await));
+        assert!(s.is_empty());
     }
 
     #[tokio::test]

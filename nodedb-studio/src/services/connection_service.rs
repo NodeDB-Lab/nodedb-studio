@@ -27,7 +27,7 @@ use crate::models::workbench::{QueryPlan, ResultSet, SchemaNode};
 use crate::services::admin_data::AdminData;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
-use crate::services::mock_behavior::{MockBehavior, apply, apply_one};
+use crate::services::mock_behavior::{MockBehavior, apply, apply_one, apply_one_or_empty};
 use crate::services::streams_data::{StreamsData, cdc_rows_from_mock};
 use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
@@ -62,15 +62,15 @@ pub trait ConnectionService {
     async fn mark_all_read(&self) -> Result<(), StudioError>;
 
     /// Badge counts for the nav rail's Query and Streams entries.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn nav_badges(&self) -> Result<NavBadges, StudioError>;
 
     /// The active session summary shown in the statusbar.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn session_info(&self) -> Result<SessionInfo, StudioError>;
 
     /// All databases visible on the active connection.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn databases(&self) -> Result<Vec<String>, StudioError>;
 }
 
@@ -329,7 +329,13 @@ impl AdminData for MockConnectionService {
 impl WorkbenchData for MockConnectionService {
     async fn run_query(&self, sql: &str) -> Result<ResultSet, StudioError> {
         let s = sql.to_string();
-        apply_one(self.behavior, move || mock::result_set(&s)).await
+        let s2 = s.clone();
+        apply_one_or_empty(
+            self.behavior,
+            move || mock::result_set(&s),
+            move || mock::empty_result_set(&s2),
+        )
+        .await
     }
 
     async fn explain(&self, sql: &str) -> Result<QueryPlan, StudioError> {
@@ -344,12 +350,19 @@ impl WorkbenchData for MockConnectionService {
 
 #[async_trait(?Send)]
 impl ViewersData for MockConnectionService {
-    async fn sub_graph(&self) -> Result<SubGraph, StudioError> {
-        apply_one(self.behavior, mock::sub_graph).await
+    async fn sub_graph(&self, collection: &str) -> Result<SubGraph, StudioError> {
+        let c = collection.to_string();
+        apply_one_or_empty(
+            self.behavior,
+            move || mock::sub_graph(&c),
+            mock::empty_sub_graph,
+        )
+        .await
     }
 
-    async fn vector_points(&self) -> Result<Vec<VectorPoint>, StudioError> {
-        apply(self.behavior, mock::vector_points).await
+    async fn vector_points(&self, collection: &str) -> Result<Vec<VectorPoint>, StudioError> {
+        let c = collection.to_string();
+        apply(self.behavior, move || mock::vector_points(&c)).await
     }
 
     async fn series(&self, metric: &str) -> Result<Vec<SeriesPoint>, StudioError> {
@@ -357,13 +370,15 @@ impl ViewersData for MockConnectionService {
         apply(self.behavior, move || mock::series(&m)).await
     }
 
-    async fn spatial_features(&self) -> Result<Vec<SpatialFeature>, StudioError> {
-        apply(self.behavior, mock::spatial_features).await
+    async fn spatial_features(&self, collection: &str) -> Result<Vec<SpatialFeature>, StudioError> {
+        let c = collection.to_string();
+        apply(self.behavior, move || mock::spatial_features(&c)).await
     }
 
-    async fn fts_hits(&self, query: &str) -> Result<Vec<FtsHit>, StudioError> {
+    async fn fts_hits(&self, collection: &str, query: &str) -> Result<Vec<FtsHit>, StudioError> {
+        let c = collection.to_string();
         let q = query.to_string();
-        apply(self.behavior, move || mock::fts_hits(&q)).await
+        apply(self.behavior, move || mock::fts_hits(&c, &q)).await
     }
 
     async fn sync_peers(&self) -> Result<Vec<SyncPeer>, StudioError> {
@@ -684,8 +699,8 @@ mod tests {
     // Verifies the two-step transition pattern: set Loading, await the read,
     // set Loaded from the result. This test has no Dioxus signals/guards (unit-level),
     // so it only demonstrates the transition logic; the actual no-guard-across-await
-    // discipline is exercised by the real streaming view (later task) and enforced
-    // by the AGENTS.md convention.
+    // discipline is exercised by real streaming views and enforced by the
+    // AGENTS.md convention.
     #[tokio::test]
     async fn delayed_read_transitions_loading_to_loaded_without_guard() {
         let svc = MockConnectionService::ready();

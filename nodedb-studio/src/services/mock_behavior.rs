@@ -36,16 +36,40 @@ pub async fn apply<T>(
 }
 
 /// Apply the behaviour to a single-value fixture thunk (used by seam methods
-/// that read one value rather than a list — `session_info`, `nav_badges`,
-/// `record_detail`, `run_query`, `explain`, `sub_graph`). `Ready` and `Empty`
-/// both call the thunk: a fetched single value has no "empty" shape, so
-/// `Empty` folds into `Ready` here rather than inventing an absent value.
+/// that read one value with no "empty" shape at all — `session_info`,
+/// `nav_badges`, `record_detail`, `explain`). `Ready` and `Empty` both call
+/// the thunk: a fetched single value here is never "empty", it either
+/// arrived or it errored, so `Empty` folds into `Ready` rather than
+/// inventing an absent value.
 pub async fn apply_one<T>(
     behavior: MockBehavior,
     ready: impl FnOnce() -> T,
 ) -> Result<T, StudioError> {
     match behavior {
         MockBehavior::Ready | MockBehavior::Empty => Ok(ready()),
+        MockBehavior::Erroring => Err(StudioError::from(
+            nodedb_client::NodeDbError::node_unreachable("mock"),
+        )),
+        MockBehavior::Delayed(d) => {
+            tokio::time::sleep(d).await;
+            Ok(ready())
+        }
+    }
+}
+
+/// Apply the behaviour to a single-value fixture thunk whose value can
+/// itself be "empty" (used by `run_query` and `sub_graph`: a zero-row result
+/// set or a zero-node graph is a real, common outcome, not an absent value).
+/// Unlike `apply_one`, `Empty` calls `empty` rather than `ready`, so the
+/// caller controls exactly what the empty shape looks like.
+pub async fn apply_one_or_empty<T>(
+    behavior: MockBehavior,
+    ready: impl FnOnce() -> T,
+    empty: impl FnOnce() -> T,
+) -> Result<T, StudioError> {
+    match behavior {
+        MockBehavior::Ready => Ok(ready()),
+        MockBehavior::Empty => Ok(empty()),
         MockBehavior::Erroring => Err(StudioError::from(
             nodedb_client::NodeDbError::node_unreachable("mock"),
         )),
@@ -118,6 +142,42 @@ mod tests {
     #[tokio::test]
     async fn apply_one_delayed_still_returns_the_fixture() {
         let out = apply_one(MockBehavior::Delayed(Duration::from_millis(5)), || 9u8).await;
+        assert_eq!(out.expect("delayed yields data"), 9u8);
+    }
+
+    #[tokio::test]
+    async fn apply_one_or_empty_ready_returns_the_fixture() {
+        let out = apply_one_or_empty(MockBehavior::Ready, || 7u8, || 0u8).await;
+        assert_eq!(out.expect("ready yields data"), 7u8);
+    }
+
+    #[tokio::test]
+    async fn apply_one_or_empty_empty_returns_the_empty_thunk() {
+        // Unlike `apply_one`, `Empty` does NOT fold into `Ready` here: the
+        // caller's `empty` thunk runs instead, so a genuinely empty payload
+        // is reachable for single-value reads that have a real empty shape.
+        let out = apply_one_or_empty(MockBehavior::Empty, || 7u8, || 0u8).await;
+        assert_eq!(out.expect("empty yields the empty thunk"), 0u8);
+    }
+
+    #[tokio::test]
+    async fn apply_one_or_empty_erroring_returns_a_retriable_error() {
+        let out = apply_one_or_empty(MockBehavior::Erroring, || 7u8, || 0u8).await;
+        let err = out.expect_err("erroring yields Err");
+        assert!(
+            err.is_retriable(),
+            "demo error must exercise the retry path"
+        );
+    }
+
+    #[tokio::test]
+    async fn apply_one_or_empty_delayed_still_returns_the_fixture() {
+        let out = apply_one_or_empty(
+            MockBehavior::Delayed(Duration::from_millis(5)),
+            || 9u8,
+            || 0u8,
+        )
+        .await;
         assert_eq!(out.expect("delayed yields data"), 9u8);
     }
 }
