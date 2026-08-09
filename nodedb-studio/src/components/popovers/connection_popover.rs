@@ -50,9 +50,9 @@ pub fn ConnectionPopover() -> Element {
                     };
                     let svc = service.clone();
                     let item_class = if disabled { "cp-item disabled" } else { "cp-item" };
-                    // TODO(later phase): the switch popover has no username field yet, so
-                    // identity is taken from the saved profile rather than a user-entered
-                    // value. Replace once the connect modal collects credentials explicitly.
+                    // TODO: the switch popover has no username field yet, so identity is
+                    // taken from the saved profile rather than a user-entered value.
+                    // Replace once the connect modal collects credentials explicitly.
                     let creds = Credentials {
                         username: sc
                             .profile
@@ -72,7 +72,12 @@ pub fn ConnectionPopover() -> Element {
                                     let name = name.clone();
                                     let creds = creds.clone();
                                     spawn(async move {
-                                        if let Ok(s) = svc.connect(&name, &creds).await { active.set(Some(s)); }
+                                        match svc.connect(&name, &creds).await {
+                                            Ok(s) => active.set(Some(s)),
+                                            Err(e) => {
+                                                tracing::error!("connect to {name} failed: {e}")
+                                            }
+                                        }
                                     });
                                     popover.set(None);
                                 }

@@ -201,7 +201,7 @@ pub fn notifications() -> Vec<Notification> {
 /// These must agree with the hardcoded literals in `components::rail` until
 /// that later phase swaps the rail onto this seam method, so the eventual
 /// wiring is a visual no-op.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn nav_badges() -> NavBadges {
     NavBadges {
         query: 3,
@@ -212,7 +212,7 @@ pub fn nav_badges() -> NavBadges {
 /// The active session summary shown in the statusbar. `server_version` is a
 /// neutral "dev" placeholder: NodeDB version numbers are undecided, so no
 /// specific version is invented here (see the module note in `mod.rs`).
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn session_info() -> SessionInfo {
     SessionInfo {
         database: "analytics".into(),
@@ -225,7 +225,7 @@ pub fn session_info() -> SessionInfo {
 
 /// Databases visible on the active connection, matching `local-nodedb-dev`'s
 /// profile above.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn databases() -> Vec<String> {
     vec![
         "analytics".into(),
@@ -234,4 +234,33 @@ pub fn databases() -> Vec<String> {
         "iot_telemetry".into(),
         "docs_corpus".into(),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `connect()` builds its username from `profile.map(|p| p.user)
+    /// .unwrap_or_default()`, so a connectable entry with no profile would
+    /// silently produce a blank username, get rejected by the seam's
+    /// `MissingUsername` guard, and have that error dropped by every call
+    /// site's `if let Ok(..)` — a Connect button that does nothing, with no
+    /// error and no state change. Nothing in the types prevents that
+    /// combination; this test makes the fixture invariant that avoids it
+    /// break loudly instead.
+    #[test]
+    fn every_connectable_entry_has_a_profile() {
+        let conns = connections();
+        assert!(!conns.is_empty(), "fixture must not be empty");
+        for c in &conns {
+            if c.status.is_connectable() {
+                assert!(
+                    c.profile.is_some(),
+                    "{} is connectable but has no profile: connect() would \
+                     default its username to blank and silently no-op",
+                    c.name
+                );
+            }
+        }
+    }
 }

@@ -28,9 +28,9 @@ pub fn CommandPalette() -> Element {
     // each switch handler clones it.
     let switch_svc = service.clone();
 
-    // TODO(later phase): the palette has no username field yet, so identity is
-    // taken from the saved profile rather than a user-entered value. Replace
-    // once the connect modal collects credentials explicitly.
+    // TODO: the palette has no username field yet, so identity is taken from
+    // the saved profile rather than a user-entered value. Replace once the
+    // connect modal collects credentials explicitly.
     let creds_for = |name: &str| -> Credentials {
         Credentials {
             username: registry
@@ -89,7 +89,12 @@ pub fn CommandPalette() -> Element {
                                 let svc = svc.clone();
                                 let creds = creds.clone();
                                 spawn(async move {
-                                    if let Ok(s) = svc.connect("staging-cluster", &creds).await { active.set(Some(s)); }
+                                    match svc.connect("staging-cluster", &creds).await {
+                                        Ok(s) => active.set(Some(s)),
+                                        Err(e) => tracing::error!(
+                                            "connect to staging-cluster failed: {e}"
+                                        ),
+                                    }
                                 });
                                 open.set(false);
                             }
@@ -103,7 +108,12 @@ pub fn CommandPalette() -> Element {
                                 let svc = svc.clone();
                                 let creds = creds.clone();
                                 spawn(async move {
-                                    if let Ok(s) = svc.connect("prod-replica-eu", &creds).await { active.set(Some(s)); }
+                                    match svc.connect("prod-replica-eu", &creds).await {
+                                        Ok(s) => active.set(Some(s)),
+                                        Err(e) => tracing::error!(
+                                            "connect to prod-replica-eu failed: {e}"
+                                        ),
+                                    }
                                 });
                                 open.set(false);
                             }

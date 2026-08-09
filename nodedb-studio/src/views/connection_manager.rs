@@ -49,9 +49,9 @@ pub fn ConnectionManager() -> Element {
                             conn: conn.clone(),
                             on_connect: {
                                 let service = service.clone();
-                                // TODO(later phase): the connect form has no username field
-                                // yet, so identity is taken from the saved profile rather
-                                // than a user-entered value. Replace once the connect modal
+                                // TODO: the connect form has no username field yet, so
+                                // identity is taken from the saved profile rather than a
+                                // user-entered value. Replace once the connect modal
                                 // collects credentials explicitly.
                                 let creds = Credentials {
                                     username: conn
@@ -67,10 +67,12 @@ pub fn ConnectionManager() -> Element {
                                     let service = service.clone();
                                     let creds = creds.clone();
                                     spawn(async move {
-                                        if let Ok(session) = service.connect(&name, &creds).await {
-                                            active.set(Some(session));
+                                        match service.connect(&name, &creds).await {
+                                            Ok(session) => active.set(Some(session)),
+                                            Err(e) => {
+                                                tracing::error!("connect to {name} failed: {e}")
+                                            }
                                         }
-                                        // Err case (e.g. offline): surfaced in a later wiring phase.
                                     });
                                 }
                             },
