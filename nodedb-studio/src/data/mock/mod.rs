@@ -13,6 +13,8 @@ mod docs;
 mod explorer;
 mod notify;
 mod streams;
+#[cfg(test)]
+mod test_support;
 mod viewers;
 mod workbench;
 

@@ -10,27 +10,27 @@ use crate::services::error::StudioError;
 #[async_trait(?Send)]
 pub trait AdminData {
     /// Cluster topology: one row per node.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn cluster_nodes(&self) -> Result<Vec<ClusterNode>, StudioError>;
 
     /// Raft groups for the cluster.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn raft_groups(&self) -> Result<Vec<RaftGroup>, StudioError>;
 
     /// Shard ranges and their leaseholders.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn shard_ranges(&self) -> Result<Vec<ShardRange>, StudioError>;
 
     /// RBAC: all users in the tenant.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn users(&self) -> Result<Vec<UserRow>, StudioError>;
 
     /// Row-level-security policies.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn rls_policies(&self) -> Result<Vec<RlsPolicy>, StudioError>;
 
     /// Audit log entries.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn audit_entries(&self) -> Result<Vec<AuditEntry>, StudioError>;
 }
 
@@ -162,11 +162,11 @@ mod tests {
         let users = svc.users().await.expect("users");
         let admin = users
             .iter()
-            .find(|u| u.id == "admin")
+            .find(|u| u.username == "admin")
             .expect("fixture has an `admin` user");
         let alice = users
             .iter()
-            .find(|u| u.id == "alice")
+            .find(|u| u.username == "alice")
             .expect("fixture has an `alice` user");
         assert!(admin.is_superuser, "admin fixture must be a superuser");
         assert!(!alice.is_superuser, "alice fixture must not be a superuser");
@@ -178,11 +178,11 @@ mod tests {
         let policies = svc.rls_policies().await.expect("rls");
         let tenant_isolation = policies
             .iter()
-            .find(|p| p.id == "tenant_isolation")
+            .find(|p| p.name == "tenant_isolation")
             .expect("fixture has a `tenant_isolation` policy");
         let pii_masking = policies
             .iter()
-            .find(|p| p.id == "pii_masking")
+            .find(|p| p.name == "pii_masking")
             .expect("fixture has a `pii_masking` policy");
         assert!(
             tenant_isolation.enabled,

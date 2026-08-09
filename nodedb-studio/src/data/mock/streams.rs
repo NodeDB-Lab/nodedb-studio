@@ -15,7 +15,7 @@ use crate::models::streams::{MaterializedView, NotifyChannel, NotifyMessage, Sch
 /// Materialized views known to the cluster. `id` deliberately differs from
 /// `name` (a `mv-N` handle vs. the human-readable view name) so a later bug
 /// that keys a list by the wrong field is visible instead of invisible.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn materialized_views() -> Vec<MaterializedView> {
     vec![
         MaterializedView {
@@ -37,7 +37,7 @@ pub fn materialized_views() -> Vec<MaterializedView> {
 
 /// Durable, replayable topics with their consumer lag. `id` deliberately
 /// differs from `name`, same reasoning as `materialized_views`.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn topics() -> Vec<Topic> {
     vec![
         Topic {
@@ -74,7 +74,7 @@ pub fn topics() -> Vec<Topic> {
 /// successful ones so fixture-content tests can't be satisfied by an
 /// accidentally-uniform status column. `id` deliberately differs from `name`,
 /// same reasoning as `materialized_views`.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn scheduled_jobs() -> Vec<ScheduledJob> {
     vec![
         ScheduledJob {
@@ -103,7 +103,7 @@ pub fn scheduled_jobs() -> Vec<ScheduledJob> {
 
 /// LISTEN/NOTIFY channels. `id` deliberately differs from `name`, same
 /// reasoning as `materialized_views`.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn notify_channel_rows() -> Vec<NotifyChannel> {
     vec![
         NotifyChannel {
@@ -125,7 +125,7 @@ pub fn notify_channel_rows() -> Vec<NotifyChannel> {
 }
 
 /// The pub/sub message tail across channels.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn notify_message_rows() -> Vec<NotifyMessage> {
     (0..4)
         .map(|i| NotifyMessage {
@@ -140,6 +140,7 @@ pub fn notify_message_rows() -> Vec<NotifyMessage> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::mock::test_support::{assert_ids_distinct_from_names, assert_unique_ids};
 
     #[test]
     fn materialized_views_have_unique_ids_distinct_from_name() {
@@ -175,26 +176,5 @@ mod tests {
     fn notify_message_rows_have_unique_ids() {
         let rows = notify_message_rows();
         assert_unique_ids(&rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>());
-    }
-
-    fn assert_unique_ids(ids: &[&str]) {
-        assert!(!ids.is_empty(), "fixture must not be empty");
-        let mut sorted = ids.to_vec();
-        sorted.sort_unstable();
-        sorted.dedup();
-        assert_eq!(sorted.len(), ids.len(), "ids must be unique");
-    }
-
-    /// A list keyed by the wrong field (e.g. `name` instead of `id`) still
-    /// passes `assert_unique_ids` when the fixture happens to have `id ==
-    /// name`, so that mistake stays invisible. Fixtures here deliberately
-    /// give every row a distinct `id`/`name` pair to make it visible.
-    fn assert_ids_distinct_from_names<'a>(rows: impl Iterator<Item = (&'a str, &'a str)>) {
-        let mut saw_any = false;
-        for (id, name) in rows {
-            saw_any = true;
-            assert_ne!(id, name, "id must not equal name: {id}");
-        }
-        assert!(saw_any, "fixture must not be empty");
     }
 }
