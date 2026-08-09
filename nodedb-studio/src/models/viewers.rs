@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 /// One node in a graph viewer. `x`/`y` are a laid-out display position, not
 /// stored coordinates.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GraphNode {
     pub id: String,
@@ -20,7 +20,7 @@ pub struct GraphNode {
 }
 
 /// One edge in a graph viewer. `from`/`to` reference `GraphNode::id`.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphEdge {
     pub id: String,
@@ -31,7 +31,7 @@ pub struct GraphEdge {
 
 /// A graph viewer's full render input: every edge must reference a node
 /// present in `nodes`.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SubGraph {
     pub nodes: Vec<GraphNode>,
@@ -40,7 +40,7 @@ pub struct SubGraph {
 
 /// One point in a vector viewer's projection. `x`/`y` are a 2D projection of
 /// the embedding, not the raw vector.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VectorPoint {
     pub id: String,
@@ -50,7 +50,7 @@ pub struct VectorPoint {
 }
 
 /// One sample in a timeseries metric.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SeriesPoint {
     pub id: String,
@@ -60,7 +60,7 @@ pub struct SeriesPoint {
 
 /// One feature in a spatial viewer. `geometry_json` is display GeoJSON
 /// produced at the seam, never a raw client value.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpatialFeature {
     pub id: String,
@@ -69,7 +69,7 @@ pub struct SpatialFeature {
 }
 
 /// One full-text-search hit.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FtsHit {
     pub id: String,
@@ -78,7 +78,7 @@ pub struct FtsHit {
 }
 
 /// One peer in the sync/replication topology.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SyncPeer {
     pub id: String,

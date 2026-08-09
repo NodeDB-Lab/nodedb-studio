@@ -7,7 +7,7 @@ use crate::models::explorer::RecordRow;
 /// One page of query output. Pagination is the seam's responsibility: the
 /// client buffers whole result sets, so the real implementation emits
 /// LIMIT/OFFSET rather than holding a cursor.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ResultSet {
     pub columns: Vec<String>,
@@ -17,14 +17,14 @@ pub struct ResultSet {
 }
 
 /// The query planner's EXPLAIN output for one statement.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueryPlan {
     pub text: String,
 }
 
 /// One node in the schema tree (database / collection / field, recursively).
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaNode {
     pub id: String,

@@ -23,12 +23,12 @@ pub trait StreamsData {
 
     /// Create a Studio-owned consumer group on `stream` and return the session.
     /// Callers must pair this with `close_stream_session`.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn open_stream_session(&self, stream: &str) -> Result<StreamSession, StudioError>;
 
     /// Read up to `limit` events from the session's current cursor. Idempotent:
     /// re-reading without committing returns the same events.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn cdc_batch(
         &self,
         session: &StreamSession,
@@ -36,31 +36,31 @@ pub trait StreamsData {
     ) -> Result<Vec<CdcRow>, StudioError>;
 
     /// Advance the session's cursor past everything read so far.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn commit_stream_offsets(&self, session: &StreamSession) -> Result<(), StudioError>;
 
     /// Drop the Studio-owned consumer group.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn close_stream_session(&self, session: &StreamSession) -> Result<(), StudioError>;
 
     /// Materialized views known to the cluster.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn materialized_views(&self) -> Result<Vec<MaterializedView>, StudioError>;
 
     /// Durable, replayable topics.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn topics(&self) -> Result<Vec<Topic>, StudioError>;
 
     /// Cron-style scheduled jobs.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, StudioError>;
 
     /// LISTEN/NOTIFY channels.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn notify_channels(&self) -> Result<Vec<NotifyChannel>, StudioError>;
 
     /// The pub/sub message tail across channels.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn notify_messages(&self) -> Result<Vec<NotifyMessage>, StudioError>;
 }
 

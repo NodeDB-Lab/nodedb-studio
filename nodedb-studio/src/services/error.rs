@@ -34,7 +34,7 @@ pub enum StudioError {
     /// server answered a `SHOW` with its session-variable fallback
     /// (`cols=["setting"]`), which would otherwise read as an empty screen.
     #[error("unexpected result columns: expected [{expected}], got [{got}]")]
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     UnexpectedColumns { expected: String, got: String },
     /// Connect was attempted without an explicit username.
     #[error("a username is required to connect")]

@@ -53,7 +53,7 @@ pub fn collection_groups() -> Vec<CollectionGroup> {
 }
 
 /// List rows for a collection. Deterministic and keyed by `id`.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn records(collection: &str) -> Vec<RecordRow> {
     (0..6)
         .map(|i| RecordRow {
@@ -68,7 +68,7 @@ pub fn records(collection: &str) -> Vec<RecordRow> {
 }
 
 /// Detail body for one record.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 pub fn record_detail(collection: &str, id: &str) -> RecordDetail {
     RecordDetail {
         id: id.to_string(),

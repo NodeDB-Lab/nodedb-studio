@@ -19,10 +19,10 @@ const SCANNED_ROOTS: &[&str] = &["src/views", "src/components", "src/modals"];
 /// The one documented exception. `views/streams/notify.rs` renders
 /// `models::streams::NotifyChannel`/`NotifyMessage`, but those seam models
 /// are missing the `active` and `source` fields the current notify view
-/// renders (a gap flagged in Task 6's review). Rewiring notify would force a
-/// UI redesign decision that is deliberately deferred rather than papered
-/// over here. Remove this exception the moment notify is rewired to the
-/// seam — at that point this test must go back to zero exceptions.
+/// renders. Rewiring notify would force a UI redesign decision that is
+/// deliberately deferred rather than papered over here. Remove this
+/// exception the moment notify is rewired to the seam — at that point this
+/// test must go back to zero exceptions.
 const ALLOWED_EXCEPTIONS: &[&str] = &["views/streams/notify.rs"];
 
 /// Recursively collect every `.rs` file under `dir`.

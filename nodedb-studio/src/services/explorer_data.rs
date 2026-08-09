@@ -16,11 +16,11 @@ pub trait ExplorerData {
     async fn collection_groups(&self) -> Result<Vec<CollectionGroup>, StudioError>;
 
     /// List-pane rows for one collection.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn records(&self, collection: &str) -> Result<Vec<RecordRow>, StudioError>;
 
     /// Detail-panel contents for one record.
-    #[allow(dead_code)] // SEAM-UNWIRED(task-10)
+    #[allow(dead_code)] // SEAM-UNWIRED
     async fn record_detail(&self, collection: &str, id: &str) -> Result<RecordDetail, StudioError>;
 }
 

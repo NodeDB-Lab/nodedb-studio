@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// A Studio-owned CDC consumer session. Studio never shares a consumer group:
 /// committing on someone else's group would advance a production consumer past
 /// events it never processed.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StreamSession {
     pub stream: String,
@@ -15,7 +15,7 @@ pub struct StreamSession {
 }
 
 /// One materialized view.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaterializedView {
     pub id: String,
@@ -26,7 +26,7 @@ pub struct MaterializedView {
 }
 
 /// One durable, replayable topic.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Topic {
     pub id: String,
@@ -39,7 +39,7 @@ pub struct Topic {
 }
 
 /// One cron-style scheduled job.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScheduledJob {
     pub id: String,
@@ -50,7 +50,7 @@ pub struct ScheduledJob {
 }
 
 /// One LISTEN/NOTIFY channel.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NotifyChannel {
     pub id: String,
@@ -59,7 +59,7 @@ pub struct NotifyChannel {
 }
 
 /// One message on the LISTEN/NOTIFY tail.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NotifyMessage {
     pub id: String,

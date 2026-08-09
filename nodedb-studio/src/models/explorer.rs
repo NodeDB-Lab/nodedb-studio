@@ -13,7 +13,7 @@ pub struct CollectionGroup {
 
 /// One row in a viewer's list pane. `cells` are pre-formatted for display and
 /// align with the viewer's own column headers.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordRow {
     pub id: String,
@@ -22,7 +22,7 @@ pub struct RecordRow {
 
 /// The detail panel for one record. `body_json` is display JSON produced at the
 /// seam, never a raw client value.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordDetail {
     pub id: String,

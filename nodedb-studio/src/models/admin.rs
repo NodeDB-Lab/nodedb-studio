@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 /// One node in the cluster topology.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClusterNode {
     pub id: String,
@@ -17,7 +17,7 @@ pub struct ClusterNode {
 }
 
 /// One Raft consensus group.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RaftGroup {
     pub id: String,
@@ -30,7 +30,7 @@ pub struct RaftGroup {
 }
 
 /// One shard range and its current leaseholder.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ShardRange {
     pub id: String,
@@ -42,7 +42,7 @@ pub struct ShardRange {
 }
 
 /// One RBAC user row.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserRow {
     pub id: String,
@@ -53,7 +53,7 @@ pub struct UserRow {
 }
 
 /// One row-level-security policy.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RlsPolicy {
     pub id: String,
@@ -65,7 +65,7 @@ pub struct RlsPolicy {
 }
 
 /// One audit-log entry.
-#[allow(dead_code)] // SEAM-UNWIRED(task-10)
+#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditEntry {
     pub id: String,
