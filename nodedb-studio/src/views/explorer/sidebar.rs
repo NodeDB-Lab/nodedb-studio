@@ -4,7 +4,10 @@
 //! as input) so the four states are render-testable without a runtime.
 //!
 //! Clicking a collection updates the shared selection, which swaps the
-//! viewer pane.
+//! viewer pane. `ExplorerSidebar` also owns defaulting that selection: once
+//! `collection_groups()` loads with data and nothing is selected yet, it
+//! picks the first collection of the first group (`default_selection`) —
+//! there is no selection at all while loading, empty, or errored.
 
 use std::rc::Rc;
 
@@ -14,10 +17,10 @@ use crate::components::async_view::AsyncView;
 use crate::models::explorer::CollectionGroup;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
-use crate::views::explorer::Selected;
+use crate::views::explorer::{Selected, default_selection};
 
 #[component]
-pub fn ExplorerSidebar(selected: Signal<Selected>) -> Element {
+pub fn ExplorerSidebar(selected: Signal<Option<Selected>>) -> Element {
     let backend = use_context::<Rc<dyn Backend>>();
     let mut groups = use_resource(move || {
         let backend = backend.clone();
@@ -28,6 +31,23 @@ pub fn ExplorerSidebar(selected: Signal<Selected>) -> Element {
     // read guard across an await; there is none here.
     let state = AsyncState::from_value(groups.read().clone());
 
+    // Default the selection once real data is in, but only while nothing has
+    // been picked yet — a later reload (`on_retry`) must never clobber a
+    // selection the user already made. Reads `groups` (the resource itself,
+    // not the derived `state` local) inside the effect so it reruns exactly
+    // when the resource changes; `selected.peek()` reads without subscribing.
+    use_effect(move || {
+        let value = groups.read().clone();
+        if selected.peek().is_some() {
+            return;
+        }
+        if let Some(Ok(gs)) = value
+            && let Some(first) = default_selection(&gs)
+        {
+            selected.set(Some(first));
+        }
+    });
+
     rsx! {
         SidebarGroups { state, selected, on_retry: move |_| groups.restart() }
     }
@@ -36,7 +56,7 @@ pub fn ExplorerSidebar(selected: Signal<Selected>) -> Element {
 #[derive(Props, Clone, PartialEq)]
 pub struct SidebarGroupsProps {
     pub state: AsyncState<Vec<CollectionGroup>>,
-    pub selected: Signal<Selected>,
+    pub selected: Signal<Option<Selected>>,
     #[props(default)]
     pub on_retry: EventHandler<()>,
 }
@@ -70,7 +90,9 @@ pub fn SidebarGroups(props: SidebarGroupsProps) -> Element {
                         for col in &group.collections {
                             {
                                 let sel = selected.read();
-                                let is_active = sel.name == col.name && sel.mode == col.mode;
+                                let is_active = sel
+                                    .as_ref()
+                                    .is_some_and(|s| s.name == col.name && s.mode == col.mode);
                                 drop(sel);
                                 let item_class = if is_active { "collection active" } else { "collection" };
                                 let name = col.name.clone();
@@ -79,7 +101,7 @@ pub fn SidebarGroups(props: SidebarGroupsProps) -> Element {
                                     div {
                                         key: "{col.name}",
                                         class: "{item_class}",
-                                        onclick: move |_| selected.set(Selected { name: name.clone(), mode }),
+                                        onclick: move |_| selected.set(Some(Selected { name: name.clone(), mode })),
                                         span { class: "ico", "{col.mode.icon_letter()}" }
                                         " {col.name} "
                                         span { class: "count", "{col.count}" }
@@ -127,11 +149,15 @@ mod tests {
         ]
     }
 
-    fn selected_signal() -> Signal<Selected> {
-        Signal::new(Selected {
+    fn selected_signal() -> Signal<Option<Selected>> {
+        Signal::new(Some(Selected {
             name: "users".to_string(),
             mode: StorageMode::Document,
-        })
+        }))
+    }
+
+    fn no_selection_signal() -> Signal<Option<Selected>> {
+        Signal::new(None)
     }
 
     fn app_loading() -> Element {
@@ -170,6 +196,15 @@ mod tests {
         }
     }
 
+    fn app_ready_no_selection() -> Element {
+        rsx! {
+            SidebarGroups {
+                state: AsyncState::from_value(Some(Ok(sample_groups()))),
+                selected: no_selection_signal(),
+            }
+        }
+    }
+
     #[test]
     fn loading_state_renders_spinner() {
         let html = render(app_loading);
@@ -199,5 +234,12 @@ mod tests {
         assert!(html.contains("embeddings"));
         // The selected collection ("users") renders with the active class.
         assert!(html.contains("collection active"));
+    }
+
+    #[test]
+    fn no_selection_highlights_no_row() {
+        // Honest "nothing picked yet" state: no row gets the active class.
+        let html = render(app_ready_no_selection);
+        assert!(!html.contains("collection active"));
     }
 }
