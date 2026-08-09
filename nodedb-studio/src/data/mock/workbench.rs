@@ -29,8 +29,9 @@ pub fn result_set(sql: &str) -> ResultSet {
 /// The genuinely-empty result set `MockBehavior::Empty` returns for
 /// `run_query`: zero rows is the most common non-error query outcome, so
 /// unlike `record_detail`/`explain` this must not fold into `result_set`'s
-/// fixture rows. Columns are kept (a real zero-row result still has a shape)
-/// so the empty state is distinguishable from an absent one.
+/// fixture rows. Columns are shape documentation for the fixture; a zero-row
+/// render with headers would need a payload-carrying Empty variant, which
+/// does not exist in the current `AsyncState` design.
 #[allow(dead_code)] // SEAM-UNWIRED
 pub fn empty_result_set(sql: &str) -> ResultSet {
     ResultSet {

@@ -574,7 +574,7 @@ mod tests {
     #[tokio::test]
     async fn session_info_empty_behavior_still_returns_the_fixture() {
         // Single-value reads have no "empty" shape, so Empty folds into Ready
-        // — matching the `record_detail` / `run_query` precedent.
+        // — matching the `record_detail` precedent.
         let svc = MockConnectionService::empty();
         let s = svc.session_info().await.expect("empty folds into ready");
         assert_eq!(s.database, "analytics");
