@@ -2,6 +2,7 @@
 
 pub mod async_view;
 pub mod command_palette;
+pub mod data_grid;
 pub mod live_tail;
 pub mod modal;
 pub mod popovers;

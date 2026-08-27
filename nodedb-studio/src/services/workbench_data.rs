@@ -36,11 +36,11 @@ mod tests {
     async fn run_query_returns_columns_and_keyed_rows() {
         let svc = MockConnectionService::ready();
         let rs = svc.run_query("SELECT 1").await.expect("query runs");
-        assert!(!rs.columns.is_empty());
-        for r in &rs.rows {
+        assert!(!rs.columns().is_empty());
+        for r in rs.rows() {
             assert_eq!(
                 r.cells.len(),
-                rs.columns.len(),
+                rs.columns().len(),
                 "row width must match header"
             );
             assert!(!r.id.is_empty(), "rows need a stable key");
@@ -54,8 +54,8 @@ mod tests {
         // numbers rather than deriving them from the call under test.
         let svc = MockConnectionService::ready();
         let rs = svc.run_query("SELECT 1").await.expect("query runs");
-        assert_eq!(rs.columns.len(), 3, "fixture is documented as 3 columns");
-        assert_eq!(rs.rows.len(), 4, "fixture is documented as 4 rows");
+        assert_eq!(rs.columns().len(), 3, "fixture is documented as 3 columns");
+        assert_eq!(rs.rows().len(), 4, "fixture is documented as 4 rows");
     }
 
     #[tokio::test]
@@ -70,7 +70,7 @@ mod tests {
             .run_query("SELECT 1")
             .await
             .expect("empty behaviour is still Ok");
-        assert!(rs.rows.is_empty(), "empty behaviour must yield zero rows");
+        assert!(rs.rows().is_empty(), "empty behaviour must yield zero rows");
     }
 
     #[tokio::test]
