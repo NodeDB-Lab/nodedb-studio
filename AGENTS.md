@@ -22,23 +22,30 @@ NodeDB Studio is a **desktop GUI client for NodeDB**, built in Rust with
 
 This is a Cargo workspace; the app is the `nodedb-studio` member crate.
 
-## Setup — local NodeDB dependency (do this first)
+## Setup — NodeDB dependency
 
-`Cargo.toml` pins `nodedb-client` / `nodedb-types` to a published version, but
-those crates are not on crates.io yet. Point them at a local NodeDB checkout with
-a **gitignored** Cargo patch — never hardcode machine paths in `Cargo.toml`.
+`Cargo.toml` pins `nodedb-client` / `nodedb-types` to the `NodeDB-Lab/nodedb` git
+repo by commit `rev`, not to crates.io (the published crates lag the repo by
+hundreds of commits). Cargo fetches it on first build; no local NodeDB checkout is
+needed. Both crates must pin the **same** rev, and always a commit, never a branch:
+a branch would make every CI run build different upstream code.
 
-Create `.cargo/config.toml` at the workspace root (already gitignored):
+Bump the rev deliberately. The native wire is not frozen pre-1.0, and the seam
+decoders are written against the pinned rev, so re-run fmt, clippy and nextest
+after any bump.
+
+To develop against a local NodeDB checkout instead, override with a **gitignored**
+Cargo patch. Never hardcode machine paths in `Cargo.toml`. Create
+`.cargo/config.toml` at the workspace root (already gitignored):
 
 ```toml
-[patch.crates-io]
+[patch."https://github.com/NodeDB-Lab/nodedb.git"]
 nodedb-client = { path = "../nodedb/nodedb-client" }
 nodedb-types  = { path = "../nodedb/nodedb-types" }
 ```
 
-Adjust the paths to your checkout. The version pinned in `Cargo.toml` must match
-your local NodeDB workspace version (see its root `Cargo.toml`). If Cargo says
-your toolchain is too old, run `rustup update stable`.
+Adjust the paths to your checkout. If Cargo says your toolchain is too old, run
+`rustup update stable`.
 
 ## Commands
 
