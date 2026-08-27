@@ -13,7 +13,6 @@ pub struct CollectionGroup {
 
 /// One row in a viewer's list pane. `cells` are pre-formatted for display and
 /// align with the viewer's own column headers.
-#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RecordRow {
     pub id: String,

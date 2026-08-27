@@ -9,21 +9,27 @@ use crate::models::workbench::{QueryPlan, ResultSet, SchemaNode};
 /// returned for `sql`.
 #[allow(dead_code)] // SEAM-UNWIRED
 pub fn result_set(sql: &str) -> ResultSet {
-    ResultSet {
-        columns: vec!["id".into(), "name".into(), "created_at".into()],
-        rows: (0..4)
-            .map(|i| RecordRow {
-                id: format!("row-{i}"),
-                cells: vec![
-                    format!("row-{i}"),
-                    format!("item {i}"),
-                    format!("2026-08-0{} 10:0{}:00", (i % 9) + 1, i),
-                ],
-            })
-            .collect(),
-        elapsed_ms: 12,
-        scanned: format!("4 rows for `{sql}`"),
-    }
+    let rows = (0..4)
+        .map(|i| RecordRow {
+            id: format!("row-{i}"),
+            cells: vec![
+                format!("row-{i}"),
+                format!("item {i}"),
+                format!("2026-08-0{} 10:0{}:00", (i % 9) + 1, i),
+            ],
+        })
+        .collect();
+    // The fallback keeps this infallible without an unwrap. It would swap a
+    // ragged fixture for a zero-row one, so `workbench_data::run_query_ready_*`
+    // pins 3 columns and 4 rows with independent numbers; a ragged edit
+    // fails there rather than reaching a screen as "no rows".
+    ResultSet::new(
+        vec!["id".into(), "name".into(), "created_at".into()],
+        rows,
+        12,
+        format!("4 rows for `{sql}`"),
+    )
+    .unwrap_or_else(|_| empty_result_set(sql))
 }
 
 /// The genuinely-empty result set `MockBehavior::Empty` returns for
@@ -34,12 +40,15 @@ pub fn result_set(sql: &str) -> ResultSet {
 /// does not exist in the current `AsyncState` design.
 #[allow(dead_code)] // SEAM-UNWIRED
 pub fn empty_result_set(sql: &str) -> ResultSet {
-    ResultSet {
-        columns: vec!["id".into(), "name".into(), "created_at".into()],
-        rows: Vec::new(),
-        elapsed_ms: 3,
-        scanned: format!("0 rows for `{sql}`"),
-    }
+    // Zero rows are trivially rectangular, so `new` cannot fail here; the
+    // fallback exists only to keep this infallible without an unwrap.
+    ResultSet::new(
+        vec!["id".into(), "name".into(), "created_at".into()],
+        Vec::new(),
+        3,
+        format!("0 rows for `{sql}`"),
+    )
+    .unwrap_or_else(|_| ResultSet::default())
 }
 
 /// A short, deterministic EXPLAIN plan for `sql`.
