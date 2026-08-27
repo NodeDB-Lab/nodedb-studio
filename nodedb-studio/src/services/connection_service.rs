@@ -142,7 +142,7 @@ impl MockConnectionService {
     /// which is exactly the scenario the commit-after-a-failed-read
     /// regression needs to observe.
     #[cfg(test)]
-    pub(crate) fn with_shared_cursor(&self, behavior: MockBehavior) -> Self {
+    pub(crate) fn with_shared_state(&self, behavior: MockBehavior) -> Self {
         Self {
             behavior,
             all_read: self.all_read.clone(),
@@ -173,6 +173,9 @@ impl ConnectionService for MockConnectionService {
     }
 
     async fn mark_all_read(&self) -> Result<(), StudioError> {
+        // Route the write through the same behaviour switch as every read, so
+        // the failure path is reachable in tests.
+        apply_one(self.behavior, || ()).await?;
         self.all_read.set(true);
         Ok(())
     }
@@ -397,7 +400,9 @@ mod tests {
         let svc = MockConnectionService::ready();
         let before = svc.notifications().await.expect("mock infallible");
         assert!(before.iter().any(|n| n.unread), "fixture has unread items");
-        svc.mark_all_read().await.expect("mock write infallible");
+        svc.mark_all_read()
+            .await
+            .expect("ready mock write succeeds");
         let after = svc.notifications().await.expect("mock infallible");
         assert!(
             after.iter().all(|n| !n.unread),
@@ -711,5 +716,25 @@ mod tests {
         let result = svc.cdc_feed().await;
         latest = AsyncState::from_value(Some(result));
         assert!(matches!(latest, AsyncState::Loaded(_)));
+    }
+    /// The write must be able to fail, or the popover's failure path is dead
+    /// code. Erroring must reject the write AND leave the read unchanged, so a
+    /// caller that mutates local state only after Ok cannot end up ahead of the
+    /// backend.
+    #[tokio::test]
+    async fn mark_all_read_erroring_rejects_and_leaves_feed_unread() {
+        let svc = MockConnectionService::erroring();
+        assert!(
+            svc.mark_all_read().await.is_err(),
+            "erroring write must fail"
+        );
+        // The read also errors under this behaviour, so probe persisted state
+        // through a ready view of the same shared cell instead.
+        let ready = svc.with_shared_state(MockBehavior::Ready);
+        let feed = ready.notifications().await.expect("ready read");
+        assert!(
+            feed.iter().any(|n| n.unread),
+            "a failed write must not clear the persisted unread flags"
+        );
     }
 }

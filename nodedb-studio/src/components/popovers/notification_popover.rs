@@ -9,6 +9,10 @@
 //! list itself. Mark-all-read / per-item clicks MUTATE the store, so the badge
 //! and the list never diverge. The Error-state Retry reloads the feed via the
 //! shared `Resource` handle, gated on `StudioError::is_retriable()`.
+//!
+//! A failed mark-all-read is a WRITE failure and is kept out of the read store:
+//! the list the user was looking at is still correct, so it stays on screen and
+//! the failure renders beside it, with a retry that re-issues the write.
 
 use std::rc::Rc;
 
@@ -19,8 +23,9 @@ use crate::models::notification::{Notification, NotificationTarget};
 use crate::routes::Route;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
+use crate::services::error::StudioError;
 use crate::state::connection::{ActiveConnection, Capabilities};
-use crate::state::notifications::{mark_all_read, mark_read, visible};
+use crate::state::notifications::{apply_mark_all_read, mark_read, visible};
 use crate::state::ui::Popover;
 
 /// Where a notification navigates when clicked.
@@ -50,6 +55,23 @@ pub fn NotificationPopover() -> Element {
     let active = use_context::<Signal<Option<ActiveConnection>>>();
     let backend = use_context::<Rc<dyn Backend>>();
     let nav = use_navigator();
+    // Write failure for mark-all-read, separate from the read store.
+    let mut write_error: Signal<Option<StudioError>> = use_signal(|| None);
+    // Persist first; the local list changes only once the seam acknowledges
+    // the write (see apply_mark_all_read). The spawn keeps every signal guard
+    // out of the await. Built once so the header button and its Retry are the
+    // same operation, not two copies that can drift.
+    let mark_all = {
+        let backend = backend.clone();
+        move || {
+            let backend = backend.clone();
+            spawn(async move {
+                let result = backend.mark_all_read().await;
+                let err = apply_mark_all_read(&mut store.write(), result);
+                write_error.set(err);
+            });
+        }
+    };
 
     // Capability gate (unchanged): no connection -> render nothing.
     let caps: Capabilities = match active.read().as_ref() {
@@ -89,27 +111,27 @@ pub fn NotificationPopover() -> Element {
             div { class: "notif-header",
                 h4 { "Notifications " span { class: "count", "{count_label}" } }
                 button {
-                    onclick: move |_| {
-                        // In-memory update first for snappy UI (write guard dropped
-                        // before the block ends, never held across an await).
-                        if let Some(items) = store.write().loaded_mut() {
-                            mark_all_read(items);
-                        }
-                        // Persist through the seam so the badge stays cleared on
-                        // any subsequent reload (fixes POP-03). The spawn avoids
-                        // holding any signal guard across the await.
-                        // On success, reconcile the shared feed so the real client's
-                        // persisted state is reflected (reload.restart() re-fetches).
-                        let backend = backend.clone();
-                        let mut reload = reload;
-                        spawn(async move {
-                            match backend.mark_all_read().await {
-                                Ok(()) => reload.restart(),
-                                Err(e) => tracing::warn!("mark_all_read failed: {e}"),
-                            }
-                        });
+                    onclick: {
+                        let mark_all = mark_all.clone();
+                        move |_| mark_all()
                     },
                     "Mark all read"
+                }
+            }
+            // A failed write renders through the same component as a failed
+            // read, so it is styled, tested, and gated on retriability exactly
+            // once. Its Retry re-issues the write, not the read.
+            if let Some(e) = write_error.read().as_ref() {
+                AsyncView {
+                    loading: false,
+                    empty: false,
+                    error: Some(format!("Could not mark all read: {e}")),
+                    retriable: e.is_retriable(),
+                    empty_message: String::new(),
+                    on_retry: {
+                        let mark_all = mark_all.clone();
+                        move |_| mark_all()
+                    },
                 }
             }
             div { class: "notif-list",

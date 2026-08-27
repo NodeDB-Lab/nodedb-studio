@@ -5,6 +5,8 @@
 //! logic in one place so the bell badge and the popover list agree.
 
 use crate::models::notification::Notification;
+use crate::services::async_state::AsyncState;
+use crate::services::error::StudioError;
 use crate::state::connection::Capabilities;
 
 /// Notifications visible for the given capabilities: an item is hidden when it
@@ -22,6 +24,28 @@ pub fn visible<'a>(
 /// Count of unread notifications among those visible for the given capabilities.
 pub fn unread_count(items: &[Notification], caps: &Capabilities) -> usize {
     visible(items, caps).filter(|n| n.unread).count()
+}
+
+/// Reconcile the local store with the result of a `mark_all_read` write.
+///
+/// On `Ok` the loaded list is cleared so the badge drops immediately. On `Err`
+/// the loaded list is left exactly as it was: the write failed, the read did
+/// not, and clearing badges for a write the server rejected is the lie this
+/// function exists to prevent. The write error is returned so the caller can
+/// show it beside the still-correct list rather than in place of it.
+pub fn apply_mark_all_read(
+    store: &mut AsyncState<Vec<Notification>>,
+    write: Result<(), StudioError>,
+) -> Option<StudioError> {
+    match write {
+        Ok(()) => {
+            if let Some(items) = store.loaded_mut() {
+                mark_all_read(items);
+            }
+            None
+        }
+        Err(e) => Some(e),
+    }
 }
 
 /// Clear the unread flag on every notification (the "mark all read" action).
@@ -78,5 +102,37 @@ mod tests {
         let mut items = vec![notif("a", true)];
         mark_read(&mut items, "missing");
         assert!(items[0].unread);
+    }
+    fn loaded(items: Vec<Notification>) -> AsyncState<Vec<Notification>> {
+        AsyncState::from_value(Some(Ok(items)))
+    }
+
+    #[test]
+    fn apply_mark_all_read_ok_clears_every_unread() {
+        let mut store = loaded(vec![notif("a", true), notif("b", true)]);
+        let err = apply_mark_all_read(&mut store, Ok(()));
+        assert!(err.is_none());
+        assert!(
+            store
+                .loaded()
+                .expect("still loaded")
+                .iter()
+                .all(|n| !n.unread)
+        );
+    }
+
+    /// The property the popover used to violate: a failed write must leave
+    /// the loaded list untouched, so the badge cannot show "all clear" for
+    /// items the server still holds unread.
+    #[test]
+    fn apply_mark_all_read_err_leaves_list_intact_and_returns_error() {
+        let mut store = loaded(vec![notif("a", true), notif("b", false)]);
+        let err = apply_mark_all_read(&mut store, Err(StudioError::NotConnected));
+        assert!(matches!(err, Some(StudioError::NotConnected)));
+        let items = store
+            .loaded()
+            .expect("a failed write must not discard the loaded list");
+        assert!(items[0].unread, "unread flag must survive a failed write");
+        assert!(!items[1].unread);
     }
 }

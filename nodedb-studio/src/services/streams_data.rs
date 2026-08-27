@@ -304,9 +304,10 @@ mod lifecycle_tests {
         );
     }
 
-    /// Writes are not gated by the mock's read behaviour: `commit_stream_offsets`
-    /// and `close_stream_session` always succeed, exactly like `mark_all_read`
-    /// does for notifications, even when the configured behaviour makes reads fail.
+    /// `commit_stream_offsets` and `close_stream_session` are not gated by the
+    /// mock's behaviour switch and always succeed, even when reads fail. This is
+    /// unlike `mark_all_read`, which is gated so its failure path is testable;
+    /// these two have no UI call site yet, so nothing depends on them failing.
     #[tokio::test]
     async fn commit_and_close_succeed_even_when_reads_error() {
         let svc = MockConnectionService::erroring();
@@ -358,7 +359,7 @@ mod lifecycle_tests {
             .await
             .expect("commit always succeeds, even after a failed read");
 
-        let recovered = erroring.with_shared_cursor(MockBehavior::Ready);
+        let recovered = erroring.with_shared_state(MockBehavior::Ready);
         let after = recovered
             .cdc_batch(&s, 10)
             .await
@@ -388,7 +389,7 @@ mod lifecycle_tests {
             .await
             .expect("commit always succeeds, even after an empty read");
 
-        let recovered = empty.with_shared_cursor(MockBehavior::Ready);
+        let recovered = empty.with_shared_state(MockBehavior::Ready);
         let after = recovered
             .cdc_batch(&s, 10)
             .await
