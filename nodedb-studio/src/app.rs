@@ -81,7 +81,11 @@ pub fn App() -> Element {
 
     let active = use_context::<Signal<Option<ActiveConnection>>>();
     // Rendered through the same component every failed read uses, so the markup
-    // and styling live in one place. `retriable` is deliberately false: the way
+    // and styling live in one place. It is fixed-position and above the modal
+    // scrim: `html, body` are `100vh; overflow: hidden`, so a banner in normal
+    // flow would push the statusbar off-screen, and a failed "Save & connect"
+    // has to be readable without closing the form that caused it.
+    // `retriable` is deliberately false: the way
     // to retry a connect is the Connect button the user just pressed, which is
     // still on screen, and a second affordance here would need the name and
     // credentials of the attempt that failed. The message clears when the next
@@ -91,7 +95,9 @@ pub fn App() -> Element {
     rsx! {
         document::Stylesheet { href: STYLES }
         if let Some(msg) = connect_error_msg {
-            AsyncView { loading: false, empty: false, error: Some(msg) }
+            div { class: "connect-error-bar",
+                AsyncView { loading: false, empty: false, error: Some(msg) }
+            }
         }
         if active.read().is_some() {
             Studio {}
