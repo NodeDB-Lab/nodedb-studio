@@ -118,10 +118,12 @@ fn every_connect_call_site_reconciles_through_apply_connect() {
     }
 
     let src_dir = manifest_dir.join("src");
-    let mut calls = 0usize;
-    let mut reconciles = 0usize;
-    let mut sites: Vec<String> = Vec::new();
+    let mut total_calls = 0usize;
+    let mut violations: Vec<String> = Vec::new();
 
+    // Compared PER FILE, not as a global total: a single tally lets a file that
+    // drops its result pass because another file happens to contribute a spare
+    // apply_connect line.
     for file in &files {
         let rel = file
             .strip_prefix(&src_dir)
@@ -131,28 +133,33 @@ fn every_connect_call_site_reconciles_through_apply_connect() {
         let Ok(contents) = fs::read_to_string(file) else {
             continue;
         };
-        for (idx, line) in contents.lines().enumerate() {
+        let mut calls = 0usize;
+        let mut reconciles = 0usize;
+        for line in contents.lines() {
             let code = code_part(line);
             if code.contains(".connect(") {
                 calls += 1;
-                sites.push(format!("{rel}:{} : {}", idx + 1, line.trim()));
             }
             if code.contains("apply_connect(") {
                 reconciles += 1;
             }
         }
+        total_calls += calls;
+        if calls != reconciles {
+            violations.push(format!(
+                "{rel}: {calls} connect() call site(s), {reconciles} apply_connect() reconcile(s)"
+            ));
+        }
     }
 
     assert!(
-        calls > 0,
+        total_calls > 0,
         "expected at least one connect() call site under {SCANNED_ROOTS:?} — scan may be wrong"
     );
-    assert_eq!(
-        calls,
-        reconciles,
-        "{calls} connect() call site(s) but {reconciles} apply_connect() reconcile(s) — \
-         a connect result is being dropped or only logged, which renders as a button \
+    assert!(
+        violations.is_empty(),
+        "a connect result is being dropped or only logged, which renders as a button \
          that silently does nothing:\n{}",
-        sites.join("\n")
+        violations.join("\n")
     );
 }

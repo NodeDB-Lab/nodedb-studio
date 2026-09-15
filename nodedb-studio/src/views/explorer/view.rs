@@ -47,6 +47,21 @@ pub fn default_selection(groups: &[CollectionGroup]) -> Option<Selected> {
     })
 }
 
+/// Whether `selected` still names a collection present in `groups`.
+///
+/// A reload can return a set the current pick is no longer in (renamed,
+/// dropped, or a different connection). Keeping it leaves the viewer header
+/// naming a collection no sidebar row matches, which is the phantom-collection
+/// symptom the hardcoded default used to produce.
+pub fn selection_still_present(groups: &[CollectionGroup], selected: Option<&Selected>) -> bool {
+    let Some(sel) = selected else {
+        return false;
+    };
+    groups
+        .iter()
+        .any(|g| g.collections.iter().any(|c| c.name == sel.name))
+}
+
 #[component]
 pub fn Explorer() -> Element {
     let selected = use_signal(|| None::<Selected>);
@@ -94,9 +109,48 @@ pub fn Explorer() -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::models::collection::Collection;
     use crate::services::connection_service::MockConnectionService;
     use crate::services::explorer_data::ExplorerData;
+
+    fn groups_with(names: &[&str]) -> Vec<CollectionGroup> {
+        vec![CollectionGroup {
+            mode: StorageMode::Document,
+            collections: names
+                .iter()
+                .map(|n| Collection {
+                    name: (*n).to_string(),
+                    mode: StorageMode::Document,
+                    count: "1".to_string(),
+                })
+                .collect(),
+        }]
+    }
+
+    /// A pick that survived a reload must still exist in the new set. Against
+    /// an implementation that keeps any non-None selection, the second case
+    /// fails and the viewer header names a collection no sidebar row matches.
+    #[test]
+    fn selection_is_kept_only_while_the_collection_exists() {
+        let groups = groups_with(&["events", "orders"]);
+        let pick = Selected {
+            name: "orders".to_string(),
+            mode: StorageMode::Document,
+        };
+        assert!(selection_still_present(&groups, Some(&pick)));
+
+        let after_rename = groups_with(&["events", "orders_v2"]);
+        assert!(
+            !selection_still_present(&after_rename, Some(&pick)),
+            "a reload that dropped `orders` must not keep it selected"
+        );
+    }
+
+    #[test]
+    fn no_selection_is_never_present() {
+        assert!(!selection_still_present(&groups_with(&["events"]), None));
+    }
 
     #[test]
     fn default_selection_is_none_for_no_groups() {

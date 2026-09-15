@@ -17,7 +17,7 @@ use crate::components::async_view::AsyncView;
 use crate::models::explorer::CollectionGroup;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
-use crate::views::explorer::{Selected, default_selection};
+use crate::views::explorer::{Selected, default_selection, selection_still_present};
 
 #[component]
 pub fn ExplorerSidebar(selected: Signal<Option<Selected>>) -> Element {
@@ -36,16 +36,20 @@ pub fn ExplorerSidebar(selected: Signal<Option<Selected>>) -> Element {
     // selection the user already made. Reads `groups` (the resource itself,
     // not the derived `state` local) inside the effect so it reruns exactly
     // when the resource changes; `selected.peek()` reads without subscribing.
+    //
+    // A pick is kept only while it still exists. If a reload returns a set
+    // without the selected collection, keeping it would leave the viewer
+    // header naming a collection no sidebar row matches — the same
+    // phantom-collection symptom the hardcoded default used to produce.
     use_effect(move || {
         let value = groups.read().clone();
-        if selected.peek().is_some() {
+        let Some(Ok(gs)) = value else {
+            return;
+        };
+        if selection_still_present(&gs, selected.peek().as_ref()) {
             return;
         }
-        if let Some(Ok(gs)) = value
-            && let Some(first) = default_selection(&gs)
-        {
-            selected.set(Some(first));
-        }
+        selected.set(default_selection(&gs));
     });
 
     rsx! {

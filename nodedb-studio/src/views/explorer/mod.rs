@@ -4,4 +4,4 @@ pub mod sidebar;
 mod view;
 pub mod viewers;
 
-pub use view::{Explorer, Selected, default_selection};
+pub use view::{Explorer, Selected, default_selection, selection_still_present};
