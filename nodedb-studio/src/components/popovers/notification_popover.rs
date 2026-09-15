@@ -16,6 +16,7 @@
 
 use std::rc::Rc;
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::async_view::AsyncView;
@@ -61,11 +62,20 @@ pub fn NotificationPopover() -> Element {
     // the write (see apply_mark_all_read). The spawn keeps every signal guard
     // out of the await. Built once so the header button and its Retry are the
     // same operation, not two copies that can drift.
+    //
+    // spawn_forever, not spawn: this popover is conditionally mounted, and
+    // Dioxus drops a scope's tasks on unmount. Clicking away while the write
+    // is in flight would kill it at the await, leaving the server's state
+    // unknown and the shared store never reconciled. The store is app-level
+    // context, so the reconcile still lands; only `write_error` is scoped
+    // here, so a failure the user navigated away from is not shown. That is
+    // acceptable because the failure path leaves the list untouched, which is
+    // what reopening the popover shows.
     let mark_all = {
         let backend = backend.clone();
         move || {
             let backend = backend.clone();
-            spawn(async move {
+            spawn_forever(async move {
                 let result = backend.mark_all_read().await;
                 let err = apply_mark_all_read(&mut store.write(), result);
                 write_error.set(err);

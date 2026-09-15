@@ -163,3 +163,61 @@ fn every_connect_call_site_reconciles_through_apply_connect() {
         violations.join("\n")
     );
 }
+
+/// No scope-bound `spawn` in views, components or modals.
+///
+/// Dioxus drops a scope's tasks when the scope is removed, and most of this
+/// tree is conditionally mounted: every popover, every modal, and the
+/// Connection Manager itself, which is swapped for the studio shell the moment
+/// a connect succeeds. A handler that spawns a seam call and then closes its
+/// own popover kills the task at its first await. Nothing renders, nothing
+/// errors, and the button reads as broken.
+///
+/// The mock cannot catch this. `apply_one` resolves on the first poll, so the
+/// task finishes before the unmount can cancel it; only a backend that really
+/// yields reaches the await. That is why this is a source rule rather than a
+/// runtime test.
+///
+/// Seam writes use `spawn_forever` (root scope). Seam reads use `use_resource`
+/// or `use_future`, which are tied to the component on purpose.
+#[test]
+fn views_components_and_modals_never_use_scope_bound_spawn() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let mut files = Vec::new();
+    for root in SCANNED_ROOTS {
+        collect_rs_files(&manifest_dir.join(root), &mut files);
+    }
+
+    let src_dir = manifest_dir.join("src");
+    let mut violations: Vec<String> = Vec::new();
+
+    for file in &files {
+        let rel = file
+            .strip_prefix(&src_dir)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let Ok(contents) = fs::read_to_string(file) else {
+            continue;
+        };
+        for (idx, line) in contents.lines().enumerate() {
+            let code = code_part(line);
+            // `spawn_forever(` contains `spawn(`-adjacent text, so match the
+            // bare call specifically.
+            if code.contains("spawn(") && !code.contains("spawn_forever(") {
+                violations.push(format!("{rel}:{} : {}", idx + 1, line.trim()));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "found {} scope-bound spawn(s). A conditionally-mounted component that \
+         spawns a seam call and then unmounts loses the task at its first await, \
+         so the action silently does nothing. Use spawn_forever for writes, or \
+         use_resource / use_future for reads:\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}
