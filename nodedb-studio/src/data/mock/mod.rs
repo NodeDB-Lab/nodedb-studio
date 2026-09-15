@@ -11,7 +11,6 @@ mod cdc;
 mod connections;
 mod docs;
 mod explorer;
-mod notify;
 mod streams;
 #[cfg(test)]
 mod test_support;
@@ -22,7 +21,6 @@ pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_r
 pub use cdc::{ChangeOp, cdc_events};
 pub use connections::{connections, databases, nav_badges, notifications, session_info};
 pub use explorer::{collection_groups, record_detail, records};
-pub use notify::{notify_channels, notify_messages};
 pub use streams::{
     materialized_views, notify_channel_rows, notify_message_rows, scheduled_jobs, topics,
 };

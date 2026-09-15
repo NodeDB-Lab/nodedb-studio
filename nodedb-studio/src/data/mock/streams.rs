@@ -103,7 +103,6 @@ pub fn scheduled_jobs() -> Vec<ScheduledJob> {
 
 /// LISTEN/NOTIFY channels. `id` deliberately differs from `name`, same
 /// reasoning as `materialized_views`.
-#[allow(dead_code)] // SEAM-UNWIRED
 pub fn notify_channel_rows() -> Vec<NotifyChannel> {
     vec![
         NotifyChannel {
@@ -125,7 +124,6 @@ pub fn notify_channel_rows() -> Vec<NotifyChannel> {
 }
 
 /// The pub/sub message tail across channels.
-#[allow(dead_code)] // SEAM-UNWIRED
 pub fn notify_message_rows() -> Vec<NotifyMessage> {
     (0..4)
         .map(|i| NotifyMessage {

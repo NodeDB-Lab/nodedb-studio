@@ -16,14 +16,9 @@ use std::path::{Path, PathBuf};
 /// Directories (relative to the crate root) that must stay seam-only.
 const SCANNED_ROOTS: &[&str] = &["src/views", "src/components", "src/modals"];
 
-/// The one documented exception. `views/streams/notify.rs` renders
-/// `models::streams::NotifyChannel`/`NotifyMessage`, but those seam models
-/// are missing the `active` and `source` fields the current notify view
-/// renders. Rewiring notify would force a UI redesign decision that is
-/// deliberately deferred rather than papered over here. Remove this
-/// exception the moment notify is rewired to the seam — at that point this
-/// test must go back to zero exceptions.
-const ALLOWED_EXCEPTIONS: &[&str] = &["views/streams/notify.rs"];
+/// No exceptions. `views/streams/notify.rs` was the last one and is now
+/// seam-backed. Anything added back here needs a reason that survives review.
+const ALLOWED_EXCEPTIONS: &[&str] = &[];
 
 /// Recursively collect every `.rs` file under `dir`.
 fn collect_rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
@@ -101,24 +96,6 @@ fn views_components_and_modals_read_only_through_the_seam() {
         violations.len(),
         ALLOWED_EXCEPTIONS,
         violations.join("\n")
-    );
-}
-
-#[test]
-fn the_documented_exception_still_exists_and_still_needs_it() {
-    // Guards against the exception silently becoming stale: if
-    // `views/streams/notify.rs` stops referencing `data::mock`, the
-    // exception entry above is dead and must be deleted along with this
-    // test's assumption.
-    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let notify = manifest_dir.join("src/views/streams/notify.rs");
-    let contents = fs::read_to_string(&notify)
-        .unwrap_or_else(|e| panic!("expected {} to exist: {e}", notify.display()));
-    let still_uses_mock = contents.lines().any(references_mock);
-    assert!(
-        still_uses_mock,
-        "views/streams/notify.rs no longer references data::mock — remove it from \
-         ALLOWED_EXCEPTIONS in this test file, the exception is no longer needed"
     );
 }
 

@@ -50,7 +50,6 @@ pub struct ScheduledJob {
 }
 
 /// One LISTEN/NOTIFY channel.
-#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NotifyChannel {
     pub id: String,
@@ -59,7 +58,6 @@ pub struct NotifyChannel {
 }
 
 /// One message on the LISTEN/NOTIFY tail.
-#[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct NotifyMessage {
     pub id: String,

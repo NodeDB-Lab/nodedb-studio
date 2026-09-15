@@ -56,11 +56,9 @@ pub trait StreamsData {
     async fn scheduled_jobs(&self) -> Result<Vec<ScheduledJob>, StudioError>;
 
     /// LISTEN/NOTIFY channels.
-    #[allow(dead_code)] // SEAM-UNWIRED
     async fn notify_channels(&self) -> Result<Vec<NotifyChannel>, StudioError>;
 
     /// The pub/sub message tail across channels.
-    #[allow(dead_code)] // SEAM-UNWIRED
     async fn notify_messages(&self) -> Result<Vec<NotifyMessage>, StudioError>;
 }
 
