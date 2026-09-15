@@ -3,6 +3,7 @@
 
 use std::rc::Rc;
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
@@ -72,7 +73,9 @@ pub fn ConnectionManager() -> Element {
                                     let service = service.clone();
                                     let creds = creds.clone();
                                     connect_error.set(ConnectError(None));
-                                    spawn(async move {
+                                    // spawn_forever so the task survives this
+                                    // screen being swapped for the studio shell.
+                                    spawn_forever(async move {
                                         let result = service.connect(&name, &creds).await;
                                         let err = apply_connect(&mut active.write(), result);
                                         connect_error.set(ConnectError(err));

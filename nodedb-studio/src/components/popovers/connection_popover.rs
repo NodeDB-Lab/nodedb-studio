@@ -3,6 +3,7 @@
 
 use std::rc::Rc;
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
@@ -76,7 +77,13 @@ pub fn ConnectionPopover() -> Element {
                                     let name = name.clone();
                                     let creds = creds.clone();
                                     connect_error.set(ConnectError(None));
-                                    spawn(async move {
+                                    // spawn_forever, not spawn: this popover is
+                                    // conditionally mounted and closes on the next
+                                    // line, and Dioxus drops a scope's tasks when
+                                    // the scope goes away. A plain spawn dies at
+                                    // the await against any backend that actually
+                                    // yields, leaving no session and no error.
+                                    spawn_forever(async move {
                                         let result = svc.connect(&name, &creds).await;
                                         let err = apply_connect(&mut active.write(), result);
                                         connect_error.set(ConnectError(err));

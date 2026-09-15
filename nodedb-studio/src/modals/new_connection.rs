@@ -18,6 +18,7 @@
 
 use std::rc::Rc;
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
@@ -66,7 +67,9 @@ pub fn NewConnectionForm() -> Element {
         let service = service.clone();
         // Clear any previous failure so the surface reflects this attempt.
         connect_error.set(ConnectError(None));
-        spawn(async move {
+        // spawn_forever so a Cancel mid-connect cannot cancel the attempt and
+        // leave the app with neither a session nor an error.
+        spawn_forever(async move {
             let result = service.connect(&name, &creds).await;
             let err = apply_connect(&mut active.write(), result);
             let connected = err.is_none();

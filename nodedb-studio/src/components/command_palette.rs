@@ -3,6 +3,7 @@
 //! Rendered inside the router (via `StudioLayout`) so navigation items can use
 //! the navigator. Open state is the shared `Signal<bool>` provided by `Studio`.
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::routes::Route;
@@ -40,7 +41,12 @@ pub fn CommandPalette() -> Element {
     let creds_for = |name: &str| -> Credentials {
         Credentials {
             username: registry
-                .peek()
+                // .read(), not .peek(): this runs at render time, not in an
+                // event handler. peek() would freeze the credentials at the
+                // render where the palette opened, so a registry that resolves
+                // later (a real backend awaiting the network) would leave every
+                // switch sending a blank username with no re-render to fix it.
+                .read()
                 .iter()
                 .find(|c| c.name == name)
                 .and_then(|c| c.profile.as_ref())
@@ -95,7 +101,9 @@ pub fn CommandPalette() -> Element {
                                 let svc = svc.clone();
                                 let creds = creds.clone();
                                 connect_error.set(ConnectError(None));
-                                spawn(async move {
+                                // spawn_forever: the palette closes on the next
+                                // line, and a scope-bound task would be dropped.
+                                spawn_forever(async move {
                                     let result = svc.connect("staging-cluster", &creds).await;
                                     let err = apply_connect(&mut active.write(), result);
                                     connect_error.set(ConnectError(err));
@@ -112,7 +120,9 @@ pub fn CommandPalette() -> Element {
                                 let svc = svc.clone();
                                 let creds = creds.clone();
                                 connect_error.set(ConnectError(None));
-                                spawn(async move {
+                                // spawn_forever: the palette closes on the next
+                                // line, and a scope-bound task would be dropped.
+                                spawn_forever(async move {
                                     let result = svc.connect("prod-replica-eu", &creds).await;
                                     let err = apply_connect(&mut active.write(), result);
                                     connect_error.set(ConnectError(err));
