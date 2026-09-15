@@ -31,9 +31,12 @@ pub fn CommandPalette() -> Element {
     // each switch handler clones it.
     let switch_svc = service.clone();
 
-    // TODO: the palette has no username field yet, so identity is taken from
-    // the saved profile rather than a user-entered value. Replace once the
-    // connect modal collects credentials explicitly.
+    // A saved entry's stored profile IS its explicit username; the palette
+    // switches between entries that already have one, so there is no field to
+    // type into here. An entry with no profile yields a blank, which the seam
+    // rejects with MissingUsername and the app root renders — never a silent
+    // fallback to `admin`. `data::mock::connections` holds the fixture
+    // invariant that keeps connectable entries from reaching that state.
     let creds_for = |name: &str| -> Credentials {
         Credentials {
             username: registry

@@ -50,10 +50,12 @@ pub fn ConnectionManager() -> Element {
                             conn: conn.clone(),
                             on_connect: {
                                 let service = service.clone();
-                                // TODO: the connect form has no username field yet, so
-                                // identity is taken from the saved profile rather than a
-                                // user-entered value. Replace once the connect modal
-                                // collects credentials explicitly.
+                                // The stored profile IS this card's explicit
+                                // username. A profile-less entry yields a blank,
+                                // which the seam rejects with MissingUsername and
+                                // the app root renders, rather than defaulting to
+                                // `admin`. New connections collect a username in
+                                // the modal (see modals/new_connection.rs).
                                 let creds = Credentials {
                                     username: conn
                                         .profile

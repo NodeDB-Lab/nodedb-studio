@@ -53,9 +53,10 @@ pub fn ConnectionPopover() -> Element {
                     };
                     let svc = service.clone();
                     let item_class = if disabled { "cp-item disabled" } else { "cp-item" };
-                    // TODO: the switch popover has no username field yet, so identity is
-                    // taken from the saved profile rather than a user-entered value.
-                    // Replace once the connect modal collects credentials explicitly.
+                    // The stored profile IS this entry's explicit username; the
+                    // popover only switches between already-saved connections. A
+                    // profile-less entry yields a blank, which the seam rejects
+                    // with MissingUsername and the app root renders.
                     let creds = Credentials {
                         username: sc
                             .profile

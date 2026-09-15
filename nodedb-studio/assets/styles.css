@@ -441,6 +441,11 @@
     font-size: 13px;
   }
   .form-field input:focus, .form-field select:focus { border-color: var(--accent); }
+  .field-error {
+    margin-top: 5px;
+    font-size: 11px;
+    color: var(--text-danger);
+  }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
   /* ============================================================
