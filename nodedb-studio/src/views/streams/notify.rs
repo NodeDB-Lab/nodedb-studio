@@ -83,7 +83,9 @@ fn NotifyPanes(
     on_retry_messages: EventHandler<()>,
 ) -> Element {
     let channel_list = channels.loaded().cloned().unwrap_or_default();
-    let count = channel_list.len();
+    // Only a loaded list has a count. While loading or after an error the header
+    // would otherwise read "Channels (0)" directly above the spinner or error.
+    let count = channels.loaded().map(|c| c.len());
     // Listener count for the selected channel, from the loaded list rather than
     // a literal, so the toolbar cannot disagree with the sidebar.
     let listeners = selected.as_ref().and_then(|name| {
@@ -108,7 +110,9 @@ fn NotifyPanes(
     rsx! {
         div { style: "display: grid; grid-template-columns: 260px 1fr; overflow: hidden;",
             div { style: "background: var(--bg-secondary); border-right: 0.5px solid var(--border-mid); padding: 10px;",
-                div { class: "eyebrow", style: "padding: 6px 10px;", "Channels ({count})" }
+                div { class: "eyebrow", style: "padding: 6px 10px;",
+                    if let Some(n) = count { "Channels ({n})" } else { "Channels" }
+                }
                 AsyncView {
                     loading: channels.is_loading(),
                     empty: channels.is_empty(),
@@ -148,7 +152,15 @@ fn NotifyPanes(
                 div { class: "tail-body",
                     AsyncView {
                         loading: messages.is_loading(),
-                        empty: messages.is_empty(),
+                        // Driven by the FILTERED rows, not the raw read: the seam
+                        // returns every channel's messages, so a channel with no
+                        // traffic has a non-empty read and zero rows. Keying this
+                        // off `messages.is_empty()` renders the blank pane this
+                        // screen exists to avoid. Loading and Error win, so the
+                        // spinner and the error are not replaced by "No messages".
+                        empty: rows.is_empty()
+                            && !messages.is_loading()
+                            && messages.error_message().is_none(),
                         error: messages.error_message(),
                         retriable: messages.is_retriable(),
                         on_retry: move |_| on_retry_messages.call(()),
@@ -313,6 +325,62 @@ mod tests {
             1,
             "only the user_events message belongs in the tail: {html}"
         );
+    }
+
+    /// A channel with no traffic must say so. The seam returns every channel's
+    /// messages, so the read is non-empty while the filtered tail has zero
+    /// rows; keying the empty flag off the raw read renders a blank pane.
+    fn app_quiet_channel() -> Element {
+        rsx! {
+            NotifyPanes {
+                channels: AsyncState::from_value(Some(Ok(sample_channels()))),
+                messages: AsyncState::from_value(Some(Ok(vec![message(
+                    "notify-0",
+                    "user_events",
+                )]))),
+                selected: Some("deploy_hooks".to_string()),
+                on_pick: move |_| {},
+                on_retry_channels: move |_| {},
+                on_retry_messages: move |_| {},
+            }
+        }
+    }
+
+    #[test]
+    fn quiet_channel_says_no_messages_instead_of_rendering_blank() {
+        let html = render(app_quiet_channel);
+        assert!(html.contains("No messages."), "{html}");
+        assert_eq!(html.matches("tail-row").count(), 0);
+    }
+
+    /// Loading and Error must win over the filtered-empty check, or the
+    /// spinner and the error text get replaced by "No messages."
+    fn app_loading_tail() -> Element {
+        rsx! {
+            NotifyPanes {
+                channels: AsyncState::from_value(Some(Ok(sample_channels()))),
+                messages: AsyncState::Loading,
+                selected: Some("user_events".to_string()),
+                on_pick: move |_| {},
+                on_retry_channels: move |_| {},
+                on_retry_messages: move |_| {},
+            }
+        }
+    }
+
+    #[test]
+    fn loading_tail_shows_the_spinner_not_no_messages() {
+        let html = render(app_loading_tail);
+        assert!(html.contains("async-loading"), "{html}");
+        assert!(!html.contains("No messages."), "{html}");
+    }
+
+    /// The header must not claim a count while the list is still loading.
+    #[test]
+    fn header_omits_the_count_until_channels_load() {
+        let html = render(app_loading);
+        assert!(html.contains("Channels"), "{html}");
+        assert!(!html.contains("Channels (0)"), "{html}");
     }
 
     /// The toolbar's listener count comes from the loaded channel list, so it
