@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 
 use crate::routes::Route;
 use crate::services::backend::Backend;
-use crate::state::connection::ActiveConnection;
+use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
 use crate::state::connections_registry::{Credentials, SavedConnection};
 use crate::state::ui::ModalKind;
 
@@ -15,6 +15,9 @@ use crate::state::ui::ModalKind;
 pub fn CommandPalette() -> Element {
     let mut open = use_context::<Signal<bool>>();
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
+    // The palette closes on click, so a failure it owned would never render;
+    // the surface lives at the app root instead.
+    let mut connect_error = use_context::<Signal<ConnectError>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let service = use_context::<std::rc::Rc<dyn Backend>>();
     let registry = use_context::<Signal<Vec<SavedConnection>>>();
@@ -88,13 +91,11 @@ pub fn CommandPalette() -> Element {
                             move |_| {
                                 let svc = svc.clone();
                                 let creds = creds.clone();
+                                connect_error.set(ConnectError(None));
                                 spawn(async move {
-                                    match svc.connect("staging-cluster", &creds).await {
-                                        Ok(s) => active.set(Some(s)),
-                                        Err(e) => tracing::error!(
-                                            "connect to staging-cluster failed: {e}"
-                                        ),
-                                    }
+                                    let result = svc.connect("staging-cluster", &creds).await;
+                                    let err = apply_connect(&mut active.write(), result);
+                                    connect_error.set(ConnectError(err));
                                 });
                                 open.set(false);
                             }
@@ -107,13 +108,11 @@ pub fn CommandPalette() -> Element {
                             move |_| {
                                 let svc = svc.clone();
                                 let creds = creds.clone();
+                                connect_error.set(ConnectError(None));
                                 spawn(async move {
-                                    match svc.connect("prod-replica-eu", &creds).await {
-                                        Ok(s) => active.set(Some(s)),
-                                        Err(e) => tracing::error!(
-                                            "connect to prod-replica-eu failed: {e}"
-                                        ),
-                                    }
+                                    let result = svc.connect("prod-replica-eu", &creds).await;
+                                    let err = apply_connect(&mut active.write(), result);
+                                    connect_error.set(ConnectError(err));
                                 });
                                 open.set(false);
                             }

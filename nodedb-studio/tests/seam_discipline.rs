@@ -121,3 +121,61 @@ fn the_documented_exception_still_exists_and_still_needs_it() {
          ALLOWED_EXCEPTIONS in this test file, the exception is no longer needed"
     );
 }
+
+/// Every `connect()` call site must reconcile its result through
+/// `apply_connect`, which hands the error back for rendering.
+///
+/// This exists because the previous fix looked complete and was not: the call
+/// sites were changed from `if let Ok(..)` (drop the error) to
+/// `tracing::error!` (log the error), which leaves the user-facing symptom
+/// identical — a Connect button that does nothing, with no message and no
+/// state change. A count comparison catches a fourth call site added later
+/// that forgets to surface its failure.
+#[test]
+fn every_connect_call_site_reconciles_through_apply_connect() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let mut files = Vec::new();
+    for root in SCANNED_ROOTS {
+        collect_rs_files(&manifest_dir.join(root), &mut files);
+    }
+
+    let src_dir = manifest_dir.join("src");
+    let mut calls = 0usize;
+    let mut reconciles = 0usize;
+    let mut sites: Vec<String> = Vec::new();
+
+    for file in &files {
+        let rel = file
+            .strip_prefix(&src_dir)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let Ok(contents) = fs::read_to_string(file) else {
+            continue;
+        };
+        for (idx, line) in contents.lines().enumerate() {
+            let code = code_part(line);
+            if code.contains(".connect(") {
+                calls += 1;
+                sites.push(format!("{rel}:{} : {}", idx + 1, line.trim()));
+            }
+            if code.contains("apply_connect(") {
+                reconciles += 1;
+            }
+        }
+    }
+
+    assert!(
+        calls > 0,
+        "expected at least one connect() call site under {SCANNED_ROOTS:?} — scan may be wrong"
+    );
+    assert_eq!(
+        calls,
+        reconciles,
+        "{calls} connect() call site(s) but {reconciles} apply_connect() reconcile(s) — \
+         a connect result is being dropped or only logged, which renders as a button \
+         that silently does nothing:\n{}",
+        sites.join("\n")
+    );
+}

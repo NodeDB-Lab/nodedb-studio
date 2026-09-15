@@ -6,7 +6,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
-use crate::state::connection::ActiveConnection;
+use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
 use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
 use crate::state::ui::{ModalKind, Popover};
 
@@ -17,6 +17,9 @@ pub fn ConnectionPopover() -> Element {
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let registry = use_context::<Signal<Vec<SavedConnection>>>();
     let service = use_context::<Rc<dyn Backend>>();
+    // The popover closes on click (see `popover.set(None)` below), so a failure
+    // it owned would never render; the surface lives at the app root instead.
+    let mut connect_error = use_context::<Signal<ConnectError>>();
 
     let conn = active.read();
     let Some(c) = conn.as_ref() else {
@@ -71,13 +74,11 @@ pub fn ConnectionPopover() -> Element {
                                     let svc = svc.clone();
                                     let name = name.clone();
                                     let creds = creds.clone();
+                                    connect_error.set(ConnectError(None));
                                     spawn(async move {
-                                        match svc.connect(&name, &creds).await {
-                                            Ok(s) => active.set(Some(s)),
-                                            Err(e) => {
-                                                tracing::error!("connect to {name} failed: {e}")
-                                            }
-                                        }
+                                        let result = svc.connect(&name, &creds).await;
+                                        let err = apply_connect(&mut active.write(), result);
+                                        connect_error.set(ConnectError(err));
                                     });
                                     popover.set(None);
                                 }

@@ -6,7 +6,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
-use crate::state::connection::ActiveConnection;
+use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
 use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
 use crate::state::ui::ModalKind;
 
@@ -16,6 +16,7 @@ pub fn ConnectionManager() -> Element {
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let service = use_context::<Rc<dyn Backend>>();
+    let mut connect_error = use_context::<Signal<ConnectError>>();
 
     rsx! {
         div { class: "conn-manager",
@@ -63,16 +64,16 @@ pub fn ConnectionManager() -> Element {
                                 };
                                 move |name: String| {
                                     // Async at the seam: clone the Rc into the task and
-                                    // set `active` (Copy) only after the await resolves.
+                                    // write the signals (Copy) only after the await
+                                    // resolves. Clearing the error first makes a stale
+                                    // failure disappear the moment a new attempt starts.
                                     let service = service.clone();
                                     let creds = creds.clone();
+                                    connect_error.set(ConnectError(None));
                                     spawn(async move {
-                                        match service.connect(&name, &creds).await {
-                                            Ok(session) => active.set(Some(session)),
-                                            Err(e) => {
-                                                tracing::error!("connect to {name} failed: {e}")
-                                            }
-                                        }
+                                        let result = service.connect(&name, &creds).await;
+                                        let err = apply_connect(&mut active.write(), result);
+                                        connect_error.set(ConnectError(err));
                                     });
                                 }
                             },
