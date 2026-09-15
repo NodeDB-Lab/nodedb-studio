@@ -3,7 +3,7 @@
 //!
 //! Naming note: the mockup's legacy "arcadedb" labels, "local-arcade-dev"
 //! name, "arcade-5" node, and per-version server tags are deliberately NOT
-//! reproduced. NodeDB version numbers are undecided (CLAUDE.md §2), so the
+//! reproduced. NodeDB version numbers are not settled, so the
 //! server stat is a neutral "dev" placeholder rather than an invented version.
 
 mod admin;

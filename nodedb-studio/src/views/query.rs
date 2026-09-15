@@ -1,7 +1,7 @@
 //! Query workspace: schema tree + editor + results.
 //!
-//! The editor is a static highlighted `<pre>` placeholder (CLAUDE.md: no real
-//! code editor — CodeMirror/Monaco would slot in here later).
+//! The editor is a static highlighted `<pre>` placeholder. There is no real
+//! code editor yet; CodeMirror or Monaco would slot in here later.
 
 use dioxus::prelude::*;
 

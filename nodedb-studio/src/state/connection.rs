@@ -2,8 +2,7 @@
 //!
 //! Identity in NodeDB-Studio is per-connection, NOT global. There is no
 //! "Studio account": switching connections swaps the NodeDB user, role, avatar
-//! letter, and the capability flags that reshape the entire shell. See
-//! CLAUDE.md "Per-connection identity" and "Capability-driven shell".
+//! letter, and the capability flags that reshape the entire shell.
 
 use serde::{Deserialize, Serialize};
 

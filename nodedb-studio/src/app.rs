@@ -1,6 +1,7 @@
 //! Root component: provides global state and the top-level state machine.
 //!
-//! Two states, handled by a root conditional (NOT routing — see CLAUDE.md §5):
+//! Two states, handled by a root conditional rather than by routing, because
+//! the Connection Manager is not a route: the Router mounts inside `Studio`.
 //!   - Disconnected -> `ConnectionManager` (full screen, no studio chrome)
 //!   - Connected    -> `Studio`
 //!

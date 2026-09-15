@@ -4,8 +4,13 @@
 //! them from a `QueryResult{columns, rows}`. `Table` is that shape expressed in
 //! Studio's own terms, so decoders are unit-testable with no client or server.
 //!
-//! Every value arrives as a string: the server returns timestamps, counts and
-//! booleans as strings. Decoders parse at the point of use.
+//! Every value arrives as a string on this path: `SHOW` and `DESCRIBE` return
+//! timestamps, counts and booleans as strings, so decoders parse at the point
+//! of use. That holds for the catalog and admin surface this module serves. It
+//! does NOT hold for native `SELECT`, which since NodeDB [Unreleased] returns
+//! nested objects and arrays as structured values rather than JSON text; those
+//! results carry richer shapes than `Table` can hold and belong in
+//! `models::workbench::ResultSet`, not here.
 
 use crate::services::error::StudioError;
 
