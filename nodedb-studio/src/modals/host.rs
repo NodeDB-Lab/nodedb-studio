@@ -22,8 +22,8 @@ pub fn ModalHost() -> Element {
         Some(ModalKind::NewConnection) => rsx! {
             Modal { title: "New connection", NewConnectionForm {} }
         },
-        Some(ModalKind::Preferences) => rsx! {
-            Modal { title: "Preferences", wide: true, PreferencesPanes {} }
+        Some(ModalKind::Preferences(pane)) => rsx! {
+            Modal { title: "Preferences", wide: true, PreferencesPanes { pane } }
         },
         Some(ModalKind::DocForm) => rsx! {
             Modal { title: "Edit document · evt_01H8QXG2K…", width: 640, DocForm {} }
@@ -88,6 +88,41 @@ mod tests {
             let html = render(kind);
             assert!(html.contains(title), "{kind:?} title: {html}");
             assert!(html.contains(body), "{kind:?} body: {html}");
+        }
+    }
+
+    /// A deep-link lands on its pane, with the sidebar marking that pane
+    /// active, instead of always opening at Appearance.
+    #[test]
+    fn preferences_opens_at_the_requested_pane() {
+        use crate::state::preferences::Preferences;
+        use crate::state::ui::PrefsPane;
+        fn app(pane: PrefsPane) -> Element {
+            use_context_provider(|| Signal::new(Some(ModalKind::Preferences(pane))));
+            use_context_provider(|| Signal::new(Preferences::default()));
+            rsx! { ModalHost {} }
+        }
+        let headings = [
+            (PrefsPane::Appearance, "Appearance"),
+            (PrefsPane::Editor, "Editor"),
+            (PrefsPane::Keyboard, "Keyboard shortcuts"),
+            (PrefsPane::Security, "Security"),
+            (PrefsPane::Telemetry, "Telemetry"),
+            (PrefsPane::About, "About NodeDB-Studio"),
+        ];
+        for (pane, heading) in headings {
+            let mut dom = VirtualDom::new_with_props(app, pane);
+            dom.rebuild_in_place();
+            let html = dioxus_ssr::render(&dom);
+            let label = pane.label();
+            assert!(
+                html.contains(&format!(r#"<div class="prefs-cat active">{label}</div>"#)),
+                "{pane:?} sidebar: {html}"
+            );
+            assert!(
+                html.contains(&format!("<h2>{heading}</h2>")),
+                "{pane:?} pane: {html}"
+            );
         }
     }
 

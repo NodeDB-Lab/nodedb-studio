@@ -10,7 +10,7 @@ use crate::routes::Route;
 use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
 use crate::state::connections_registry::{Credentials, SavedConnection};
-use crate::state::ui::ModalKind;
+use crate::state::ui::{ModalKind, PrefsPane};
 
 #[component]
 pub fn CommandPalette() -> Element {
@@ -86,10 +86,10 @@ pub fn CommandPalette() -> Element {
                     div { class: "palette-item",
                         "Run current query" span { class: "meta", "⌘↵" }
                     }
-                    div { class: "palette-item", onclick: move |_| { modal.set(Some(ModalKind::Preferences)); open.set(false); },
+                    div { class: "palette-item", onclick: move |_| { modal.set(Some(ModalKind::Preferences(PrefsPane::Appearance))); open.set(false); },
                         "Open preferences" span { class: "meta", "⌘," }
                     }
-                    div { class: "palette-item", onclick: move |_| { modal.set(Some(ModalKind::Preferences)); open.set(false); },
+                    div { class: "palette-item", onclick: move |_| { modal.set(Some(ModalKind::Preferences(PrefsPane::Appearance))); open.set(false); },
                         "Toggle theme" span { class: "meta", "⌘⇧L" }
                     }
 
