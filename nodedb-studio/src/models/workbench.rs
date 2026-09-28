@@ -11,9 +11,9 @@ use crate::services::error::StudioError;
 ///
 /// Rectangular and uniquely keyed by construction: every row has exactly
 /// `columns.len()` cells and a distinct `id`. Build one through
-/// [`ResultSet::new`], which rejects a ragged row or a duplicate id, so a
-/// decoder that drops a cell surfaces as an error instead of a grid whose
-/// values sit under the wrong headers. `cells` hold display strings; sorting
+/// [`ResultSet::new`], which rejects a ragged row or a duplicate id with
+/// `MalformedRows`, so a decoder that drops a cell surfaces as an error
+/// instead of a grid whose values sit under the wrong headers. `cells` hold display strings; sorting
 /// or typed comparison needs raw values the model does not carry yet.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ResultSet {
@@ -34,18 +34,20 @@ impl ResultSet {
     ) -> Result<Self, StudioError> {
         let width = columns.len();
         if let Some(bad) = rows.iter().find(|r| r.cells.len() != width) {
-            return Err(StudioError::UnexpectedColumns {
-                expected: format!("{width} cells per row"),
-                got: format!("row {} has {} cells", bad.id, bad.cells.len()),
+            return Err(StudioError::MalformedRows {
+                reason: format!(
+                    "row {} has {} cells, expected {width}",
+                    bad.id,
+                    bad.cells.len()
+                ),
             });
         }
         // Rows are Dioxus sibling keys; a duplicate panics in debug and
         // silently reuses the wrong node in release.
         let mut seen = std::collections::HashSet::with_capacity(rows.len());
         if let Some(dup) = rows.iter().find(|r| !seen.insert(r.id.as_str())) {
-            return Err(StudioError::UnexpectedColumns {
-                expected: "unique row ids".into(),
-                got: format!("duplicate row id {}", dup.id),
+            return Err(StudioError::MalformedRows {
+                reason: format!("duplicate row id {}", dup.id),
             });
         }
         Ok(Self {
@@ -112,7 +114,7 @@ mod tests {
             0,
             String::new(),
         );
-        assert!(matches!(rs, Err(StudioError::UnexpectedColumns { .. })));
+        assert!(matches!(rs, Err(StudioError::MalformedRows { .. })));
     }
 
     #[test]
@@ -123,7 +125,24 @@ mod tests {
             0,
             String::new(),
         );
-        assert!(matches!(rs, Err(StudioError::UnexpectedColumns { .. })));
+        assert!(matches!(rs, Err(StudioError::MalformedRows { .. })));
+    }
+
+    /// The message names the rows, not the columns, so the user looks at
+    /// the right fault.
+    #[test]
+    fn rejection_message_names_the_offending_row() {
+        let err = ResultSet::new(
+            vec!["a".into(), "b".into()],
+            vec![row("r2", &["only-one"])],
+            0,
+            String::new(),
+        )
+        .expect_err("ragged row");
+        assert_eq!(
+            err.to_string(),
+            "result rows do not match their header: row r2 has 1 cells, expected 2"
+        );
     }
 
     #[test]
@@ -134,6 +153,6 @@ mod tests {
             0,
             String::new(),
         );
-        assert!(matches!(rs, Err(StudioError::UnexpectedColumns { .. })));
+        assert!(matches!(rs, Err(StudioError::MalformedRows { .. })));
     }
 }
