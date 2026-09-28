@@ -15,8 +15,19 @@ pub enum Popover {
 
 /// Which modal is currently open. Preferences is reachable in either app state;
 /// New connection only while disconnected/connected via the relevant trigger.
+/// The entity-form and confirm-delete variants carry no record yet: nothing
+/// selects one until the Explorer's master-detail lands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
     NewConnection,
     Preferences,
+    DocForm,
+    StrictForm,
+    VectorForm,
+    GraphNodeForm,
+    GraphEdgeForm,
+    KvForm,
+    SpatialForm,
+    #[allow(dead_code)] // SEAM-UNWIRED: opened from the detail-panel footer (Phase 4)
+    ConfirmDelete,
 }
