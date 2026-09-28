@@ -2019,3 +2019,50 @@
   }
   .btn.danger:hover { opacity: 0.9; }
   .btn.danger:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Stats pane (components/stat_card.rs) */
+  .stats-pane {
+    padding: 20px;
+    overflow: auto;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 22px;
+  }
+  .stat-card {
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-mid);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .stat-card .lbl {
+    font-family: var(--font-mono); font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+  }
+  .stat-card .val {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 500;
+    margin-top: 4px;
+  }
+  .stat-card .sub {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+  }
+  .stat-section + .stat-section { margin-top: 22px; }
+  .stat-section h3 {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  .stat-spark {
+    background: var(--bg-primary);
+    border: 0.5px solid var(--border-mid);
+    border-radius: 8px;
+    padding: 14px 16px;
+  }

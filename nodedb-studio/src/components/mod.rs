@@ -10,6 +10,7 @@ pub mod popovers;
 pub mod rail;
 pub mod snav;
 pub mod sparkline;
+pub mod stat_card;
 pub mod statusbar;
 pub mod subnav;
 pub mod topbar;
