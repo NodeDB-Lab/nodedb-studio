@@ -30,6 +30,15 @@ pub enum StudioError {
     Server(#[source] NodeDbError),
     #[error("not connected to a database")]
     NotConnected,
+    /// A result set did not carry the columns the decoder needs. Most often the
+    /// server answered a `SHOW` with its session-variable fallback
+    /// (`cols=["setting"]`), which would otherwise read as an empty screen.
+    #[error("unexpected result columns: expected [{expected}], got [{got}]")]
+    #[allow(dead_code)] // SEAM-UNWIRED
+    UnexpectedColumns { expected: String, got: String },
+    /// Connect was attempted without an explicit username.
+    #[error("a username is required to connect")]
+    MissingUsername,
 }
 
 impl StudioError {
@@ -37,7 +46,9 @@ impl StudioError {
     /// `NotConnected` is never retriable (it is studio-originated, not transient).
     pub fn is_retriable(&self) -> bool {
         match self {
-            StudioError::NotConnected => false,
+            StudioError::NotConnected
+            | StudioError::UnexpectedColumns { .. }
+            | StudioError::MissingUsername => false,
             StudioError::Connection(e)
             | StudioError::Auth(e)
             | StudioError::NotFound(e)

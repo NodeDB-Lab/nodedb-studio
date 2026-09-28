@@ -1,8 +1,8 @@
 //! App-level preferences (theme, fonts, keyboard, telemetry).
 //!
 //! These are global to Studio, NOT per-connection, and live behind the
-//! Preferences modal — never in the studio rail. See CLAUDE.md
-//! "Settings vs preferences".
+//! Preferences modal, never in the studio rail. Connection-scoped settings
+//! belong with the connection; anything global to Studio belongs here.
 
 use serde::{Deserialize, Serialize};
 

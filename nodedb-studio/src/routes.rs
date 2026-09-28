@@ -1,7 +1,7 @@
 //! Studio-internal routing.
 //!
 //! Routing exists only in the connected state — `App` mounts the `Router`
-//! inside `Studio`, never in the Connection Manager (CLAUDE.md §5). All routes
+//! inside `Studio`, never in the Connection Manager. All routes
 //! share `StudioLayout`, which renders the persistent chrome (rail, topbar,
 //! statusbar) around the content `Outlet`.
 
@@ -123,7 +123,8 @@ fn StudioLayout() -> Element {
     });
 
     // Global keyboard shortcuts. Attached to the focused root so it works
-    // without document-level JS (CLAUDE.md §4). ⌘K / ⌘D act only while
+    // without document-level JS, which the desktop shell does not give us.
+    // ⌘K / ⌘D act only while
     // connected (always true here); ⌘, opens Preferences; Esc closes overlays.
     let on_key = move |e: KeyboardEvent| {
         let meta = e.modifiers().meta() || e.modifiers().ctrl();

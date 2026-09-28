@@ -5,9 +5,19 @@
 //! Adding a new domain trait later means extending this bound and implementing the
 //! trait on the mock + stub — additive, never a reshape of existing methods.
 
+use crate::services::admin_data::AdminData;
 use crate::services::connection_service::ConnectionService;
+use crate::services::explorer_data::ExplorerData;
 use crate::services::streams_data::StreamsData;
+use crate::services::viewers_data::ViewersData;
+use crate::services::workbench_data::WorkbenchData;
 
-pub trait Backend: ConnectionService + StreamsData {}
+pub trait Backend:
+    ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData + ViewersData
+{
+}
 
-impl<T: ConnectionService + StreamsData> Backend for T {}
+impl<T: ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData + ViewersData>
+    Backend for T
+{
+}

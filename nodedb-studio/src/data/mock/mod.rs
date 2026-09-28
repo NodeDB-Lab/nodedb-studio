@@ -3,14 +3,28 @@
 //!
 //! Naming note: the mockup's legacy "arcadedb" labels, "local-arcade-dev"
 //! name, "arcade-5" node, and per-version server tags are deliberately NOT
-//! reproduced. NodeDB version numbers are undecided (CLAUDE.md §2), so the
+//! reproduced. NodeDB version numbers are not settled, so the
 //! server stat is a neutral "dev" placeholder rather than an invented version.
 
+mod admin;
 mod cdc;
 mod connections;
 mod docs;
-mod notify;
+mod explorer;
+mod streams;
+#[cfg(test)]
+mod test_support;
+mod viewers;
+mod workbench;
 
+pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_ranges, users};
 pub use cdc::{ChangeOp, cdc_events};
-pub use connections::{connections, explorer_collections, notifications};
-pub use notify::{notify_channels, notify_messages};
+pub use connections::{connections, databases, nav_badges, notifications, session_info};
+pub use explorer::{collection_groups, record_detail, records};
+pub use streams::{
+    materialized_views, notify_channel_rows, notify_message_rows, scheduled_jobs, topics,
+};
+pub use viewers::{
+    empty_sub_graph, fts_hits, series, spatial_features, sub_graph, sync_peers, vector_points,
+};
+pub use workbench::{empty_result_set, query_plan, result_set, schema_tree};

@@ -1,5 +1,5 @@
-use crate::models::collection::{Collection, StorageMode};
 use crate::models::notification::{Notification, NotificationTarget, Severity};
+use crate::models::shell::{NavBadges, SessionInfo};
 use crate::state::connection::{Capabilities, Capability};
 use crate::state::connections_registry::{ConnStatus, ConnectionProfile, SavedConnection};
 
@@ -124,32 +124,6 @@ pub fn connections() -> Vec<SavedConnection> {
     ]
 }
 
-/// Explorer collections, in sidebar display order (grouped by storage mode).
-/// One NodeDB instance exposes all eight modes; these are not separate engines.
-pub fn explorer_collections() -> Vec<Collection> {
-    let c = |name: &str, mode, count: &str| Collection {
-        name: name.to_string(),
-        mode,
-        count: count.to_string(),
-    };
-    vec![
-        c("users", StorageMode::Document, "12,481"),
-        c("events", StorageMode::Document, "2.4M"),
-        c("sessions", StorageMode::Document, "88,209"),
-        c("orders", StorageMode::Strict, "442,003"),
-        c("invoices", StorageMode::Strict, "95,818"),
-        c("doc_embeddings", StorageMode::Vector, "1.1M"),
-        c("product_embeds", StorageMode::Vector, "88,400"),
-        c("social_graph", StorageMode::Graph, "3.2M"),
-        c("metrics", StorageMode::Timeseries, "48M"),
-        c("sensor_temps", StorageMode::Timeseries, "5.1M"),
-        c("sessions_cache", StorageMode::Kv, "18,200"),
-        c("feature_flags", StorageMode::Kv, "42"),
-        c("store_locations", StorageMode::Spatial, "2,108"),
-        c("articles_idx", StorageMode::Fts, "241,005"),
-    ]
-}
-
 /// The notification feed. Capability gating is applied at render time against
 /// the active connection (see `state::notifications`).
 pub fn notifications() -> Vec<Notification> {
@@ -221,4 +195,72 @@ pub fn notifications() -> Vec<Notification> {
             unread: false,
         },
     ]
+}
+
+/// Nav-rail badge counts: pending items on the Query and Streams entries.
+/// These must agree with the hardcoded literals in `components::rail` until
+/// that later phase swaps the rail onto this seam method, so the eventual
+/// wiring is a visual no-op.
+#[allow(dead_code)] // SEAM-UNWIRED
+pub fn nav_badges() -> NavBadges {
+    NavBadges {
+        query: 3,
+        streams: 6,
+    }
+}
+
+/// The active session summary shown in the statusbar. `server_version` is a
+/// neutral "dev" placeholder: NodeDB version numbers are undecided, so no
+/// specific version is invented here (see the module note in `mod.rs`).
+#[allow(dead_code)] // SEAM-UNWIRED
+pub fn session_info() -> SessionInfo {
+    SessionInfo {
+        database: "analytics".into(),
+        role: "admin".into(),
+        server_version: "dev".into(),
+        timezone: "UTC".into(),
+        read_only: false,
+    }
+}
+
+/// Databases visible on the active connection, matching `local-nodedb-dev`'s
+/// profile above.
+#[allow(dead_code)] // SEAM-UNWIRED
+pub fn databases() -> Vec<String> {
+    vec![
+        "analytics".into(),
+        "events_log".into(),
+        "social_graph".into(),
+        "iot_telemetry".into(),
+        "docs_corpus".into(),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `connect()` builds its username from `profile.map(|p| p.user)
+    /// .unwrap_or_default()`, so a connectable entry with no profile would
+    /// silently produce a blank username, get rejected by the seam's
+    /// `MissingUsername` guard, and have that error dropped by every call
+    /// site's `if let Ok(..)` — a Connect button that does nothing, with no
+    /// error and no state change. Nothing in the types prevents that
+    /// combination; this test makes the fixture invariant that avoids it
+    /// break loudly instead.
+    #[test]
+    fn every_connectable_entry_has_a_profile() {
+        let conns = connections();
+        assert!(!conns.is_empty(), "fixture must not be empty");
+        for c in &conns {
+            if c.status.is_connectable() {
+                assert!(
+                    c.profile.is_some(),
+                    "{} is connectable but has no profile: connect() would \
+                     default its username to blank and silently no-op",
+                    c.name
+                );
+            }
+        }
+    }
 }

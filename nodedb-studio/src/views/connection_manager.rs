@@ -3,11 +3,12 @@
 
 use std::rc::Rc;
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
-use crate::state::connection::ActiveConnection;
-use crate::state::connections_registry::{ConnStatus, SavedConnection};
+use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
+use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
 use crate::state::ui::ModalKind;
 
 #[component]
@@ -16,6 +17,7 @@ pub fn ConnectionManager() -> Element {
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let service = use_context::<Rc<dyn Backend>>();
+    let mut connect_error = use_context::<Signal<ConnectError>>();
 
     rsx! {
         div { class: "conn-manager",
@@ -49,15 +51,34 @@ pub fn ConnectionManager() -> Element {
                             conn: conn.clone(),
                             on_connect: {
                                 let service = service.clone();
+                                // The stored profile IS this card's explicit
+                                // username. A profile-less entry yields a blank,
+                                // which the seam rejects with MissingUsername and
+                                // the app root renders, rather than defaulting to
+                                // `admin`. New connections collect a username in
+                                // the modal (see modals/new_connection.rs).
+                                let creds = Credentials {
+                                    username: conn
+                                        .profile
+                                        .as_ref()
+                                        .map(|p| p.user.clone())
+                                        .unwrap_or_default(),
+                                    password: None,
+                                };
                                 move |name: String| {
                                     // Async at the seam: clone the Rc into the task and
-                                    // set `active` (Copy) only after the await resolves.
+                                    // write the signals (Copy) only after the await
+                                    // resolves. Clearing the error first makes a stale
+                                    // failure disappear the moment a new attempt starts.
                                     let service = service.clone();
-                                    spawn(async move {
-                                        if let Ok(session) = service.connect(&name).await {
-                                            active.set(Some(session));
-                                        }
-                                        // Err case (e.g. offline): surfaced in a later wiring phase.
+                                    let creds = creds.clone();
+                                    connect_error.set(ConnectError(None));
+                                    // spawn_forever so the task survives this
+                                    // screen being swapped for the studio shell.
+                                    spawn_forever(async move {
+                                        let result = service.connect(&name, &creds).await;
+                                        let err = apply_connect(&mut active.write(), result);
+                                        connect_error.set(ConnectError(err));
                                     });
                                 }
                             },

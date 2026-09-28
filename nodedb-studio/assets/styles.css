@@ -394,6 +394,19 @@
   /* ============================================================
      Modal overlay
      ============================================================ */
+  /* Connect failures overlay everything, the modal scrim (z-index 150)
+     included: a failed "Save & connect" must be readable without closing the
+     form that caused it. Fixed, because html/body are 100vh with overflow
+     hidden, so a banner in normal flow pushes the shell off-screen. */
+  .connect-error-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 200;
+    background: var(--bg-secondary);
+    border-bottom: 0.5px solid var(--border-mid);
+  }
+  .connect-error-bar .async-error { padding: 12px 20px; }
+
   .modal-overlay {
     position: fixed; inset: 0;
     background: rgba(0,0,0,0.4);
@@ -441,6 +454,11 @@
     font-size: 13px;
   }
   .form-field input:focus, .form-field select:focus { border-color: var(--accent); }
+  .field-error {
+    margin-top: 5px;
+    font-size: 11px;
+    color: var(--text-danger);
+  }
   .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
   /* ============================================================

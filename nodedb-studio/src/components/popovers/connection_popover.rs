@@ -3,11 +3,12 @@
 
 use std::rc::Rc;
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
-use crate::state::connection::ActiveConnection;
-use crate::state::connections_registry::{ConnStatus, SavedConnection};
+use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
+use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
 use crate::state::ui::{ModalKind, Popover};
 
 #[component]
@@ -17,6 +18,9 @@ pub fn ConnectionPopover() -> Element {
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let registry = use_context::<Signal<Vec<SavedConnection>>>();
     let service = use_context::<Rc<dyn Backend>>();
+    // The popover closes on click (see `popover.set(None)` below), so a failure
+    // it owned would never render; the surface lives at the app root instead.
+    let mut connect_error = use_context::<Signal<ConnectError>>();
 
     let conn = active.read();
     let Some(c) = conn.as_ref() else {
@@ -50,6 +54,18 @@ pub fn ConnectionPopover() -> Element {
                     };
                     let svc = service.clone();
                     let item_class = if disabled { "cp-item disabled" } else { "cp-item" };
+                    // The stored profile IS this entry's explicit username; the
+                    // popover only switches between already-saved connections. A
+                    // profile-less entry yields a blank, which the seam rejects
+                    // with MissingUsername and the app root renders.
+                    let creds = Credentials {
+                        username: sc
+                            .profile
+                            .as_ref()
+                            .map(|p| p.user.clone())
+                            .unwrap_or_default(),
+                        password: None,
+                    };
                     rsx! {
                         div {
                             class: "{item_class}",
@@ -59,8 +75,18 @@ pub fn ConnectionPopover() -> Element {
                                     // set `active` (Copy) only after the await resolves.
                                     let svc = svc.clone();
                                     let name = name.clone();
-                                    spawn(async move {
-                                        if let Ok(s) = svc.connect(&name).await { active.set(Some(s)); }
+                                    let creds = creds.clone();
+                                    connect_error.set(ConnectError(None));
+                                    // spawn_forever, not spawn: this popover is
+                                    // conditionally mounted and closes on the next
+                                    // line, and Dioxus drops a scope's tasks when
+                                    // the scope goes away. A plain spawn dies at
+                                    // the await against any backend that actually
+                                    // yields, leaving no session and no error.
+                                    spawn_forever(async move {
+                                        let result = svc.connect(&name, &creds).await;
+                                        let err = apply_connect(&mut active.write(), result);
+                                        connect_error.set(ConnectError(err));
                                     });
                                     popover.set(None);
                                 }

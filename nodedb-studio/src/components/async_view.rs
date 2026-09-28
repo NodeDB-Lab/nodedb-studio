@@ -1,4 +1,5 @@
-//! Shared loading/empty/error renderer for any seam-backed read.
+//! Shared loading/empty/error renderer for any seam-backed read, and the
+//! error/retry renderer for a seam-backed write.
 //!
 //! The caller maps its `use_resource` result to `AsyncState<T>` (plain Rust),
 //! renders the `Loaded(T)` case itself, and delegates the three non-loaded

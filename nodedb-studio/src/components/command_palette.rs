@@ -3,19 +3,25 @@
 //! Rendered inside the router (via `StudioLayout`) so navigation items can use
 //! the navigator. Open state is the shared `Signal<bool>` provided by `Studio`.
 
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::routes::Route;
 use crate::services::backend::Backend;
-use crate::state::connection::ActiveConnection;
+use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
+use crate::state::connections_registry::{Credentials, SavedConnection};
 use crate::state::ui::ModalKind;
 
 #[component]
 pub fn CommandPalette() -> Element {
     let mut open = use_context::<Signal<bool>>();
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
+    // The palette closes on click, so a failure it owned would never render;
+    // the surface lives at the app root instead.
+    let mut connect_error = use_context::<Signal<ConnectError>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let service = use_context::<std::rc::Rc<dyn Backend>>();
+    let registry = use_context::<Signal<Vec<SavedConnection>>>();
     let nav = use_navigator();
 
     if !*open.read() {
@@ -25,6 +31,30 @@ pub fn CommandPalette() -> Element {
     // Switch connection by name, then close. `service` is an Rc (not Copy), so
     // each switch handler clones it.
     let switch_svc = service.clone();
+
+    // A saved entry's stored profile IS its explicit username; the palette
+    // switches between entries that already have one, so there is no field to
+    // type into here. An entry with no profile yields a blank, which the seam
+    // rejects with MissingUsername and the app root renders — never a silent
+    // fallback to `admin`. The connections fixture carries the invariant
+    // that keeps connectable entries from reaching that state.
+    let creds_for = |name: &str| -> Credentials {
+        Credentials {
+            username: registry
+                // .read(), not .peek(): this runs at render time, not in an
+                // event handler. peek() would freeze the credentials at the
+                // render where the palette opened, so a registry that resolves
+                // later (a real backend awaiting the network) would leave every
+                // switch sending a blank username with no re-render to fix it.
+                .read()
+                .iter()
+                .find(|c| c.name == name)
+                .and_then(|c| c.profile.as_ref())
+                .map(|p| p.user.clone())
+                .unwrap_or_default(),
+            password: None,
+        }
+    };
 
     rsx! {
         div {
@@ -66,10 +96,17 @@ pub fn CommandPalette() -> Element {
                     div { class: "palette-section", "Connections" }
                     div { class: "palette-item", onclick: {
                             let svc = switch_svc.clone();
+                            let creds = creds_for("staging-cluster");
                             move |_| {
                                 let svc = svc.clone();
-                                spawn(async move {
-                                    if let Ok(s) = svc.connect("staging-cluster").await { active.set(Some(s)); }
+                                let creds = creds.clone();
+                                connect_error.set(ConnectError(None));
+                                // spawn_forever: the palette closes on the next
+                                // line, and a scope-bound task would be dropped.
+                                spawn_forever(async move {
+                                    let result = svc.connect("staging-cluster", &creds).await;
+                                    let err = apply_connect(&mut active.write(), result);
+                                    connect_error.set(ConnectError(err));
                                 });
                                 open.set(false);
                             }
@@ -78,10 +115,17 @@ pub fn CommandPalette() -> Element {
                     }
                     div { class: "palette-item", onclick: {
                             let svc = switch_svc.clone();
+                            let creds = creds_for("prod-replica-eu");
                             move |_| {
                                 let svc = svc.clone();
-                                spawn(async move {
-                                    if let Ok(s) = svc.connect("prod-replica-eu").await { active.set(Some(s)); }
+                                let creds = creds.clone();
+                                connect_error.set(ConnectError(None));
+                                // spawn_forever: the palette closes on the next
+                                // line, and a scope-bound task would be dropped.
+                                spawn_forever(async move {
+                                    let result = svc.connect("prod-replica-eu", &creds).await;
+                                    let err = apply_connect(&mut active.write(), result);
+                                    connect_error.set(ConnectError(err));
                                 });
                                 open.set(false);
                             }
