@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 
 use crate::state::connection::ActiveConnection;
-use crate::state::ui::{ModalKind, Popover};
+use crate::state::ui::{ModalKind, Popover, PrefsPane};
 
 #[component]
 pub fn AvatarPopover() -> Element {
@@ -47,17 +47,17 @@ pub fn AvatarPopover() -> Element {
             div { class: "ap-section-label", "App" }
             div {
                 class: "ap-item",
-                onclick: move |_| { popover.set(None); modal.set(Some(ModalKind::Preferences)); },
+                onclick: move |_| { popover.set(None); modal.set(Some(ModalKind::Preferences(PrefsPane::Appearance))); },
                 "Preferences… " span { class: "kbd", "⌘," }
             }
             div {
                 class: "ap-item",
-                onclick: move |_| { popover.set(None); modal.set(Some(ModalKind::Preferences)); },
+                onclick: move |_| { popover.set(None); modal.set(Some(ModalKind::Preferences(PrefsPane::Keyboard))); },
                 "Keyboard shortcuts"
             }
             div {
                 class: "ap-item",
-                onclick: move |_| { popover.set(None); modal.set(Some(ModalKind::Preferences)); },
+                onclick: move |_| { popover.set(None); modal.set(Some(ModalKind::Preferences(PrefsPane::About))); },
                 "About NodeDB-Studio"
             }
         }

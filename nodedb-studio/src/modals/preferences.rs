@@ -9,48 +9,34 @@
 use dioxus::prelude::*;
 
 use crate::state::preferences::{Preferences, Theme};
-use crate::state::ui::ModalKind;
+use crate::state::ui::{ModalKind, PrefsPane};
 
-const CATS: [(&str, &str); 6] = [
-    ("appearance", "Appearance"),
-    ("editor", "Editor"),
-    ("keyboard", "Keyboard"),
-    ("security", "Security"),
-    ("telemetry", "Telemetry"),
-    ("about", "About"),
-];
-
+/// `pane` is the open pane, owned by the modal signal: a sidebar click
+/// re-sets `ModalKind::Preferences` rather than keeping a second signal.
 #[component]
-pub fn PreferencesPanes() -> Element {
+pub fn PreferencesPanes(pane: PrefsPane) -> Element {
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
-    let mut pane = use_signal(|| "appearance".to_string());
-    let current = pane.read().clone();
 
     rsx! {
         div { class: "prefs-layout",
             div { class: "prefs-sidebar",
-                for (key, label) in CATS {
-                    {
-                        let is_active = current == key;
-                        let k = key.to_string();
-                        rsx! {
-                            div {
-                                class: if is_active { "prefs-cat active" } else { "prefs-cat" },
-                                onclick: move |_| pane.set(k.clone()),
-                                "{label}"
-                            }
-                        }
+                for p in PrefsPane::ALL {
+                    div {
+                        key: "{p.label()}",
+                        class: if p == pane { "prefs-cat active" } else { "prefs-cat" },
+                        onclick: move |_| modal.set(Some(ModalKind::Preferences(p))),
+                        "{p.label()}"
                     }
                 }
             }
             div { class: "prefs-content",
-                match current.as_str() {
-                    "editor" => rsx! { EditorPane {} },
-                    "keyboard" => rsx! { KeyboardPane {} },
-                    "security" => rsx! { SecurityPane {} },
-                    "telemetry" => rsx! { TelemetryPane {} },
-                    "about" => rsx! { AboutPane {} },
-                    _ => rsx! { AppearancePane {} },
+                match pane {
+                    PrefsPane::Appearance => rsx! { AppearancePane {} },
+                    PrefsPane::Editor => rsx! { EditorPane {} },
+                    PrefsPane::Keyboard => rsx! { KeyboardPane {} },
+                    PrefsPane::Security => rsx! { SecurityPane {} },
+                    PrefsPane::Telemetry => rsx! { TelemetryPane {} },
+                    PrefsPane::About => rsx! { AboutPane {} },
                 }
             }
         }

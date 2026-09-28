@@ -34,8 +34,12 @@ pub enum StudioError {
     /// server answered a `SHOW` with its session-variable fallback
     /// (`cols=["setting"]`), which would otherwise read as an empty screen.
     #[error("unexpected result columns: expected [{expected}], got [{got}]")]
-    #[allow(dead_code)] // SEAM-UNWIRED
     UnexpectedColumns { expected: String, got: String },
+    /// A result's rows disagree with its header: a row whose width differs
+    /// from the column count, or two rows sharing a key. Rendered as-is, the
+    /// values would sit under the wrong headings or reuse the wrong row node.
+    #[error("result rows do not match their header: {reason}")]
+    MalformedRows { reason: String },
     /// Connect was attempted without an explicit username.
     #[error("a username is required to connect")]
     MissingUsername,
@@ -48,6 +52,7 @@ impl StudioError {
         match self {
             StudioError::NotConnected
             | StudioError::UnexpectedColumns { .. }
+            | StudioError::MalformedRows { .. }
             | StudioError::MissingUsername => false,
             StudioError::Connection(e)
             | StudioError::Auth(e)
