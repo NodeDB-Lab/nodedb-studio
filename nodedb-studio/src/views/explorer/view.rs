@@ -156,9 +156,6 @@ mod tests {
         }]
     }
 
-    /// A pick that survived a reload must still exist in the new set. Against
-    /// an implementation that keeps any non-None selection, the second case
-    /// fails and the viewer header names a collection no sidebar row matches.
     /// Insert-capable modes open their own engine's form; the two without a
     /// create flow render no button at all.
     #[test]
@@ -178,6 +175,9 @@ mod tests {
         assert!(insert_actions(StorageMode::Fts).is_empty());
     }
 
+    /// A pick that survived a reload must still exist in the new set. Against
+    /// an implementation that keeps any non-None selection, the second case
+    /// fails and the viewer header names a collection no sidebar row matches.
     #[test]
     fn selection_is_kept_only_while_the_collection_exists() {
         let groups = groups_with(&["events", "orders"]);
