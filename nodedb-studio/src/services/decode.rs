@@ -41,9 +41,12 @@ impl<'a> Row<'a> {
         self.cells
             .get(idx)
             .map(String::as_str)
-            .ok_or_else(|| StudioError::UnexpectedColumns {
-                expected: format!("row to have at least {} cells", idx + 1),
-                got: format!("row has {} cells", self.cells.len()),
+            .ok_or_else(|| StudioError::MalformedRows {
+                reason: format!(
+                    "row has {} cells, column {name} is cell {}",
+                    self.cells.len(),
+                    idx + 1
+                ),
             })
     }
 }
@@ -151,8 +154,8 @@ mod tests {
             Ok(r.field("id")?.to_string())
         });
         assert!(
-            matches!(out, Err(StudioError::UnexpectedColumns { .. })),
-            "expected UnexpectedColumns for short row, got {out:?}"
+            matches!(out, Err(StudioError::MalformedRows { .. })),
+            "expected MalformedRows for short row, got {out:?}"
         );
     }
 }
