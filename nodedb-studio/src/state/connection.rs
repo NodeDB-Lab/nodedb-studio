@@ -72,7 +72,8 @@ pub struct ActiveConnection {
     /// Role string, e.g. "admin" or "analyst (read-only)".
     pub role: String,
     pub capabilities: Capabilities,
-    pub databases: Vec<String>,
+    /// The database the chrome shows as selected. The list to pick from is
+    /// read live through the seam's `databases()`.
     pub current_database: String,
 }
 
@@ -145,7 +146,6 @@ mod tests {
             user: "alice".into(),
             role: "admin".into(),
             capabilities: caps(),
-            databases: vec!["main".into()],
             current_database: "main".into(),
         }
     }

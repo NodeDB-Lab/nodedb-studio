@@ -64,7 +64,6 @@ impl SavedConnection {
             user: profile.user.clone(),
             role: profile.role.clone(),
             capabilities: profile.capabilities,
-            databases: profile.databases.clone(),
             current_database: profile.default_database.clone(),
         })
     }

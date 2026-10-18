@@ -216,17 +216,15 @@ pub fn session_info() -> SessionInfo {
     }
 }
 
-/// Databases visible on the active connection, matching `local-nodedb-dev`'s
-/// profile above.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn databases() -> Vec<String> {
-    vec![
-        "analytics".into(),
-        "events_log".into(),
-        "social_graph".into(),
-        "iot_telemetry".into(),
-        "docs_corpus".into(),
-    ]
+/// Databases visible on the connection `name`: the ones its profile above
+/// lists. Empty for an unknown or offline connection.
+pub fn databases_for(name: &str) -> Vec<String> {
+    connections()
+        .into_iter()
+        .find(|c| c.name == name)
+        .and_then(|c| c.profile)
+        .map(|p| p.databases)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
