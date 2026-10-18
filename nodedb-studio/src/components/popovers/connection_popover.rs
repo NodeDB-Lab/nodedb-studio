@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
-use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
+use crate::state::connections_registry::{ConnStatus, SavedConnection};
 use crate::state::ui::{ModalKind, Popover};
 
 #[component]
@@ -54,18 +54,7 @@ pub fn ConnectionPopover() -> Element {
                     };
                     let svc = service.clone();
                     let item_class = if disabled { "cp-item disabled" } else { "cp-item" };
-                    // The stored profile IS this entry's explicit username; the
-                    // popover only switches between already-saved connections. A
-                    // profile-less entry yields a blank, which the seam rejects
-                    // with MissingUsername and the app root renders.
-                    let creds = Credentials {
-                        username: sc
-                            .profile
-                            .as_ref()
-                            .map(|p| p.user.clone())
-                            .unwrap_or_default(),
-                        password: None,
-                    };
+                    let creds = sc.credentials();
                     rsx! {
                         div {
                             class: "{item_class}",

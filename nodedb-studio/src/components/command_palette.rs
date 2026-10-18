@@ -14,13 +14,8 @@ use crate::state::ui::{ModalKind, PrefsPane};
 
 /// The palette's "Switch to …" targets: every saved connection that can be
 /// opened, except the one already active, in registry order, each with the
-/// credentials to send.
-///
-/// A saved entry's stored profile IS its explicit username; the palette
-/// switches between entries that already have one, so there is no field to
-/// type into here. An entry with no profile yields a blank, which the seam
-/// rejects with MissingUsername and the app root renders: never a silent
-/// fallback to `admin`.
+/// credentials to send. The palette switches between saved entries only, so
+/// there is no username field to type into here.
 fn switch_targets(
     registry: &[SavedConnection],
     current: Option<&str>,
@@ -28,17 +23,7 @@ fn switch_targets(
     registry
         .iter()
         .filter(|c| c.status.is_connectable() && Some(c.name.as_str()) != current)
-        .map(|c| {
-            let creds = Credentials {
-                username: c
-                    .profile
-                    .as_ref()
-                    .map(|p| p.user.clone())
-                    .unwrap_or_default(),
-                password: None,
-            };
-            (c.name.clone(), creds)
-        })
+        .map(|c| (c.name.clone(), c.credentials()))
         .collect()
 }
 
