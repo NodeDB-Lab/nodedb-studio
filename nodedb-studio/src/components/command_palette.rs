@@ -1,7 +1,7 @@
 //! Command palette (Cmd+K). Opens only while connected.
 //!
 //! Rendered inside the router (via `StudioLayout`) so navigation items can use
-//! the navigator. Open state is the shared `Signal<bool>` provided by `Studio`.
+//! the navigator. Open state is the shared `Signal<bool>` provided by `App`.
 
 use dioxus::core::spawn_forever;
 use dioxus::prelude::*;

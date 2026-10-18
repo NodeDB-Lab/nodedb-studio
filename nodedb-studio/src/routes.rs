@@ -5,7 +5,6 @@
 //! share `StudioLayout`, which renders the persistent chrome (rail, topbar,
 //! statusbar) around the content `Outlet`.
 
-use dioxus::html::Key;
 use dioxus::prelude::*;
 
 use crate::components::command_palette::CommandPalette;
@@ -141,9 +140,8 @@ impl Route {
 fn StudioLayout() -> Element {
     let nav = use_navigator();
     let route = use_route::<Route>();
-    let mut active = use_context::<Signal<Option<ActiveConnection>>>();
+    let active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut popover = use_context::<Signal<Option<Popover>>>();
-    let mut palette = use_context::<Signal<bool>>();
 
     // If the current view requires a capability the active connection lacks
     // (e.g. after switching to a connection without Graph), fall back to
@@ -162,37 +160,12 @@ fn StudioLayout() -> Element {
         }
     });
 
-    // Studio-only keys: ⌘K and ⌘D need a connection, and the palette and
-    // popover signals live in `Studio`. ⌘, and Esc-closes-the-modal are on
-    // the `App` root so they also work while disconnected and inside a modal;
-    // Esc bubbles there after closing the palette and popover here.
-    let on_key = move |e: KeyboardEvent| {
-        let meta = e.modifiers().meta() || e.modifiers().ctrl();
-        match e.key() {
-            Key::Character(c) if meta && c == "k" => {
-                e.prevent_default();
-                palette.set(true);
-            }
-            Key::Character(c) if meta && c == "d" => {
-                e.prevent_default();
-                active.set(None);
-            }
-            Key::Escape => {
-                palette.set(false);
-                popover.set(None);
-            }
-            _ => {}
-        }
-    };
-
     rsx! {
         div {
             class: "app",
-            tabindex: "0",
-            autofocus: true,
-            onkeydown: on_key,
-            // A click anywhere outside a chip/popover closes the open popover
-            // (chips and popover bodies stop propagation).
+            // Keys are handled at the `App` root. A click anywhere outside a
+            // chip/popover closes the open popover (chips and popover bodies
+            // stop propagation).
             onclick: move |_| popover.set(None),
             Rail {}
             div { class: "main",
