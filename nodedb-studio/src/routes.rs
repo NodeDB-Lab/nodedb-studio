@@ -80,7 +80,9 @@ impl Route {
     }
 
     /// The capability a route requires to be reachable, if any. When the active
-    /// connection lacks it, `StudioLayout` redirects to Explorer.
+    /// connection lacks it, `StudioLayout` redirects to Explorer. Exhaustive on
+    /// purpose: a new route must state whether it is gated, or a gated screen
+    /// ships reachable on connections that cannot serve it.
     pub fn required_cap(&self) -> Option<Capability> {
         match self {
             Route::GraphExplorer {} => Some(Capability::Graph),
@@ -90,7 +92,11 @@ impl Route {
             Route::SpatialView {} => Some(Capability::Spatial),
             Route::FtsInspector {} => Some(Capability::Fts),
             Route::Sync {} => Some(Capability::Sync),
-            _ => None,
+            Route::Explorer {}
+            | Route::Query {}
+            | Route::Designer {}
+            | Route::Admin { .. }
+            | Route::Console {} => None,
         }
     }
 }
