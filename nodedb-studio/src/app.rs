@@ -22,7 +22,7 @@ use crate::services::connection_service::MockConnectionService;
 use crate::state::connection::{ActiveConnection, ConnectError};
 use crate::state::connections_registry::SavedConnection;
 use crate::state::preferences::Preferences;
-use crate::state::ui::ModalKind;
+use crate::state::ui::{ModalKind, PrefsPane};
 use crate::views::connection_manager::ConnectionManager;
 use crate::views::studio_shell::Studio;
 
@@ -48,7 +48,7 @@ pub fn App() -> Element {
     use_context_provider(|| Signal::new(Preferences::default()));
     // Modal state is provided here (not in Studio) because Preferences is
     // reachable while disconnected and via Cmd+, in either state.
-    use_context_provider(|| Signal::new(None::<ModalKind>));
+    let mut modal = use_context_provider(|| Signal::new(None::<ModalKind>));
     // Connect failures are provided here, not inside the views that start them:
     // the command palette and the switch popover both close on click, so an
     // error they owned would be dropped before it could render.
@@ -80,6 +80,38 @@ pub fn App() -> Element {
     use_context_provider(|| reload_feed);
 
     let active = use_context::<Signal<Option<ActiveConnection>>>();
+
+    // App-wide keys: the ones the mockup honours in either state. They live
+    // on this root, not on the studio's `.app`, because `ModalHost` renders
+    // outside `.app` (Esc typed into a modal input never reached it) and the
+    // Connection Manager has no `.app` at all. ⌘K, ⌘D and closing the
+    // palette/popover stay in `StudioLayout`, which owns those signals.
+    let on_key = move |e: KeyboardEvent| {
+        let meta = e.modifiers().meta() || e.modifiers().ctrl();
+        match e.key() {
+            Key::Character(c) if meta && c == "," => {
+                e.prevent_default();
+                modal.set(Some(ModalKind::Preferences(PrefsPane::Appearance)));
+            }
+            Key::Escape => modal.set(None),
+            _ => {}
+        }
+    };
+    // Keys reach a handler only from a focused element inside it. Disconnecting
+    // unmounts the focused `.app`, which drops focus to `<body>`, outside this
+    // root, so re-take focus whenever the connection goes away.
+    let mut root = use_signal(|| None::<Rc<MountedData>>);
+    use_effect(move || {
+        if active.read().is_none()
+            && let Some(el) = root.read().clone()
+        {
+            spawn(async move {
+                // Focus is best-effort: if it fails, a click anywhere in the
+                // window focuses this root again.
+                let _ = el.set_focus(true).await;
+            });
+        }
+    });
     // Rendered through the same component every failed read uses, so the markup
     // and styling live in one place. It is fixed-position and above the modal
     // scrim: `html, body` are `100vh; overflow: hidden`, so a banner in normal
@@ -94,6 +126,11 @@ pub fn App() -> Element {
 
     rsx! {
         document::Stylesheet { href: STYLES }
+        div {
+            class: "studio-root",
+            tabindex: "-1",
+            onkeydown: on_key,
+            onmounted: move |e| root.set(Some(e.data())),
         if let Some(msg) = connect_error_msg {
             div { class: "connect-error-bar",
                 AsyncView { loading: false, empty: false, error: Some(msg) }
@@ -106,5 +143,6 @@ pub fn App() -> Element {
         }
         // Overlays everything; renders nothing when no modal is open.
         ModalHost {}
+        }
     }
 }

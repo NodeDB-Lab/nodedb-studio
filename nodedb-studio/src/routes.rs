@@ -13,7 +13,7 @@ use crate::components::rail::Rail;
 use crate::components::statusbar::Statusbar;
 use crate::components::topbar::Topbar;
 use crate::state::connection::{ActiveConnection, Capability};
-use crate::state::ui::{ModalKind, Popover, PrefsPane};
+use crate::state::ui::Popover;
 
 use crate::views::admin::Admin;
 use crate::views::console::Console;
@@ -109,7 +109,6 @@ fn StudioLayout() -> Element {
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let mut palette = use_context::<Signal<bool>>();
-    let mut modal = use_context::<Signal<Option<ModalKind>>>();
 
     // If the current view requires a capability the active connection lacks
     // (e.g. after switching to a connection without Graph), fall back to
@@ -128,10 +127,10 @@ fn StudioLayout() -> Element {
         }
     });
 
-    // Global keyboard shortcuts. Attached to the focused root so it works
-    // without document-level JS, which the desktop shell does not give us.
-    // ⌘K / ⌘D act only while
-    // connected (always true here); ⌘, opens Preferences; Esc closes overlays.
+    // Studio-only keys: ⌘K and ⌘D need a connection, and the palette and
+    // popover signals live in `Studio`. ⌘, and Esc-closes-the-modal are on
+    // the `App` root so they also work while disconnected and inside a modal;
+    // Esc bubbles there after closing the palette and popover here.
     let on_key = move |e: KeyboardEvent| {
         let meta = e.modifiers().meta() || e.modifiers().ctrl();
         match e.key() {
@@ -143,14 +142,9 @@ fn StudioLayout() -> Element {
                 e.prevent_default();
                 active.set(None);
             }
-            Key::Character(c) if meta && c == "," => {
-                e.prevent_default();
-                modal.set(Some(ModalKind::Preferences(PrefsPane::Appearance)));
-            }
             Key::Escape => {
                 palette.set(false);
                 popover.set(None);
-                modal.set(None);
             }
             _ => {}
         }

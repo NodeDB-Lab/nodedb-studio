@@ -2066,3 +2066,6 @@
     border-radius: 8px;
     padding: 14px 16px;
   }
+
+  /* App root (app.rs): focus target for the app-wide keys. */
+  .studio-root:focus { outline: none; }
