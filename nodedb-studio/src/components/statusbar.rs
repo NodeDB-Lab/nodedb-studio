@@ -16,11 +16,12 @@ use crate::state::connection::ActiveConnection;
 pub fn Statusbar() -> Element {
     let active = use_context::<Signal<Option<ActiveConnection>>>();
     let backend = use_context::<Rc<dyn Backend>>();
+    let conn_name = use_context::<Memo<Option<String>>>();
     let session = use_resource(move || {
         let backend = backend.clone();
-        // Reading the connection subscribes this resource to it, so a switch
-        // re-reads the new server's version and timezone.
-        let _conn = active.read().as_ref().map(|c| c.name.clone());
+        // Reading the connection's name subscribes this resource to it, so a
+        // switch re-reads the new server's version and timezone.
+        let _conn = conn_name();
         async move { backend.session_info().await }
     });
 

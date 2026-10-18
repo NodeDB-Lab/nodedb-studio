@@ -31,9 +31,13 @@ pub fn DatabasePopover() -> Element {
     let mut active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let backend = use_context::<Rc<dyn Backend>>();
+    let conn = use_context::<Memo<Option<String>>>();
     let mut filter = use_signal(String::new);
     let mut listed = use_resource(move || {
         let backend = backend.clone();
+        // A switch while the popover is open (from the palette) re-reads the
+        // list, so a pick never names a database the new server lacks.
+        let _conn = conn();
         async move { backend.databases().await }
     });
 

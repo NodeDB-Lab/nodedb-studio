@@ -42,6 +42,11 @@ pub fn App() -> Element {
     // proven by `nodedb_service::tests::stub_is_object_safe_behind_rc`, so it is
     // not constructed here.
     let mut active = use_context_provider(|| Signal::new(None::<ActiveConnection>));
+    // The active connection's name. Per-connection reads subscribe to this,
+    // not to `active`: a database pick or a failed switch also writes
+    // `active`, and neither changes what the connection's server answers.
+    let conn_name = use_memo(move || active.read().as_ref().map(|c| c.name.clone()));
+    use_context_provider(|| conn_name);
     let mut registry = use_context_provider(|| Signal::new(Vec::<SavedConnection>::new()));
     // Single source of truth for notifications: the bell badge AND the popover
     // read this one store; user actions (mark-all-read / click) mutate it.
@@ -70,10 +75,11 @@ pub fn App() -> Element {
         let svc = service.clone();
         use_resource(move || {
             let svc = svc.clone();
-            // The feed belongs to the connection. Reading it here subscribes
-            // the resource, so connecting, switching or disconnecting re-reads
-            // it instead of leaving the previous connection's bell up.
-            let _conn = active.read().as_ref().map(|c| c.name.clone());
+            // The feed belongs to the connection. Reading its name here
+            // subscribes the resource, so connecting, switching or
+            // disconnecting re-reads it instead of leaving the previous
+            // connection's bell up.
+            let _conn = conn_name();
             async move {
                 // Reset to Loading at the start of each (re)load so a Retry shows
                 // the spinner. `.set()` holds no guard across the awaits below.
@@ -146,7 +152,7 @@ pub fn App() -> Element {
         }
     });
     use_effect(move || {
-        if active.read().is_none() {
+        if conn_name.read().is_none() {
             // A reconnect must not reopen these.
             palette.set(false);
             popover.set(None);

@@ -17,23 +17,20 @@ use crate::components::async_view::AsyncView;
 use crate::models::explorer::CollectionGroup;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
-use crate::state::connection::ActiveConnection;
 use crate::state::explorer::Selected;
 use crate::views::explorer::{default_selection, selection_still_present};
 
 #[component]
 pub fn ExplorerSidebar(selected: Signal<Option<Selected>>) -> Element {
     let backend = use_context::<Rc<dyn Backend>>();
-    let active = use_context::<Signal<Option<ActiveConnection>>>();
+    let conn = use_context::<Memo<Option<String>>>();
     let mut groups = use_resource(move || {
         let backend = backend.clone();
-        // Collections belong to a connection's database. Reading both here
-        // re-runs the read on a connection switch or a database pick, and
-        // the selection check below then drops a pick the new set lacks.
-        let _scope = active
-            .read()
-            .as_ref()
-            .map(|c| (c.name.clone(), c.current_database.clone()));
+        // Collections belong to the connection: reading its name re-runs the
+        // read on a switch. A database pick does not re-read:
+        // `collection_groups()` takes no database, and no seam method
+        // switches the session's database yet.
+        let _conn = conn();
         async move { backend.collection_groups().await }
     });
 
