@@ -35,8 +35,11 @@ fn badge_texts(
 #[component]
 pub fn Rail() -> Element {
     let backend = use_context::<Rc<dyn Backend>>();
+    let active = use_context::<Signal<Option<ActiveConnection>>>();
     let badges = use_resource(move || {
         let backend = backend.clone();
+        // Counts belong to the connection: reading it re-runs this on a switch.
+        let _conn = active.read().as_ref().map(|c| c.name.clone());
         async move { backend.nav_badges().await }
     });
     let (query_badge, streams_badge) = badge_texts(badges.read().as_ref());

@@ -60,10 +60,15 @@ pub fn App() -> Element {
     // AFTER the await resolves — never hold a read/write guard across `.await`.
     // The Resource handle is shared via context so a view (the notification
     // popover's Retry) can reload the feed.
+    let active = use_context::<Signal<Option<ActiveConnection>>>();
     let reload_feed = {
         let svc = service.clone();
         use_resource(move || {
             let svc = svc.clone();
+            // The feed belongs to the connection. Reading it here subscribes
+            // the resource, so connecting, switching or disconnecting re-reads
+            // it instead of leaving the previous connection's bell up.
+            let _conn = active.read().as_ref().map(|c| c.name.clone());
             async move {
                 // Reset to Loading at the start of each (re)load so a Retry shows
                 // the spinner. `.set()` holds no guard across the awaits below.
@@ -78,8 +83,6 @@ pub fn App() -> Element {
         })
     };
     use_context_provider(|| reload_feed);
-
-    let active = use_context::<Signal<Option<ActiveConnection>>>();
 
     // App-wide keys: the ones the mockup honours in either state. They live
     // on this root, not on the studio's `.app`, because `ModalHost` renders
