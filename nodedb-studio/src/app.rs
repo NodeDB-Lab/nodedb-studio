@@ -32,13 +32,15 @@ const STYLES: Asset = asset!("/assets/styles.css");
 #[allow(non_snake_case)]
 pub fn App() -> Element {
     // The single seam to the outside world. Provided as a trait object so a
-    // real client can replace the mock without touching consumers.
-    let service: Rc<dyn Backend> = Rc::new(MockConnectionService::ready());
+    // real client can replace the mock without touching consumers. Built once:
+    // a resource re-runs with the closure from the latest render, so an
+    // instance per render answers those re-runs from fresh state (a
+    // connection switch undid mark-all-read).
+    let service: Rc<dyn Backend> =
+        use_context_provider(|| Rc::new(MockConnectionService::ready()) as Rc<dyn Backend>);
     // The real-client stub's instantiability + object-safety behind the seam is
     // proven by `nodedb_service::tests::stub_is_object_safe_behind_rc`, so it is
-    // not constructed here on every render.
-
-    use_context_provider(|| service.clone());
+    // not constructed here.
     use_context_provider(|| Signal::new(None::<ActiveConnection>));
     let mut registry = use_context_provider(|| Signal::new(Vec::<SavedConnection>::new()));
     // Single source of truth for notifications: the bell badge AND the popover
