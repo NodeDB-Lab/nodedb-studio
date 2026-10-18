@@ -209,14 +209,10 @@ pub fn nav_badges() -> NavBadges {
 /// The active session summary shown in the statusbar. `server_version` is a
 /// neutral "dev" placeholder: NodeDB version numbers are undecided, so no
 /// specific version is invented here (see the module note in `mod.rs`).
-#[allow(dead_code)] // SEAM-UNWIRED
 pub fn session_info() -> SessionInfo {
     SessionInfo {
-        database: "analytics".into(),
-        role: "admin".into(),
         server_version: "dev".into(),
         timezone: "UTC".into(),
-        read_only: false,
     }
 }
 

@@ -12,13 +12,12 @@ pub struct NavBadges {
     pub streams: u32,
 }
 
-/// The active session summary shown in the statusbar.
-#[allow(dead_code)] // SEAM-UNWIRED
+/// Server facts about the active session that the connect result does not
+/// carry, shown in the statusbar. Role, current database and read-only stay
+/// on `ActiveConnection`: one owner per fact, so the statusbar and the
+/// avatar popover cannot show two different roles.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SessionInfo {
-    pub database: String,
-    pub role: String,
     pub server_version: String,
     pub timezone: String,
-    pub read_only: bool,
 }

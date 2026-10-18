@@ -64,8 +64,7 @@ pub trait ConnectionService {
     /// Badge counts for the nav rail's Query and Streams entries.
     async fn nav_badges(&self) -> Result<NavBadges, StudioError>;
 
-    /// The active session summary shown in the statusbar.
-    #[allow(dead_code)] // SEAM-UNWIRED
+    /// Server version and timezone of the active session, for the statusbar.
     async fn session_info(&self) -> Result<SessionInfo, StudioError>;
 
     /// All databases visible on the active connection.
@@ -558,8 +557,6 @@ mod tests {
     async fn session_info_populates_the_statusbar() {
         let svc = MockConnectionService::ready();
         let s = svc.session_info().await.expect("session info");
-        assert!(!s.database.is_empty());
-        assert!(!s.role.is_empty());
         assert!(!s.server_version.is_empty());
         assert!(!s.timezone.is_empty());
     }
@@ -570,9 +567,8 @@ mod tests {
         // test), so this can actually fail if the fixture drifts.
         let svc = MockConnectionService::ready();
         let s = svc.session_info().await.expect("session info");
-        assert_eq!(s.database, "analytics");
-        assert_eq!(s.role, "admin");
-        assert!(!s.read_only, "fixture session is a read-write admin");
+        assert_eq!(s.server_version, "dev");
+        assert_eq!(s.timezone, "UTC");
     }
 
     #[tokio::test]
@@ -581,7 +577,7 @@ mod tests {
         // — matching the `record_detail` precedent.
         let svc = MockConnectionService::empty();
         let s = svc.session_info().await.expect("empty folds into ready");
-        assert_eq!(s.database, "analytics");
+        assert_eq!(s.timezone, "UTC");
     }
 
     #[tokio::test]
@@ -595,7 +591,7 @@ mod tests {
     async fn session_info_delayed_still_resolves() {
         let svc = MockConnectionService::delayed(std::time::Duration::from_millis(5));
         let s = svc.session_info().await.expect("delayed still resolves");
-        assert_eq!(s.role, "admin");
+        assert_eq!(s.server_version, "dev");
     }
 
     #[tokio::test]
