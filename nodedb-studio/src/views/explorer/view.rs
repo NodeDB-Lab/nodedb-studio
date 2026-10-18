@@ -15,6 +15,7 @@ use dioxus::prelude::*;
 
 use crate::models::collection::StorageMode;
 use crate::models::explorer::CollectionGroup;
+use crate::state::ui::ModalKind;
 use crate::views::explorer::sidebar::ExplorerSidebar;
 use crate::views::explorer::viewers::document::DocumentViewer;
 use crate::views::explorer::viewers::fts::FtsViewer;
@@ -62,9 +63,29 @@ pub fn selection_still_present(groups: &[CollectionGroup], selected: Option<&Sel
         .any(|g| g.collections.iter().any(|c| c.name == sel.name))
 }
 
+/// The header's create buttons for a storage mode, primary first, as the
+/// mockup labels them. Timeseries is append-only and FTS writes happen on the
+/// parent collection, so neither offers one.
+pub fn insert_actions(mode: StorageMode) -> &'static [(&'static str, ModalKind)] {
+    match mode {
+        StorageMode::Document => &[("+ Insert", ModalKind::DocForm)],
+        StorageMode::Strict => &[("+ Insert", ModalKind::StrictForm)],
+        StorageMode::Vector => &[("+ Insert", ModalKind::VectorForm)],
+        StorageMode::Graph => &[
+            ("+ Node", ModalKind::GraphNodeForm),
+            ("+ Edge", ModalKind::GraphEdgeForm),
+        ],
+        StorageMode::Timeseries => &[],
+        StorageMode::Kv => &[("+ Insert", ModalKind::KvForm)],
+        StorageMode::Spatial => &[("+ Feature", ModalKind::SpatialForm)],
+        StorageMode::Fts => &[],
+    }
+}
+
 #[component]
 pub fn Explorer() -> Element {
     let selected = use_signal(|| None::<Selected>);
+    let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let sel = selected.read().clone();
 
     rsx! {
@@ -82,7 +103,14 @@ pub fn Explorer() -> Element {
                                 button { class: "btn small", "Schema" }
                                 button { class: "btn small", "Indexes" }
                                 button { class: "btn small", "Export" }
-                                button { class: "btn small primary", "+ Insert" }
+                                for (i, (label, kind)) in insert_actions(sel.mode).iter().copied().enumerate() {
+                                    button {
+                                        key: "{label}",
+                                        class: if i == 0 { "btn small primary" } else { "btn small" },
+                                        onclick: move |_| modal.set(Some(kind)),
+                                        "{label}"
+                                    }
+                                }
                             }
                         }
                         div { class: "viewer-body",
@@ -126,6 +154,25 @@ mod tests {
                 })
                 .collect(),
         }]
+    }
+
+    /// Insert-capable modes open their own engine's form; the two without a
+    /// create flow render no button at all.
+    #[test]
+    fn insert_actions_match_the_mockup_per_mode() {
+        let first = |m| insert_actions(m).first().map(|(_, k)| *k);
+        assert_eq!(first(StorageMode::Document), Some(ModalKind::DocForm));
+        assert_eq!(first(StorageMode::Strict), Some(ModalKind::StrictForm));
+        assert_eq!(first(StorageMode::Vector), Some(ModalKind::VectorForm));
+        assert_eq!(first(StorageMode::Graph), Some(ModalKind::GraphNodeForm));
+        assert_eq!(first(StorageMode::Kv), Some(ModalKind::KvForm));
+        assert_eq!(first(StorageMode::Spatial), Some(ModalKind::SpatialForm));
+        assert_eq!(
+            insert_actions(StorageMode::Graph)[1].1,
+            ModalKind::GraphEdgeForm
+        );
+        assert!(insert_actions(StorageMode::Timeseries).is_empty());
+        assert!(insert_actions(StorageMode::Fts).is_empty());
     }
 
     /// A pick that survived a reload must still exist in the new set. Against

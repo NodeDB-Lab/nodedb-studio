@@ -13,7 +13,7 @@ use crate::components::rail::Rail;
 use crate::components::statusbar::Statusbar;
 use crate::components::topbar::Topbar;
 use crate::state::connection::{ActiveConnection, Capability};
-use crate::state::ui::{ModalKind, Popover};
+use crate::state::ui::{ModalKind, Popover, PrefsPane};
 
 use crate::views::admin::Admin;
 use crate::views::console::Console;
@@ -139,7 +139,7 @@ fn StudioLayout() -> Element {
             }
             Key::Character(c) if meta && c == "," => {
                 e.prevent_default();
-                modal.set(Some(ModalKind::Preferences));
+                modal.set(Some(ModalKind::Preferences(PrefsPane::Appearance)));
             }
             Key::Escape => {
                 palette.set(false);

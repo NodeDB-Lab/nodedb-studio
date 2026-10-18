@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
 use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
-use crate::state::ui::ModalKind;
+use crate::state::ui::{ModalKind, PrefsPane};
 
 #[component]
 pub fn ConnectionManager() -> Element {
@@ -27,7 +27,7 @@ pub fn ConnectionManager() -> Element {
                     div { "NodeDB " span { "Studio" } }
                 }
                 div { class: "cm-topbar-actions",
-                    a { onclick: move |_| modal.set(Some(ModalKind::Preferences)), "Preferences" }
+                    a { onclick: move |_| modal.set(Some(ModalKind::Preferences(PrefsPane::Appearance))), "Preferences" }
                     a { "Docs" }
                     span { class: "version", "dev" }
                 }

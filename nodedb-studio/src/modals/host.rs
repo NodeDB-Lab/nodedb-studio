@@ -4,6 +4,10 @@
 use dioxus::prelude::*;
 
 use crate::components::modal::Modal;
+use crate::modals::confirm_delete::ConfirmDelete;
+use crate::modals::entity_forms::{
+    DocForm, GraphEdgeForm, GraphNodeForm, KvForm, SpatialForm, StrictForm, VectorForm,
+};
 use crate::modals::new_connection::NewConnectionForm;
 use crate::modals::preferences::PreferencesPanes;
 use crate::state::ui::ModalKind;
@@ -18,8 +22,113 @@ pub fn ModalHost() -> Element {
         Some(ModalKind::NewConnection) => rsx! {
             Modal { title: "New connection", NewConnectionForm {} }
         },
-        Some(ModalKind::Preferences) => rsx! {
-            Modal { title: "Preferences", wide: true, PreferencesPanes {} }
+        Some(ModalKind::Preferences(pane)) => rsx! {
+            Modal { title: "Preferences", wide: true, PreferencesPanes { pane } }
         },
+        Some(ModalKind::DocForm) => rsx! {
+            Modal { title: "Edit document · evt_01H8QXG2K…", width: 640, DocForm {} }
+        },
+        Some(ModalKind::StrictForm) => rsx! {
+            Modal { title: "Edit row · orders / 442003", width: 560, StrictForm {} }
+        },
+        Some(ModalKind::VectorForm) => rsx! {
+            Modal { title: "Edit vector · e_001", width: 640, VectorForm {} }
+        },
+        Some(ModalKind::GraphNodeForm) => rsx! {
+            Modal { title: "Edit node · u_44182", width: 540, GraphNodeForm {} }
+        },
+        Some(ModalKind::GraphEdgeForm) => rsx! {
+            Modal { title: "New edge", width: 540, GraphEdgeForm {} }
+        },
+        Some(ModalKind::KvForm) => rsx! {
+            Modal { title: "Edit · session:u_44182", width: 540, KvForm {} }
+        },
+        Some(ModalKind::SpatialForm) => rsx! {
+            Modal { title: "Edit feature · feature_8281", width: 640, SpatialForm {} }
+        },
+        Some(ModalKind::ConfirmDelete) => rsx! {
+            Modal { title: "Delete record", width: 420, ConfirmDelete {} }
+        },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app(kind: ModalKind) -> Element {
+        use_context_provider(|| Signal::new(Some(kind)));
+        rsx! { ModalHost {} }
+    }
+
+    fn render(kind: ModalKind) -> String {
+        let mut dom = VirtualDom::new_with_props(app, kind);
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    /// Each entity/confirm variant opens its own body, not a neighbour's.
+    #[test]
+    fn every_entity_variant_renders_its_own_body() {
+        let cases = [
+            (ModalKind::DocForm, "Edit document", "Document JSON"),
+            (ModalKind::StrictForm, "Edit row", "decimal(10,2)"),
+            (ModalKind::VectorForm, "Edit vector", "768 floats"),
+            (ModalKind::GraphNodeForm, "Edit node", "label schema"),
+            (ModalKind::GraphEdgeForm, "New edge", "Create edge"),
+            (ModalKind::KvForm, "session:u_44182", "no expiry"),
+            (ModalKind::SpatialForm, "Edit feature", "SRID 4326"),
+            (
+                ModalKind::ConfirmDelete,
+                "Delete record",
+                "Delete permanently",
+            ),
+        ];
+        for (kind, title, body) in cases {
+            let html = render(kind);
+            assert!(html.contains(title), "{kind:?} title: {html}");
+            assert!(html.contains(body), "{kind:?} body: {html}");
+        }
+    }
+
+    /// A deep-link lands on its pane, with the sidebar marking that pane
+    /// active, instead of always opening at Appearance.
+    #[test]
+    fn preferences_opens_at_the_requested_pane() {
+        use crate::state::preferences::Preferences;
+        use crate::state::ui::PrefsPane;
+        fn app(pane: PrefsPane) -> Element {
+            use_context_provider(|| Signal::new(Some(ModalKind::Preferences(pane))));
+            use_context_provider(|| Signal::new(Preferences::default()));
+            rsx! { ModalHost {} }
+        }
+        let headings = [
+            (PrefsPane::Appearance, "Appearance"),
+            (PrefsPane::Editor, "Editor"),
+            (PrefsPane::Keyboard, "Keyboard shortcuts"),
+            (PrefsPane::Security, "Security"),
+            (PrefsPane::Telemetry, "Telemetry"),
+            (PrefsPane::About, "About NodeDB-Studio"),
+        ];
+        for (pane, heading) in headings {
+            let mut dom = VirtualDom::new_with_props(app, pane);
+            dom.rebuild_in_place();
+            let html = dioxus_ssr::render(&dom);
+            let label = pane.label();
+            assert!(
+                html.contains(&format!(r#"<div class="prefs-cat active">{label}</div>"#)),
+                "{pane:?} sidebar: {html}"
+            );
+            assert!(
+                html.contains(&format!("<h2>{heading}</h2>")),
+                "{pane:?} pane: {html}"
+            );
+        }
+    }
+
+    #[test]
+    fn delete_button_starts_disabled() {
+        let html = render(ModalKind::ConfirmDelete);
+        assert!(html.contains("disabled"), "{html}");
     }
 }

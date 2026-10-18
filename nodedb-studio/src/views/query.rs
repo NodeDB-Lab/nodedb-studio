@@ -5,18 +5,40 @@
 
 use dioxus::prelude::*;
 
+use crate::components::data_grid::DataGrid;
+use crate::models::explorer::RecordRow;
+use crate::models::workbench::ResultSet;
+
 #[component]
 pub fn Query() -> Element {
-    // (type, n, avg_load)
-    let results = [
-        ("page_view", "14,820", "312"),
-        ("click", "8,041", "—"),
-        ("scroll", "5,209", "—"),
-        ("form_submit", "481", "1,820"),
-        ("error", "104", "—"),
-        ("signup", "22", "2,140"),
-        ("purchase", "9", "1,491"),
-    ];
+    // SEAM-UNWIRED: static placeholder. Delete when Query reads `run_query`
+    // through the seam, which also needs `use_resource`, `AsyncState::from_value`
+    // and `AsyncView` for the loading, empty and error states this view does
+    // not render yet (see views/explorer/sidebar.rs for the shape).
+    let results = ResultSet::new(
+        vec!["type".into(), "n".into(), "avg_load".into()],
+        [
+            ("page_view", "14,820", "312"),
+            ("click", "8,041", "—"),
+            ("scroll", "5,209", "—"),
+            ("form_submit", "481", "1,820"),
+            ("error", "104", "—"),
+            ("signup", "22", "2,140"),
+            ("purchase", "9", "1,491"),
+        ]
+        .iter()
+        .enumerate()
+        .map(|(i, (t, n, a))| RecordRow {
+            id: format!("row-{i}"),
+            cells: vec![t.to_string(), n.to_string(), a.to_string()],
+        })
+        .collect(),
+        142,
+        "14M".into(),
+    )
+    .unwrap_or_default();
+    // ponytail: unwrap_or_default hides a ragged edit as a blank grid; the test
+    // below pins the placeholder at 7 rows so that edit fails the suite instead.
     rsx! {
         div { class: "view active",
             div { class: "query-view",
@@ -103,7 +125,7 @@ pub fn Query() -> Element {
                         }
                         div { class: "query-results",
                             div { class: "results-toolbar",
-                                span { class: "ok", "● 7 rows · 142 ms" }
+                                span { class: "ok", "● {results.rows().len()} rows · {results.elapsed_ms} ms" }
                                 span { "analytics · local-nodedb-dev" }
                                 div { style: "margin-left:auto; display: flex; gap: 6px;",
                                     button { class: "btn small primary", "▸ Run (⌘↵)" }
@@ -112,19 +134,12 @@ pub fn Query() -> Element {
                                 }
                             }
                             div { class: "results-body",
-                                table { class: "data-grid",
-                                    thead { tr { th { "type" } th { "n" } th { "avg_load" } } }
-                                    tbody {
-                                        for r in results {
-                                            tr { td { "{r.0}" } td { "{r.1}" } td { "{r.2}" } }
-                                        }
-                                    }
-                                }
+                                DataGrid { result: results.clone() }
                             }
                             div { class: "results-footer",
                                 span { "page 1 of 1" }
-                                span { "rows: 7" }
-                                span { "scanned: 14M" }
+                                span { "rows: {results.rows().len()}" }
+                                span { "scanned: {results.scanned}" }
                                 span { "plan: index_scan(events_ts_idx)" }
                             }
                         }
@@ -145,5 +160,22 @@ fn QsCol(name: String, ty: String, #[props(default = false)] pk: bool) -> Elemen
             }
             span { class: "type", "{ty}" }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The placeholder is built through the checked constructor and falls back
+    /// to an empty set on failure. This pins it so a ragged edit to the literal
+    /// fails here rather than rendering a blank workbench.
+    #[test]
+    fn placeholder_renders_all_seven_rows() {
+        let mut dom = VirtualDom::new(Query);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+        assert_eq!(html.matches("<tr><td>").count(), 7, "{html}");
+        assert!(html.contains("<th>avg_load</th>"), "{html}");
     }
 }

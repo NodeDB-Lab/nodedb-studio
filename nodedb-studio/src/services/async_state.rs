@@ -62,7 +62,7 @@ impl IsEmpty for QueryPlan {
 // gives the mock seam methods a way to actually deliver an empty payload).
 impl IsEmpty for ResultSet {
     fn is_empty(&self) -> bool {
-        self.rows.is_empty()
+        self.rows().is_empty()
     }
 }
 
@@ -315,26 +315,28 @@ mod tests {
         // list: a query that returns zero rows is the most common
         // non-error workbench outcome and must reach `AsyncState::Empty`,
         // not `Loaded` with an empty table.
-        let result_set = AsyncState::from_value(Some(Ok(ResultSet {
-            columns: vec!["id".to_string()],
-            rows: Vec::new(),
-            elapsed_ms: 3,
-            scanned: "0 rows".to_string(),
-        })));
+        let result_set = AsyncState::from_value(Some(Ok(ResultSet::new(
+            vec!["id".to_string()],
+            Vec::new(),
+            3,
+            "0 rows".to_string(),
+        )
+        .expect("rectangular"))));
         assert!(matches!(result_set, AsyncState::Empty));
     }
 
     #[test]
     fn non_empty_result_set_is_loaded() {
-        let result_set = AsyncState::from_value(Some(Ok(ResultSet {
-            columns: vec!["id".to_string()],
-            rows: vec![RecordRow {
+        let result_set = AsyncState::from_value(Some(Ok(ResultSet::new(
+            vec!["id".to_string()],
+            vec![RecordRow {
                 id: "1".to_string(),
                 cells: vec!["1".to_string()],
             }],
-            elapsed_ms: 3,
-            scanned: "1 row".to_string(),
-        })));
+            3,
+            "1 row".to_string(),
+        )
+        .expect("rectangular"))));
         assert!(matches!(result_set, AsyncState::Loaded(_)));
     }
 
