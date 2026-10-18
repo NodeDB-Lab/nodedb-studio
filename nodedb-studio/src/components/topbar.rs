@@ -12,8 +12,10 @@ use crate::components::popovers::connection_popover::ConnectionPopover;
 use crate::components::popovers::database_popover::DatabasePopover;
 use crate::components::popovers::notification_popover::NotificationPopover;
 use crate::models::notification::Notification;
+use crate::routes::Route;
 use crate::services::async_state::AsyncState;
 use crate::state::connection::ActiveConnection;
+use crate::state::explorer::Selected;
 use crate::state::notifications::unread_count;
 use crate::state::ui::Popover;
 
@@ -32,6 +34,10 @@ pub fn Topbar() -> Element {
     let mut palette = use_context::<Signal<bool>>();
     let active = use_context::<Signal<Option<ActiveConnection>>>();
     let notifs = use_context::<Signal<AsyncState<Vec<Notification>>>>();
+    let selected = use_context::<Signal<Option<Selected>>>();
+    let route = use_route::<Route>();
+    let crumbs = route.breadcrumb(selected.read().as_ref().map(|s| s.name.as_str()));
+    let last = crumbs.len().saturating_sub(1);
 
     let conn = active.read();
     let Some(c) = conn.as_ref() else {
@@ -79,6 +85,19 @@ pub fn Topbar() -> Element {
 
             if c.capabilities.readonly {
                 span { class: "readonly-pill", span { class: "dot" } "READ-ONLY" }
+            }
+
+            div { class: "breadcrumb",
+                // Keyed by position: a collection can share a name with a
+                // section label, and duplicate sibling keys panic in debug.
+                for (i, crumb) in crumbs.into_iter().enumerate() {
+                    if i == last {
+                        span { key: "{i}", class: "crumb current", "{crumb}" }
+                    } else {
+                        span { key: "{i}", class: "crumb", "{crumb}" }
+                        span { class: "sep", "/" }
+                    }
+                }
             }
 
             div { class: "topbar-spacer" }

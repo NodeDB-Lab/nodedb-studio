@@ -17,7 +17,8 @@ use crate::components::async_view::AsyncView;
 use crate::models::explorer::CollectionGroup;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
-use crate::views::explorer::{Selected, default_selection, selection_still_present};
+use crate::state::explorer::Selected;
+use crate::views::explorer::{default_selection, selection_still_present};
 
 #[component]
 pub fn ExplorerSidebar(selected: Signal<Option<Selected>>) -> Element {

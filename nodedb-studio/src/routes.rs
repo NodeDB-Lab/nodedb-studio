@@ -99,6 +99,41 @@ impl Route {
             | Route::Console {} => None,
         }
     }
+
+    /// The topbar breadcrumb for this route, last segment current. Labels
+    /// follow the mockup's `updateBreadcrumb`. The database is not part of it;
+    /// it lives in the database chip. `collection` is the Explorer's selected
+    /// collection, appended when there is one.
+    pub fn breadcrumb(&self, collection: Option<&str>) -> Vec<String> {
+        let parts: &[&str] = match self {
+            Route::Explorer {} => &["Explorer"],
+            Route::Query {} => &["Query"],
+            Route::Designer {} => &["Designer"],
+            Route::GraphExplorer {} => &["Graph Explorer"],
+            Route::VectorSpace {} => &["Vector Space"],
+            Route::Streams { tab } => match tab.as_str() {
+                "landing" => &["Streams & Events"],
+                "mv" => &["Streams", "MV inspector"],
+                "topics" => &["Streams", "Durable topics"],
+                "notify" => &["Streams", "LISTEN/NOTIFY"],
+                "cron" => &["Streams", "Scheduled jobs"],
+                // "cdc", and any unknown tab, which the Streams view also
+                // renders as CDC.
+                _ => &["Streams", "CDC consumer"],
+            },
+            Route::Sync {} => &["Sync"],
+            Route::Admin { .. } => &["Admin"],
+            Route::Console {} => &["Console"],
+            Route::TimeseriesDashboard {} => &["Timeseries dashboard"],
+            Route::SpatialView {} => &["Spatial map"],
+            Route::FtsInspector {} => &["FTS inspector"],
+        };
+        let mut crumbs: Vec<String> = parts.iter().map(|p| p.to_string()).collect();
+        if let (Route::Explorer {}, Some(name)) = (self, collection) {
+            crumbs.push(name.to_string());
+        }
+        crumbs
+    }
 }
 
 /// Persistent studio chrome wrapping every route's content.
@@ -167,5 +202,48 @@ fn StudioLayout() -> Element {
             }
             CommandPalette {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn crumbs(route: Route, collection: Option<&str>) -> Vec<String> {
+        route.breadcrumb(collection)
+    }
+
+    #[test]
+    fn explorer_appends_the_selected_collection() {
+        assert_eq!(
+            crumbs(Route::Explorer {}, Some("users")),
+            ["Explorer", "users"]
+        );
+        assert_eq!(crumbs(Route::Explorer {}, None), ["Explorer"]);
+    }
+
+    /// The selection belongs to the Explorer; other screens never show it.
+    #[test]
+    fn other_routes_ignore_the_selection() {
+        assert_eq!(crumbs(Route::Query {}, Some("users")), ["Query"]);
+    }
+
+    #[test]
+    fn streams_tabs_use_the_mockup_labels() {
+        let tab = |t: &str| Route::Streams { tab: t.to_string() };
+        assert_eq!(crumbs(tab("landing"), None), ["Streams & Events"]);
+        assert_eq!(crumbs(tab("cdc"), None), ["Streams", "CDC consumer"]);
+        assert_eq!(crumbs(tab("mv"), None), ["Streams", "MV inspector"]);
+        assert_eq!(crumbs(tab("cron"), None), ["Streams", "Scheduled jobs"]);
+    }
+
+    /// An unknown tab renders as CDC in the Streams view; the breadcrumb must
+    /// name the screen actually shown.
+    #[test]
+    fn unknown_streams_tab_reads_as_cdc() {
+        let r = Route::Streams {
+            tab: "nope".to_string(),
+        };
+        assert_eq!(crumbs(r, None), ["Streams", "CDC consumer"]);
     }
 }

@@ -8,6 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::routes::Route;
+use crate::state::explorer::Selected;
 use crate::state::ui::Popover;
 
 #[component]
@@ -16,6 +17,8 @@ pub fn Studio() -> Element {
     // topbar (rendered inside the router) can consume them via context.
     use_context_provider(|| Signal::new(None::<Popover>));
     use_context_provider(|| Signal::new(false)); // command palette open
+    // The Explorer's selected collection, shared with the topbar breadcrumb.
+    use_context_provider(|| Signal::new(None::<Selected>));
 
     rsx! {
         Router::<Route> {}

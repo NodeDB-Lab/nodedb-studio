@@ -2,8 +2,9 @@
 //!
 //! A single NodeDB connection exposes eight storage modes. The sidebar lists
 //! collections grouped by mode; selecting one swaps the main pane to that
-//! mode's purpose-built viewer. The selected collection is shared between the
-//! sidebar and the viewer pane via a signal owned here.
+//! mode's purpose-built viewer. The selected collection is a signal provided
+//! by `Studio` (see `state::explorer`), shared by the sidebar, the viewer pane
+//! and the topbar breadcrumb.
 //!
 //! There is no fabricated default selection. Until the sidebar's seam read
 //! resolves — or if it resolves to no collections at all — `selected` stays
@@ -15,6 +16,7 @@ use dioxus::prelude::*;
 
 use crate::models::collection::StorageMode;
 use crate::models::explorer::CollectionGroup;
+use crate::state::explorer::Selected;
 use crate::state::ui::ModalKind;
 use crate::views::explorer::sidebar::ExplorerSidebar;
 use crate::views::explorer::viewers::document::DocumentViewer;
@@ -25,13 +27,6 @@ use crate::views::explorer::viewers::spatial::SpatialViewer;
 use crate::views::explorer::viewers::strict::StrictViewer;
 use crate::views::explorer::viewers::timeseries::TimeseriesViewer;
 use crate::views::explorer::viewers::vector::VectorViewer;
-
-/// The currently-selected collection (name + its storage mode).
-#[derive(Clone, PartialEq)]
-pub struct Selected {
-    pub name: String,
-    pub mode: StorageMode,
-}
 
 /// The Explorer's default selection: the first collection of the first
 /// group, in `collection_groups()`'s own display order. `None` when there
@@ -84,7 +79,7 @@ pub fn insert_actions(mode: StorageMode) -> &'static [(&'static str, ModalKind)]
 
 #[component]
 pub fn Explorer() -> Element {
-    let selected = use_signal(|| None::<Selected>);
+    let selected = use_context::<Signal<Option<Selected>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let sel = selected.read().clone();
 
