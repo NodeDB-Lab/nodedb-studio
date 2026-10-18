@@ -12,6 +12,36 @@ use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
 use crate::state::connections_registry::{Credentials, SavedConnection};
 use crate::state::ui::{ModalKind, PrefsPane};
 
+/// The palette's "Switch to …" targets: every saved connection that can be
+/// opened, except the one already active, in registry order, each with the
+/// credentials to send.
+///
+/// A saved entry's stored profile IS its explicit username; the palette
+/// switches between entries that already have one, so there is no field to
+/// type into here. An entry with no profile yields a blank, which the seam
+/// rejects with MissingUsername and the app root renders: never a silent
+/// fallback to `admin`.
+fn switch_targets(
+    registry: &[SavedConnection],
+    current: Option<&str>,
+) -> Vec<(String, Credentials)> {
+    registry
+        .iter()
+        .filter(|c| c.status.is_connectable() && Some(c.name.as_str()) != current)
+        .map(|c| {
+            let creds = Credentials {
+                username: c
+                    .profile
+                    .as_ref()
+                    .map(|p| p.user.clone())
+                    .unwrap_or_default(),
+                password: None,
+            };
+            (c.name.clone(), creds)
+        })
+        .collect()
+}
+
 #[component]
 pub fn CommandPalette() -> Element {
     let mut open = use_context::<Signal<bool>>();
@@ -28,33 +58,11 @@ pub fn CommandPalette() -> Element {
         return rsx! {};
     }
 
-    // Switch connection by name, then close. `service` is an Rc (not Copy), so
-    // each switch handler clones it.
-    let switch_svc = service.clone();
-
-    // A saved entry's stored profile IS its explicit username; the palette
-    // switches between entries that already have one, so there is no field to
-    // type into here. An entry with no profile yields a blank, which the seam
-    // rejects with MissingUsername and the app root renders — never a silent
-    // fallback to `admin`. The connections fixture carries the invariant
-    // that keeps connectable entries from reaching that state.
-    let creds_for = |name: &str| -> Credentials {
-        Credentials {
-            username: registry
-                // .read(), not .peek(): this runs at render time, not in an
-                // event handler. peek() would freeze the credentials at the
-                // render where the palette opened, so a registry that resolves
-                // later (a real backend awaiting the network) would leave every
-                // switch sending a blank username with no re-render to fix it.
-                .read()
-                .iter()
-                .find(|c| c.name == name)
-                .and_then(|c| c.profile.as_ref())
-                .map(|p| p.user.clone())
-                .unwrap_or_default(),
-            password: None,
-        }
-    };
+    // .read(), not .peek(): this runs at render time. peek() would freeze the
+    // list at the render where the palette opened, so a registry that resolves
+    // later (a real backend awaiting the network) would never show its entries.
+    let current = active.read().as_ref().map(|c| c.name.clone());
+    let targets = switch_targets(&registry.read(), current.as_deref());
 
     rsx! {
         div {
@@ -94,43 +102,27 @@ pub fn CommandPalette() -> Element {
                     }
 
                     div { class: "palette-section", "Connections" }
-                    div { class: "palette-item", onclick: {
-                            let svc = switch_svc.clone();
-                            let creds = creds_for("staging-cluster");
-                            move |_| {
-                                let svc = svc.clone();
-                                let creds = creds.clone();
-                                connect_error.set(ConnectError(None));
-                                // spawn_forever: the palette closes on the next
-                                // line, and a scope-bound task would be dropped.
-                                spawn_forever(async move {
-                                    let result = svc.connect("staging-cluster", &creds).await;
-                                    let err = apply_connect(&mut active.write(), result);
-                                    connect_error.set(ConnectError(err));
-                                });
-                                open.set(false);
-                            }
-                        },
-                        "Switch to staging-cluster"
-                    }
-                    div { class: "palette-item", onclick: {
-                            let svc = switch_svc.clone();
-                            let creds = creds_for("prod-replica-eu");
-                            move |_| {
-                                let svc = svc.clone();
-                                let creds = creds.clone();
-                                connect_error.set(ConnectError(None));
-                                // spawn_forever: the palette closes on the next
-                                // line, and a scope-bound task would be dropped.
-                                spawn_forever(async move {
-                                    let result = svc.connect("prod-replica-eu", &creds).await;
-                                    let err = apply_connect(&mut active.write(), result);
-                                    connect_error.set(ConnectError(err));
-                                });
-                                open.set(false);
-                            }
-                        },
-                        "Switch to prod-replica-eu"
+                    for (name, creds) in targets {
+                        div { key: "{name}", class: "palette-item", onclick: {
+                                let svc = service.clone();
+                                let name = name.clone();
+                                move |_| {
+                                    let svc = svc.clone();
+                                    let name = name.clone();
+                                    let creds = creds.clone();
+                                    connect_error.set(ConnectError(None));
+                                    // spawn_forever: the palette closes on the next
+                                    // line, and a scope-bound task would be dropped.
+                                    spawn_forever(async move {
+                                        let result = svc.connect(&name, &creds).await;
+                                        let err = apply_connect(&mut active.write(), result);
+                                        connect_error.set(ConnectError(err));
+                                    });
+                                    open.set(false);
+                                }
+                            },
+                            "Switch to {name}"
+                        }
                     }
                     div { class: "palette-item", onclick: move |_| { active.set(None); open.set(false); },
                         "Disconnect" span { class: "meta", "⌘D" }
@@ -138,5 +130,44 @@ pub fn CommandPalette() -> Element {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::connection_service::{ConnectionService, MockConnectionService};
+
+    /// The saved-connection registry, read through the seam as the app does.
+    async fn registry() -> Vec<SavedConnection> {
+        MockConnectionService::ready()
+            .list_connections()
+            .await
+            .expect("mock registry")
+    }
+
+    fn names(targets: &[(String, Credentials)]) -> Vec<&str> {
+        targets.iter().map(|(n, _)| n.as_str()).collect()
+    }
+
+    /// Matches the mockup while on local-nodedb-dev: the other two reachable
+    /// connections, not the offline one, not the current one.
+    #[tokio::test]
+    async fn lists_reachable_connections_except_the_current_one() {
+        let t = switch_targets(&registry().await, Some("local-nodedb-dev"));
+        assert_eq!(names(&t), ["staging-cluster", "prod-replica-eu"]);
+    }
+
+    #[tokio::test]
+    async fn each_target_carries_its_own_username() {
+        let t = switch_targets(&registry().await, Some("local-nodedb-dev"));
+        assert!(t.iter().all(|(_, c)| !c.username.trim().is_empty()));
+    }
+
+    /// The registry loads asynchronously; until it does there is nothing to
+    /// offer rather than a stale hardcoded list.
+    #[test]
+    fn empty_registry_offers_nothing() {
+        assert!(switch_targets(&[], Some("local-nodedb-dev")).is_empty());
     }
 }
