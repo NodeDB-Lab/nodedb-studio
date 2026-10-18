@@ -9,6 +9,8 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
+use crate::components::async_view::resource_state;
+use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
 
@@ -25,6 +27,7 @@ pub fn Statusbar() -> Element {
         async move { backend.session_info().await }
     });
 
+    let session = resource_state(&session);
     let conn = active.read();
     let Some(c) = conn.as_ref() else {
         return rsx! {};
@@ -36,17 +39,17 @@ pub fn Statusbar() -> Element {
             span { class: "status-item", "{c.current_database}" }
             span { class: "status-item", "{c.role}" }
             span { class: "spacer" }
-            match &*session.read() {
-                Some(Ok(s)) => rsx! {
+            match &session {
+                AsyncState::Loaded(s) => rsx! {
                     span { class: "status-item", "{s.timezone}" }
                     span { class: "status-item", "{s.server_version}" }
                 },
                 // Said, not hidden: a missing version reads as "no version",
-                // which is a different fact from "could not ask".
-                Some(Err(e)) => rsx! {
+                // which is a different fact from "the read failed".
+                AsyncState::Error(e) => rsx! {
                     span { class: "status-item", title: "{e}", "session info unavailable" }
                 },
-                None => rsx! {},
+                AsyncState::Loading | AsyncState::Empty => rsx! {},
             }
             span { class: "status-item", "⌘K for command palette" }
         }

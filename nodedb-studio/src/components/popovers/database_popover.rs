@@ -10,7 +10,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::components::async_view::AsyncView;
+use crate::components::async_view::{AsyncView, resource_state};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
@@ -46,7 +46,7 @@ pub fn DatabasePopover() -> Element {
         .as_ref()
         .map(|c| c.current_database.clone())
         .unwrap_or_default();
-    let state = AsyncState::from_value(listed.read().clone());
+    let state = resource_state(&listed);
 
     rsx! {
         div { class: "db-popover open", onclick: move |e| e.stop_propagation(),

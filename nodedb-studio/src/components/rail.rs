@@ -10,25 +10,24 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
+use crate::components::async_view::resource_state;
 use crate::models::shell::NavBadges;
 use crate::routes::Route;
+use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
-use crate::services::error::StudioError;
 use crate::state::connection::{ActiveConnection, Capability};
 
 /// The badge text for each counted item, or `None` for no badge.
 ///
-/// Zero shows no badge, as the mockup does for an idle item. A load still in
-/// flight or a failed read also shows none: a badge is a hint, not a
-/// screen, and the screens it points at report their own load errors. A
-/// count in its place would be a number the server never sent.
-fn badge_texts(
-    badges: Option<&Result<NavBadges, StudioError>>,
-) -> (Option<String>, Option<String>) {
+/// Zero shows no badge, as the mockup does for an idle item. A load in
+/// flight (a switch's re-read included) or a failed read also shows none: a
+/// badge is a hint, not a screen, and the screens it points at report their
+/// own load errors. A count there is a number this server never sent.
+fn badge_texts(badges: &AsyncState<NavBadges>) -> (Option<String>, Option<String>) {
     let text = |n: u32| (n > 0).then(|| n.to_string());
     match badges {
-        Some(Ok(b)) => (text(b.query), text(b.streams)),
-        Some(Err(_)) | None => (None, None),
+        AsyncState::Loaded(b) => (text(b.query), text(b.streams)),
+        AsyncState::Loading | AsyncState::Empty | AsyncState::Error(_) => (None, None),
     }
 }
 
@@ -43,7 +42,7 @@ pub fn Rail() -> Element {
         let _conn = conn();
         async move { backend.nav_badges().await }
     });
-    let (query_badge, streams_badge) = badge_texts(badges.read().as_ref());
+    let (query_badge, streams_badge) = badge_texts(&resource_state(&badges));
 
     rsx! {
         aside { class: "rail",
@@ -194,34 +193,35 @@ fn RailItem(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::services::error::StudioError;
 
     #[test]
     fn counts_render_as_badges() {
-        let b = Ok(NavBadges {
+        let b = AsyncState::Loaded(NavBadges {
             query: 3,
             streams: 6,
         });
         assert_eq!(
-            badge_texts(Some(&b)),
+            badge_texts(&b),
             (Some("3".to_string()), Some("6".to_string()))
         );
     }
 
     #[test]
     fn zero_shows_no_badge() {
-        let b = Ok(NavBadges {
+        let b = AsyncState::Loaded(NavBadges {
             query: 0,
             streams: 2,
         });
-        assert_eq!(badge_texts(Some(&b)), (None, Some("2".to_string())));
+        assert_eq!(badge_texts(&b), (None, Some("2".to_string())));
     }
 
     /// A failed or pending read must not invent a count.
     #[test]
     fn loading_and_error_show_no_badge() {
-        assert_eq!(badge_texts(None), (None, None));
+        assert_eq!(badge_texts(&AsyncState::Loading), (None, None));
         assert_eq!(
-            badge_texts(Some(&Err(StudioError::NotConnected))),
+            badge_texts(&AsyncState::Error(StudioError::NotConnected)),
             (None, None)
         );
     }

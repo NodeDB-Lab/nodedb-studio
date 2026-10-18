@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::components::async_view::AsyncView;
+use crate::components::async_view::{AsyncView, resource_state};
 use crate::models::explorer::CollectionGroup;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
@@ -34,9 +34,8 @@ pub fn ExplorerSidebar(selected: Signal<Option<Selected>>) -> Element {
         async move { backend.collection_groups().await }
     });
 
-    // Clone the resource value out of its guard immediately — never hold a
-    // read guard across an await; there is none here.
-    let state = AsyncState::from_value(groups.read().clone());
+    // Loading while a switch re-reads, never the previous server's set.
+    let state = resource_state(&groups);
 
     // Default the selection once real data is in, but only while nothing has
     // been picked yet — a later reload (`on_retry`) must never clobber a
