@@ -4,14 +4,43 @@
 //! the active connection lacks that capability (mirrors the mockup's
 //! `data-cap` + `applyCapabilities`). The active item is derived from the
 //! current route's nav key, so e.g. any `/streams/*` keeps "Streams" lit.
+//! Badge counts come from the seam's `nav_badges()`.
+
+use std::rc::Rc;
 
 use dioxus::prelude::*;
 
+use crate::models::shell::NavBadges;
 use crate::routes::Route;
+use crate::services::backend::Backend;
+use crate::services::error::StudioError;
 use crate::state::connection::{ActiveConnection, Capability};
+
+/// The badge text for each counted item, or `None` for no badge.
+///
+/// Zero shows no badge, as the mockup does for an idle item. A load still in
+/// flight or a failed read also shows none: a badge is a hint, not a
+/// screen, and the screens it points at report their own load errors. A
+/// count in its place would be a number the server never sent.
+fn badge_texts(
+    badges: Option<&Result<NavBadges, StudioError>>,
+) -> (Option<String>, Option<String>) {
+    let text = |n: u32| (n > 0).then(|| n.to_string());
+    match badges {
+        Some(Ok(b)) => (text(b.query), text(b.streams)),
+        Some(Err(_)) | None => (None, None),
+    }
+}
 
 #[component]
 pub fn Rail() -> Element {
+    let backend = use_context::<Rc<dyn Backend>>();
+    let badges = use_resource(move || {
+        let backend = backend.clone();
+        async move { backend.nav_badges().await }
+    });
+    let (query_badge, streams_badge) = badge_texts(badges.read().as_ref());
+
     rsx! {
         aside { class: "rail",
             div { class: "rail-brand",
@@ -26,7 +55,7 @@ pub fn Rail() -> Element {
                         path { d: "M2 3h12v3H2zM2 7h12v3H2zM2 11h12v3H2z" }
                     }
                 }
-                RailItem { route: Route::Query {}, label: "Query", badge: "3",
+                RailItem { route: Route::Query {}, label: "Query", badge: query_badge,
                     svg { class: "icon", view_box: "0 0 16 16", fill: "none", stroke: "currentColor", stroke_width: "1.5",
                         path { d: "M3 4l2 2-2 2M7 8h6" }
                     }
@@ -61,7 +90,7 @@ pub fn Rail() -> Element {
                         circle { cx: "13", cy: "7", r: "1" }
                     }
                 }
-                RailItem { route: Route::Streams { tab: "landing".to_string() }, label: "Streams & Events", cap: Capability::Streams, badge: "6",
+                RailItem { route: Route::Streams { tab: "landing".to_string() }, label: "Streams & Events", cap: Capability::Streams, badge: streams_badge,
                     svg { class: "icon", view_box: "0 0 16 16", fill: "none", stroke: "currentColor", stroke_width: "1.5",
                         path { d: "M2 5c2 0 2 2 4 2s2-2 4-2 2 2 4 2M2 10c2 0 2 2 4 2s2-2 4-2 2 2 4 2" }
                     }
@@ -155,5 +184,41 @@ fn RailItem(
                 span { class: "badge", "{b}" }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn counts_render_as_badges() {
+        let b = Ok(NavBadges {
+            query: 3,
+            streams: 6,
+        });
+        assert_eq!(
+            badge_texts(Some(&b)),
+            (Some("3".to_string()), Some("6".to_string()))
+        );
+    }
+
+    #[test]
+    fn zero_shows_no_badge() {
+        let b = Ok(NavBadges {
+            query: 0,
+            streams: 2,
+        });
+        assert_eq!(badge_texts(Some(&b)), (None, Some("2".to_string())));
+    }
+
+    /// A failed or pending read must not invent a count.
+    #[test]
+    fn loading_and_error_show_no_badge() {
+        assert_eq!(badge_texts(None), (None, None));
+        assert_eq!(
+            badge_texts(Some(&Err(StudioError::NotConnected))),
+            (None, None)
+        );
     }
 }

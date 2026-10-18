@@ -62,7 +62,6 @@ pub trait ConnectionService {
     async fn mark_all_read(&self) -> Result<(), StudioError>;
 
     /// Badge counts for the nav rail's Query and Streams entries.
-    #[allow(dead_code)] // SEAM-UNWIRED
     async fn nav_badges(&self) -> Result<NavBadges, StudioError>;
 
     /// The active session summary shown in the statusbar.
