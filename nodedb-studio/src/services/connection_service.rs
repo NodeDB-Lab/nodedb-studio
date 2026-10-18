@@ -83,7 +83,7 @@ pub struct MockConnectionService {
     behavior: MockBehavior,
     all_read: Rc<Cell<bool>>,
     /// The saved-connection name the last successful `connect` opened.
-    /// Session-scoped reads (`databases`) answer for it, as a server would.
+    /// Session-scoped reads (`databases`) answer for it, as a server does.
     session: Rc<RefCell<Option<String>>>,
     /// Offset the next `cdc_batch` reads from. Only `commit_stream_offsets`
     /// advances it, mirroring the server: reads are idempotent.
@@ -685,8 +685,8 @@ mod tests {
     }
 
     /// Each connection lists its own databases: switching sessions switches
-    /// the list. A single shared fixture would show one server's databases
-    /// on another.
+    /// the list. A single shared fixture shows one server's databases on
+    /// another.
     #[tokio::test]
     async fn databases_follow_the_connected_session() {
         let svc = connected(MockConnectionService::ready(), "local-nodedb-dev").await;

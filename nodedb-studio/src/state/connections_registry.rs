@@ -111,8 +111,8 @@ impl std::fmt::Debug for Credentials {
 mod tests {
     use super::*;
 
-    /// The seam turns a blank username into MissingUsername; a default here
-    /// would connect as someone the user never named.
+    /// The seam turns a blank username into MissingUsername. A default here
+    /// connects as someone the user never named.
     #[test]
     fn credentials_without_a_profile_are_blank() {
         let offline = SavedConnection {

@@ -43,9 +43,9 @@ pub fn CommandPalette() -> Element {
         return rsx! {};
     }
 
-    // .read(), not .peek(): this runs at render time. peek() would freeze the
-    // list at the render where the palette opened, so a registry that resolves
-    // later (a real backend awaiting the network) would never show its entries.
+    // .read(), not .peek(): this runs at render time. peek() freezes the list
+    // at the render where the palette opened, so a registry that resolves
+    // later (a real backend awaiting the network) never shows its entries.
     let current = active.read().as_ref().map(|c| c.name.clone());
     let targets = switch_targets(&registry.read(), current.as_deref());
 
@@ -97,7 +97,7 @@ pub fn CommandPalette() -> Element {
                                     let creds = creds.clone();
                                     connect_error.set(ConnectError(None));
                                     // spawn_forever: the palette closes on the next
-                                    // line, and a scope-bound task would be dropped.
+                                    // line, and that drops a scope-bound task.
                                     spawn_forever(async move {
                                         let result = svc.connect(&name, &creds).await;
                                         let err = apply_connect(&mut active.write(), result);
