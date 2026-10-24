@@ -1,23 +1,68 @@
 name: Screenshots
 
 # Captures every screen of the real app (WebKitGTK under Xvfb), light and dark.
-# - Pull requests: the images are a workflow artifact, and the job summary
-#   lists the screens that differ from main.
-# - Pushes to main: the images replace the single commit on the orphan
-#   `screenshots` branch, which the README links to. No PNG enters main.
+# Each capture is an artifact named `screenshots-<key>`. The key hashes the
+# files that decide the pixels, so a source state is captured once:
+# - Pull request: captures unless an artifact for its key exists, then lists
+#   in the job summary the screens that differ from main.
+# - Push to main: reuses the PR's artifact when the merge left the key
+#   unchanged, and captures otherwise. The images replace the single commit
+#   on the orphan `screenshots` branch, which the README links to. No PNG
+#   enters main.
+# - Changes outside those files run nothing.
 
 on:
+  pull_request:
+    paths: &pixels
+      - "nodedb-studio/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "scripts/screenshots.sh"
+      - "scripts/screenshots-diff.sh"
+      - ".github/workflows/screenshots.yml"
   push:
     branches: [main]
-  pull_request:
+    paths: *pixels
   workflow_dispatch:
 
 permissions:
   contents: read
+  actions: read
+
+concurrency:
+  group: screenshots-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  key:
+    name: key
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      run_id: ${{ steps.key.outputs.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # The diff script is left out: it changes the report, not the pixels.
+      - id: key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          key="$(git ls-tree HEAD -- nodedb-studio Cargo.toml Cargo.lock \
+            scripts/screenshots.sh .github/workflows/screenshots.yml | git hash-object --stdin)"
+          run_id="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=screenshots-$key" \
+            --jq '[.artifacts[] | select(.expired | not)][0].workflow_run.id // empty')"
+          if [[ -n "$run_id" ]]; then
+            echo "Key \`$key\` was captured by run $run_id. Its images are reused." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+
   capture:
     name: capture
+    needs: key
+    if: needs.key.outputs.run_id == ''
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -50,12 +95,30 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-${{ needs.key.outputs.key }}
           path: ${{ runner.temp }}/screenshots
           if-no-files-found: error
 
+  report:
+    name: report
+    needs: [key, capture]
+    if: >-
+      always() && github.event_name == 'pull_request'
+      && needs.key.result == 'success'
+      && (needs.capture.result == 'success' || needs.capture.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: screenshots-${{ needs.key.outputs.key }}
+          path: ${{ runner.temp }}/screenshots
+          run-id: ${{ needs.key.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
+
       - name: Compare with main
-        if: github.event_name == 'pull_request'
         run: |
           base="$RUNNER_TEMP/base"
           mkdir -p "$base"
@@ -63,24 +126,27 @@ jobs:
             git archive FETCH_HEAD | tar -x -C "$base"
           fi
           scripts/screenshots-diff.sh "$base" "$RUNNER_TEMP/screenshots" >> "$GITHUB_STEP_SUMMARY"
+          echo "Images: artifact \`screenshots-${{ needs.key.outputs.key }}\`." >> "$GITHUB_STEP_SUMMARY"
 
   publish:
     name: publish
-    needs: capture
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [key, capture]
+    if: >-
+      always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.key.result == 'success'
+      && (needs.capture.result == 'success' || needs.capture.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
-    # A newer push supersedes an older one still publishing.
-    concurrency:
-      group: screenshots-publish
-      cancel-in-progress: true
+      actions: read
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: screenshots
+          name: screenshots-${{ needs.key.outputs.key }}
           path: screenshots
+          run-id: ${{ needs.key.outputs.run_id || github.run_id }}
+          github-token: ${{ github.token }}
 
       - name: Replace the screenshots branch
         working-directory: screenshots
