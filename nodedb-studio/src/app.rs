@@ -52,7 +52,7 @@ pub fn App() -> Element {
     // read this one store; user actions (mark-all-read / click) mutate it.
     let mut notifications =
         use_context_provider(|| Signal::new(AsyncState::<Vec<Notification>>::Loading));
-    use_context_provider(|| Signal::new(Preferences::default()));
+    let prefs = use_context_provider(|| Signal::new(Preferences::default()));
     // Modal state is provided here (not in Studio) because Preferences is
     // reachable while disconnected and via Cmd+, in either state.
     let mut modal = use_context_provider(|| Signal::new(None::<ModalKind>));
@@ -170,11 +170,21 @@ pub fn App() -> Element {
     // credentials of the attempt that failed. The message clears when the next
     // attempt starts (see the call sites) or succeeds.
     let connect_error_msg = connect_error.read().0.as_ref().map(|e| e.to_string());
+    let theme = prefs.read().theme.attr();
+
+    // The screenshot scene runner, when that feature is built. It renders
+    // first so the scene target it provides exists before the studio mounts.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
+    let scene_driver = rsx! { crate::screenshots::ScreenshotDriver {} };
+    #[cfg(not(all(feature = "screenshots", target_os = "linux")))]
+    let scene_driver = rsx! {};
 
     rsx! {
         document::Stylesheet { href: STYLES }
+        {scene_driver}
         div {
             class: "studio-root",
+            "data-theme": theme,
             tabindex: "-1",
             onkeydown: on_key,
             onmounted: move |e| root.set(Some(e.data())),

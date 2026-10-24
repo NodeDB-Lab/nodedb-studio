@@ -14,6 +14,18 @@ pub enum Theme {
     Dark,
 }
 
+impl Theme {
+    /// Value of the root `data-theme` attribute. The stylesheet keys the dark
+    /// tokens on it, and on the OS preference when it is `system`.
+    pub fn attr(self) -> &'static str {
+        match self {
+            Theme::System => "system",
+            Theme::Light => "light",
+            Theme::Dark => "dark",
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Preferences {
     pub theme: Theme,

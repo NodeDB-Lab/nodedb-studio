@@ -28,6 +28,11 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "time"] }
 dioxus = { version = "0.7", features = ["desktop", "router"] }
 # Test-only: render components to a string for render-level assertions.
 dioxus-ssr = "0.7"
+# Screenshot harness only (the `screenshots` feature, Linux). wry and tao
+# already build both crates. The direct dependency exposes WebKitGTK's
+# snapshot call and cairo's PNG writer.
+webkit2gtk = "2.0"
+cairo-rs = { version = "0.18", features = ["png"] }
 
 # Serialization. Kept for derive on models/preferences; no runtime parsing
 # happens in the skeleton (mock data is hardcoded Rust).
@@ -51,6 +56,12 @@ debug = false
 inherits = "dev"
 debug = true
 strip = false
+
+# The screenshot build (`scripts/screenshots.sh`). Its own profile keeps the
+# `screenshots` feature out of the dev binary's fingerprint, so switching
+# between the two does not rebuild either.
+[profile.capture]
+inherits = "dev"
 
 [profile.release]
 lto = "thin"

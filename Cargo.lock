@@ -3123,6 +3123,7 @@ name = "nodedb-studio"
 version = "0.0.0-beta.1"
 dependencies = [
  "async-trait",
+ "cairo-rs",
  "dioxus",
  "dioxus-ssr",
  "nodedb-client",
@@ -3132,6 +3133,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "webkit2gtk",
 ]
 
 [[package]]

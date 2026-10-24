@@ -36,8 +36,33 @@
     --topbar-h: 44px;
     --statusbar-h: 24px;
   }
+  /* Dark tokens. `.studio-root[data-theme]` carries the Preferences theme:
+     `dark` forces them, `light` suppresses them, `system` follows the OS.
+     A selector cannot OR in a media query, so the block appears twice.
+     Keep the two copies identical. */
+  :root:has(.studio-root[data-theme="dark"]) {
+    --bg-primary: #1a1a18;
+    --bg-secondary: #232320;
+    --bg-tertiary: #2c2c2a;
+    --bg-rail: #1f1f1d;
+    --bg-hover: #2a2a27;
+    --bg-active: #34342f;
+    --text-primary: #f1efe8;
+    --text-secondary: #b4b2a9;
+    --text-tertiary: #888780;
+    --text-info: #85b7eb;
+    --text-success: #97c459;
+    --text-warning: #efaf57;
+    --text-danger: #e58787;
+    --accent: #f1efe8;
+    --border-soft: rgba(255,255,255,0.06);
+    --border-mid: rgba(255,255,255,0.10);
+    --border-strong: rgba(255,255,255,0.20);
+    --shadow-overlay: 0 16px 48px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.3);
+    --shadow-popover: 0 8px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.2);
+  }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:not(:has(.studio-root[data-theme="light"])) {
       --bg-primary: #1a1a18;
       --bg-secondary: #232320;
       --bg-tertiary: #2c2c2a;
@@ -640,8 +665,12 @@
       linear-gradient(180deg, #d9d6c9 0%, #e3e0d3 100%);
     position: relative;
   }
+  /* Dark variant, keyed like the dark tokens at the top of this file. */
+  .studio-root[data-theme="dark"] .spatial-map {
+    background: linear-gradient(180deg, #1d1d1b 0%, #28282500 100%);
+  }
   @media (prefers-color-scheme: dark) {
-    .spatial-map {
+    .studio-root:not([data-theme="light"]) .spatial-map {
       background: linear-gradient(180deg, #1d1d1b 0%, #28282500 100%);
     }
   }

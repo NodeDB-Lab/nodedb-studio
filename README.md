@@ -6,6 +6,33 @@ instance, which exposes eight internal **storage modes** (Document, Strict, Vect
 Timeseries, KV, Spatial, FTS) — not separate engines. Studio renders a purpose-built UI per mode
 within one connection.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/NodeDB-Lab/nodedb-studio/screenshots/dark/explorer-document.png">
+  <img alt="NodeDB Studio Explorer showing a document collection" src="https://raw.githubusercontent.com/NodeDB-Lab/nodedb-studio/screenshots/light/explorer-document.png">
+</picture>
+
+## Screenshots
+
+CI captures every screen of the real app on each push to `main`. The images live on the
+[`screenshots` branch](https://github.com/NodeDB-Lab/nodedb-studio/tree/screenshots), in
+`light/` and `dark/`, so they always match `main` and never enter the code history.
+
+| Graph explorer | Cluster admin |
+| --- | --- |
+| ![Graph explorer](https://raw.githubusercontent.com/NodeDB-Lab/nodedb-studio/screenshots/light/graph-explorer.png) | ![Cluster admin](https://raw.githubusercontent.com/NodeDB-Lab/nodedb-studio/screenshots/light/admin-cluster.png) |
+| **Streams: CDC consumer** | **Command palette** |
+| ![CDC consumer](https://raw.githubusercontent.com/NodeDB-Lab/nodedb-studio/screenshots/light/streams-cdc.png) | ![Command palette](https://raw.githubusercontent.com/NodeDB-Lab/nodedb-studio/screenshots/light/command-palette.png) |
+
+To capture them locally (Linux, needs Xvfb):
+
+```bash
+scripts/screenshots.sh            # writes <cargo target dir>/screenshots/{light,dark}/*.png
+```
+
+The scene list is in `nodedb-studio/src/screenshots/scenes.rs`. A new screen needs a scene there.
+Pull requests get the images as a workflow artifact, and the job summary lists every screen
+that differs from `main`.
+
 ## Status: UI skeleton
 
 This repository is currently a **production-quality UI skeleton**: real Dioxus components,
@@ -37,6 +64,10 @@ toolchain is too old.
 cargo run -p nodedb-studio      # opens the desktop window (1440x900)
 cargo build --release           # binary at target/release/nodedb-studio
 ```
+
+Start the app through `cargo run`. Dioxus serves the stylesheet from the source tree only when
+`CARGO_MANIFEST_DIR` is set at run time. A bare binary counts as a `dx bundle` build and renders
+unstyled.
 
 ### Local NodeDB dependency
 

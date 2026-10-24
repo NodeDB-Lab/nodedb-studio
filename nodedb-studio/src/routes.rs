@@ -160,7 +160,15 @@ fn StudioLayout() -> Element {
         }
     });
 
+    // Moves the router to the screenshot scene's target, when that feature is
+    // built.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
+    let scene_sync = rsx! { crate::screenshots::SceneSync {} };
+    #[cfg(not(all(feature = "screenshots", target_os = "linux")))]
+    let scene_sync = rsx! {};
+
     rsx! {
+        {scene_sync}
         div {
             class: "app",
             // Keys are handled at the `App` root. A click anywhere outside a
