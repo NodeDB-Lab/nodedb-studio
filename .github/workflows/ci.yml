@@ -1,12 +1,66 @@
 name: CI
 
+# fmt + clippy + tests, keyed by the source tree they test.
+# - Pull request: the checks run on the PR's merge commit. On success, a
+#   marker artifact named `ci-pass-<tree>` records that tree.
+# - Push to main: the gate looks for that marker. A merge whose tree a PR
+#   already tested skips the checks. A merge that changed the tree (main moved
+#   under the PR) runs them.
+# - Docs-only changes run nothing. Branch pushes without a PR run nothing:
+#   open a PR, or use "Run workflow", which always runs the checks.
+
 on:
-  push:
   pull_request:
+    paths-ignore: &not-code
+      - "**.md"
+      - "LICENSE"
+      - "NOTICE"
+      - ".github/labels.yml"
+      - ".github/workflows/labels.yml"
+      - ".github/workflows/screenshots.yml"
+      - "scripts/screenshots*.sh"
+  push:
+    branches: [main]
+    paths-ignore: *not-code
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+# A newer push to the same PR, or to main, cancels the run it supersedes.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tree: ${{ steps.tree.outputs.tree }}
+      tested: ${{ steps.tree.outputs.tested }}
+    steps:
+      - id: tree
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tree="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA" --jq .commit.tree.sha)"
+          hits="$(gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=ci-pass-$tree" \
+            --jq '[.artifacts[] | select(.expired | not)] | length')"
+          tested=false
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch && "$hits" -gt 0 ]]; then
+            tested=true
+            echo "Tree \`$tree\` already passed CI. The checks are skipped." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "tested=$tested" >> "$GITHUB_OUTPUT"
+
   check:
     name: fmt + clippy + tests (macOS)
+    needs: gate
+    if: needs.gate.outputs.tested != 'true'
     runs-on: macos-latest
     timeout-minutes: 30
     steps:
@@ -31,3 +85,13 @@ jobs:
 
       - name: Tests
         run: cargo nextest run --workspace
+
+      - name: Write the pass marker
+        run: echo "$GITHUB_SHA" > ci-pass.txt
+
+      - name: Record the tested tree
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-pass-${{ needs.gate.outputs.tree }}
+          path: ci-pass.txt
+          retention-days: 30
