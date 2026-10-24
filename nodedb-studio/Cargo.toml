@@ -24,5 +24,15 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
 
+[features]
+# Builds the scene runner that captures every screen to PNG
+# (`scripts/screenshots.sh`). Linux-only: it snapshots WebKitGTK's own pixels.
+# On other targets the feature compiles to nothing.
+screenshots = ["dep:webkit2gtk", "dep:cairo-rs"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { workspace = true, optional = true }
+cairo-rs = { workspace = true, optional = true }
+
 [dev-dependencies]
 dioxus-ssr = { workspace = true }

@@ -46,6 +46,7 @@ your toolchain is too old, run `rustup update stable`.
 cargo run -p nodedb-studio      # launch the desktop app (1440x900 window)
 dx serve                        # optional: run with hot-reload (needs `dioxus-cli`)
 cargo build --release           # release binary at target/release/nodedb-studio
+scripts/screenshots.sh          # capture every screen, light + dark, to PNG (Linux + Xvfb)
 
 cargo fmt --all                 # format (CI gate runs `--check`; just run the plain form)
 cargo clippy --workspace --all-targets --all-features -- -D warnings   # lints (warnings block merge)
@@ -67,7 +68,10 @@ cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo nextest run
 ```
 
-For UI changes, also `cargo run -p nodedb-studio` and confirm the screen renders.
+For UI changes, also check the screen renders: `cargo run -p nodedb-studio`, or
+`scripts/screenshots.sh` and read the PNGs. A new screen or overlay needs a scene in
+`src/screenshots/scenes.rs`. Launch through `cargo run`: a bare debug or release
+binary counts as a `dx` bundle and loads no stylesheet.
 
 ## Project structure
 
@@ -82,8 +86,10 @@ nodedb-studio/src/
   state/         live UI state as Dioxus signals (connection, prefs, ui, …)
   models/        typed domain data (collection, notification, …)
   services/      ConnectionService trait — the backend seam (mock impl today)
-  data/mock.rs   ALL hardcoded mock data, in one place
+  data/mock/     ALL hardcoded mock data, in one place
+  screenshots/   scene runner + WebKitGTK capture (`screenshots` feature, Linux only)
 assets/styles.css   CSS ported from the design (loaded via asset!)
+scripts/            screenshot capture + PR diff report (CI: .github/workflows/screenshots.yml)
 ```
 
 ## Code style & conventions
