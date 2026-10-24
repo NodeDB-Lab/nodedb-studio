@@ -3088,9 +3088,9 @@ dependencies = [
 
 [[package]]
 name = "nodedb-client"
-version = "0.6.0"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa5876d2232e7c97de4e72634ff2ee7bf2f29c12f44f67c4289cc3ae13219221"
+checksum = "0cff450ccdc291aca3bd54961439935fada9e7da89cdcd149e63c31635d4c90e"
 dependencies = [
  "async-trait",
  "nodedb-types",
@@ -3136,9 +3136,9 @@ dependencies = [
 
 [[package]]
 name = "nodedb-types"
-version = "0.6.0"
+version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc2a09275837c48cb938e009b5304fe2e1205d5e2eb027a3068f997a4ae551f7"
+checksum = "6b7d28844c865d2a2487354a0321c4db6957b2b4f6f707c59e013829db4e22d5"
 dependencies = [
  "aes-gcm",
  "bytemuck",
