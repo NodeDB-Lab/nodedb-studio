@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
-use crate::state::connections_registry::{ConnStatus, Credentials, SavedConnection};
+use crate::state::connections_registry::{ConnStatus, SavedConnection};
 use crate::state::ui::{ModalKind, PrefsPane};
 
 #[component]
@@ -51,20 +51,9 @@ pub fn ConnectionManager() -> Element {
                             conn: conn.clone(),
                             on_connect: {
                                 let service = service.clone();
-                                // The stored profile IS this card's explicit
-                                // username. A profile-less entry yields a blank,
-                                // which the seam rejects with MissingUsername and
-                                // the app root renders, rather than defaulting to
-                                // `admin`. New connections collect a username in
-                                // the modal (see modals/new_connection.rs).
-                                let creds = Credentials {
-                                    username: conn
-                                        .profile
-                                        .as_ref()
-                                        .map(|p| p.user.clone())
-                                        .unwrap_or_default(),
-                                    password: None,
-                                };
+                                // New connections collect a username in the
+                                // modal instead (see modals/new_connection.rs).
+                                let creds = conn.credentials();
                                 move |name: String| {
                                     // Async at the seam: clone the Rc into the task and
                                     // write the signals (Copy) only after the await

@@ -198,10 +198,7 @@ pub fn notifications() -> Vec<Notification> {
 }
 
 /// Nav-rail badge counts: pending items on the Query and Streams entries.
-/// These must agree with the hardcoded literals in `components::rail` until
-/// that later phase swaps the rail onto this seam method, so the eventual
-/// wiring is a visual no-op.
-#[allow(dead_code)] // SEAM-UNWIRED
+/// The mockup's figures, so the rail reads the same as the design.
 pub fn nav_badges() -> NavBadges {
     NavBadges {
         query: 3,
@@ -212,28 +209,22 @@ pub fn nav_badges() -> NavBadges {
 /// The active session summary shown in the statusbar. `server_version` is a
 /// neutral "dev" placeholder: NodeDB version numbers are undecided, so no
 /// specific version is invented here (see the module note in `mod.rs`).
-#[allow(dead_code)] // SEAM-UNWIRED
 pub fn session_info() -> SessionInfo {
     SessionInfo {
-        database: "analytics".into(),
-        role: "admin".into(),
         server_version: "dev".into(),
         timezone: "UTC".into(),
-        read_only: false,
     }
 }
 
-/// Databases visible on the active connection, matching `local-nodedb-dev`'s
-/// profile above.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn databases() -> Vec<String> {
-    vec![
-        "analytics".into(),
-        "events_log".into(),
-        "social_graph".into(),
-        "iot_telemetry".into(),
-        "docs_corpus".into(),
-    ]
+/// Databases visible on the connection `name`: the ones its profile above
+/// lists. Empty for an unknown or offline connection.
+pub fn databases_for(name: &str) -> Vec<String> {
+    connections()
+        .into_iter()
+        .find(|c| c.name == name)
+        .and_then(|c| c.profile)
+        .map(|p| p.databases)
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

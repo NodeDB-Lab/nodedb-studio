@@ -281,11 +281,8 @@ mod tests {
         // Each must map a fetched value straight to `Loaded`, never `Empty`:
         // none of the four has a meaningful "empty" shape.
         let session_info = AsyncState::from_value(Some(Ok(SessionInfo {
-            database: String::new(),
-            role: String::new(),
             server_version: String::new(),
             timezone: String::new(),
-            read_only: false,
         })));
         assert!(matches!(session_info, AsyncState::Loaded(_)));
 

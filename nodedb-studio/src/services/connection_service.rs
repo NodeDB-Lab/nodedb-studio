@@ -6,7 +6,7 @@
 //! wraps it here — and async (`use_resource`) is introduced at this boundary,
 //! not sprinkled through the views.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use async_trait::async_trait;
@@ -62,15 +62,12 @@ pub trait ConnectionService {
     async fn mark_all_read(&self) -> Result<(), StudioError>;
 
     /// Badge counts for the nav rail's Query and Streams entries.
-    #[allow(dead_code)] // SEAM-UNWIRED
     async fn nav_badges(&self) -> Result<NavBadges, StudioError>;
 
-    /// The active session summary shown in the statusbar.
-    #[allow(dead_code)] // SEAM-UNWIRED
+    /// Server version and timezone of the active session, for the statusbar.
     async fn session_info(&self) -> Result<SessionInfo, StudioError>;
 
     /// All databases visible on the active connection.
-    #[allow(dead_code)] // SEAM-UNWIRED
     async fn databases(&self) -> Result<Vec<String>, StudioError>;
 }
 
@@ -85,6 +82,9 @@ pub trait ConnectionService {
 pub struct MockConnectionService {
     behavior: MockBehavior,
     all_read: Rc<Cell<bool>>,
+    /// The saved-connection name the last successful `connect` opened.
+    /// Session-scoped reads (`databases`) answer for it, as a server does.
+    session: Rc<RefCell<Option<String>>>,
     /// Offset the next `cdc_batch` reads from. Only `commit_stream_offsets`
     /// advances it, mirroring the server: reads are idempotent.
     cdc_committed: Rc<Cell<usize>>,
@@ -100,6 +100,7 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Ready,
             all_read: Rc::default(),
+            session: Rc::default(),
             cdc_committed: Rc::default(),
             cdc_read_end: Rc::default(),
         }
@@ -110,6 +111,7 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Empty,
             all_read: Rc::default(),
+            session: Rc::default(),
             cdc_committed: Rc::default(),
             cdc_read_end: Rc::default(),
         }
@@ -120,6 +122,7 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Erroring,
             all_read: Rc::default(),
+            session: Rc::default(),
             cdc_committed: Rc::default(),
             cdc_read_end: Rc::default(),
         }
@@ -130,6 +133,7 @@ impl MockConnectionService {
         Self {
             behavior: MockBehavior::Delayed(d),
             all_read: Rc::default(),
+            session: Rc::default(),
             cdc_committed: Rc::default(),
             cdc_read_end: Rc::default(),
         }
@@ -146,6 +150,7 @@ impl MockConnectionService {
         Self {
             behavior,
             all_read: self.all_read.clone(),
+            session: self.session.clone(),
             cdc_committed: self.cdc_committed.clone(),
             cdc_read_end: self.cdc_read_end.clone(),
         }
@@ -198,8 +203,10 @@ impl ConnectionService for MockConnectionService {
                 .find(|c| c.name == name)
                 .and_then(|c| c.open())
         })
-        .await?;
-        session.ok_or(StudioError::NotConnected)
+        .await?
+        .ok_or(StudioError::NotConnected)?;
+        *self.session.borrow_mut() = Some(session.name.clone());
+        Ok(session)
     }
 
     async fn nav_badges(&self) -> Result<NavBadges, StudioError> {
@@ -211,7 +218,17 @@ impl ConnectionService for MockConnectionService {
     }
 
     async fn databases(&self) -> Result<Vec<String>, StudioError> {
-        apply(self.behavior, mock::databases).await
+        // The list belongs to the session `connect` opened, as on a server, so
+        // switching connections switches lists. Behaviour applies first: an
+        // `Erroring` mock fails the same way connected or not.
+        let session = self.session.borrow().clone();
+        apply_one_or_empty(
+            self.behavior,
+            move || session.as_deref().map(mock::databases_for),
+            || Some(Vec::new()),
+        )
+        .await?
+        .ok_or(StudioError::NotConnected)
     }
 }
 
@@ -559,8 +576,6 @@ mod tests {
     async fn session_info_populates_the_statusbar() {
         let svc = MockConnectionService::ready();
         let s = svc.session_info().await.expect("session info");
-        assert!(!s.database.is_empty());
-        assert!(!s.role.is_empty());
         assert!(!s.server_version.is_empty());
         assert!(!s.timezone.is_empty());
     }
@@ -571,9 +586,8 @@ mod tests {
         // test), so this can actually fail if the fixture drifts.
         let svc = MockConnectionService::ready();
         let s = svc.session_info().await.expect("session info");
-        assert_eq!(s.database, "analytics");
-        assert_eq!(s.role, "admin");
-        assert!(!s.read_only, "fixture session is a read-write admin");
+        assert_eq!(s.server_version, "dev");
+        assert_eq!(s.timezone, "UTC");
     }
 
     #[tokio::test]
@@ -582,7 +596,7 @@ mod tests {
         // — matching the `record_detail` precedent.
         let svc = MockConnectionService::empty();
         let s = svc.session_info().await.expect("empty folds into ready");
-        assert_eq!(s.database, "analytics");
+        assert_eq!(s.timezone, "UTC");
     }
 
     #[tokio::test]
@@ -596,7 +610,7 @@ mod tests {
     async fn session_info_delayed_still_resolves() {
         let svc = MockConnectionService::delayed(std::time::Duration::from_millis(5));
         let s = svc.session_info().await.expect("delayed still resolves");
-        assert_eq!(s.role, "admin");
+        assert_eq!(s.server_version, "dev");
     }
 
     #[tokio::test]
@@ -637,7 +651,7 @@ mod tests {
 
     #[tokio::test]
     async fn databases_are_unique() {
-        let svc = MockConnectionService::ready();
+        let svc = connected(MockConnectionService::ready(), "local-nodedb-dev").await;
         let mut dbs = svc.databases().await.expect("databases");
         let total = dbs.len();
         dbs.sort();
@@ -649,13 +663,46 @@ mod tests {
     async fn databases_fixture_has_more_than_one_entry() {
         // Pins the precondition `databases_are_unique` relies on: with a
         // single-entry fixture the dedup check above could never fire.
-        let svc = MockConnectionService::ready();
+        let svc = connected(MockConnectionService::ready(), "local-nodedb-dev").await;
         let dbs = svc.databases().await.expect("databases");
         assert!(
             dbs.len() > 1,
             "fixture must list more than one database for the dedup check to be meaningful"
         );
         assert!(dbs.contains(&"analytics".to_string()));
+    }
+
+    /// Opens `name` on `svc` so session-scoped reads have a session.
+    async fn connected(svc: MockConnectionService, name: &str) -> MockConnectionService {
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
+        svc.connect(name, &creds)
+            .await
+            .expect("fixture connection opens");
+        svc
+    }
+
+    /// Each connection lists its own databases: switching sessions switches
+    /// the list. A single shared fixture shows one server's databases on
+    /// another.
+    #[tokio::test]
+    async fn databases_follow_the_connected_session() {
+        let svc = connected(MockConnectionService::ready(), "local-nodedb-dev").await;
+        let local = svc.databases().await.expect("local databases");
+        let svc = connected(svc, "staging-cluster").await;
+        let staging = svc.databases().await.expect("staging databases");
+        assert_eq!(local, mock::databases_for("local-nodedb-dev"));
+        assert_eq!(staging, mock::databases_for("staging-cluster"));
+        assert_ne!(local, staging);
+    }
+
+    #[tokio::test]
+    async fn databases_before_connect_is_not_connected() {
+        let svc = MockConnectionService::ready();
+        let err = svc.databases().await.expect_err("no session yet");
+        assert!(matches!(err, StudioError::NotConnected));
     }
 
     #[tokio::test]
@@ -674,7 +721,11 @@ mod tests {
 
     #[tokio::test]
     async fn databases_delayed_still_returns_the_fixture() {
-        let svc = MockConnectionService::delayed(std::time::Duration::from_millis(5));
+        let svc = connected(
+            MockConnectionService::delayed(std::time::Duration::from_millis(5)),
+            "local-nodedb-dev",
+        )
+        .await;
         let dbs = svc.databases().await.expect("delayed still resolves");
         assert!(!dbs.is_empty());
     }

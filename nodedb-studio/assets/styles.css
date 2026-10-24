@@ -1308,8 +1308,11 @@
   /* ============================================================
      Read-only indicator (topbar)
      ============================================================ */
+  /* Always shown when rendered: the topbar renders it only for a read-only
+     connection. The mockup instead toggled a body.readonly class from JS,
+     which nothing sets here, so the pill never appeared. */
   .readonly-pill {
-    display: none;
+    display: inline-flex;
     align-items: center; gap: 5px;
     padding: 3px 8px;
     border-radius: 4px;
@@ -1319,7 +1322,6 @@
     background: rgba(133,79,11,0.12);
     color: var(--text-warning);
   }
-  body.readonly .readonly-pill { display: inline-flex; }
   .readonly-pill .dot {
     width: 5px; height: 5px;
     border-radius: 50%;
@@ -2066,3 +2068,6 @@
     border-radius: 8px;
     padding: 14px 16px;
   }
+
+  /* App root (app.rs): focus target for the app-wide keys. */
+  .studio-root:focus { outline: none; }

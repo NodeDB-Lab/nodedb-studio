@@ -64,9 +64,23 @@ impl SavedConnection {
             user: profile.user.clone(),
             role: profile.role.clone(),
             capabilities: profile.capabilities,
-            databases: profile.databases.clone(),
             current_database: profile.default_database.clone(),
         })
+    }
+
+    /// The credentials to connect with. The stored profile IS this entry's
+    /// explicit username. An entry with no profile yields a blank, which the
+    /// seam rejects with MissingUsername and the app root renders: never a
+    /// silent fallback to `admin`.
+    pub fn credentials(&self) -> Credentials {
+        Credentials {
+            username: self
+                .profile
+                .as_ref()
+                .map(|p| p.user.clone())
+                .unwrap_or_default(),
+            password: None,
+        }
     }
 }
 
@@ -96,6 +110,23 @@ impl std::fmt::Debug for Credentials {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The seam turns a blank username into MissingUsername. A default here
+    /// connects as someone the user never named.
+    #[test]
+    fn credentials_without_a_profile_are_blank() {
+        let offline = SavedConnection {
+            name: "test-nodedb".into(),
+            meta: String::new(),
+            sub: String::new(),
+            status: ConnStatus::Offline,
+            db_count: None,
+            ping: None,
+            server: String::new(),
+            profile: None,
+        };
+        assert_eq!(offline.credentials(), Credentials::default());
+    }
 
     #[test]
     fn debug_never_leaks_a_populated_password() {

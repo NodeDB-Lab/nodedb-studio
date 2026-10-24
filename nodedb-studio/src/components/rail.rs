@@ -4,14 +4,46 @@
 //! the active connection lacks that capability (mirrors the mockup's
 //! `data-cap` + `applyCapabilities`). The active item is derived from the
 //! current route's nav key, so e.g. any `/streams/*` keeps "Streams" lit.
+//! Badge counts come from the seam's `nav_badges()`.
+
+use std::rc::Rc;
 
 use dioxus::prelude::*;
 
+use crate::components::async_view::resource_state;
+use crate::models::shell::NavBadges;
 use crate::routes::Route;
+use crate::services::async_state::AsyncState;
+use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, Capability};
+
+/// The badge text for each counted item, or `None` for no badge.
+///
+/// Zero shows no badge, as the mockup does for an idle item. A load in
+/// flight (a switch's re-read included) or a failed read also shows none: a
+/// badge is a hint, not a screen, and the screens it points at report their
+/// own load errors. A count there is a number this server never sent.
+fn badge_texts(badges: &AsyncState<NavBadges>) -> (Option<String>, Option<String>) {
+    let text = |n: u32| (n > 0).then(|| n.to_string());
+    match badges {
+        AsyncState::Loaded(b) => (text(b.query), text(b.streams)),
+        AsyncState::Loading | AsyncState::Empty | AsyncState::Error(_) => (None, None),
+    }
+}
 
 #[component]
 pub fn Rail() -> Element {
+    let backend = use_context::<Rc<dyn Backend>>();
+    let conn = use_context::<Memo<Option<String>>>();
+    let badges = use_resource(move || {
+        let backend = backend.clone();
+        // Counts belong to the connection: reading its name re-runs this on a
+        // switch.
+        let _conn = conn();
+        async move { backend.nav_badges().await }
+    });
+    let (query_badge, streams_badge) = badge_texts(&resource_state(&badges));
+
     rsx! {
         aside { class: "rail",
             div { class: "rail-brand",
@@ -26,7 +58,7 @@ pub fn Rail() -> Element {
                         path { d: "M2 3h12v3H2zM2 7h12v3H2zM2 11h12v3H2z" }
                     }
                 }
-                RailItem { route: Route::Query {}, label: "Query", badge: "3",
+                RailItem { route: Route::Query {}, label: "Query", badge: query_badge,
                     svg { class: "icon", view_box: "0 0 16 16", fill: "none", stroke: "currentColor", stroke_width: "1.5",
                         path { d: "M3 4l2 2-2 2M7 8h6" }
                     }
@@ -61,7 +93,7 @@ pub fn Rail() -> Element {
                         circle { cx: "13", cy: "7", r: "1" }
                     }
                 }
-                RailItem { route: Route::Streams { tab: "landing".to_string() }, label: "Streams & Events", cap: Capability::Streams, badge: "6",
+                RailItem { route: Route::Streams { tab: "landing".to_string() }, label: "Streams & Events", cap: Capability::Streams, badge: streams_badge,
                     svg { class: "icon", view_box: "0 0 16 16", fill: "none", stroke: "currentColor", stroke_width: "1.5",
                         path { d: "M2 5c2 0 2 2 4 2s2-2 4-2 2 2 4 2M2 10c2 0 2 2 4 2s2-2 4-2 2 2 4 2" }
                     }
@@ -155,5 +187,42 @@ fn RailItem(
                 span { class: "badge", "{b}" }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::services::error::StudioError;
+
+    #[test]
+    fn counts_render_as_badges() {
+        let b = AsyncState::Loaded(NavBadges {
+            query: 3,
+            streams: 6,
+        });
+        assert_eq!(
+            badge_texts(&b),
+            (Some("3".to_string()), Some("6".to_string()))
+        );
+    }
+
+    #[test]
+    fn zero_shows_no_badge() {
+        let b = AsyncState::Loaded(NavBadges {
+            query: 0,
+            streams: 2,
+        });
+        assert_eq!(badge_texts(&b), (None, Some("2".to_string())));
+    }
+
+    /// A failed or pending read must not invent a count.
+    #[test]
+    fn loading_and_error_show_no_badge() {
+        assert_eq!(badge_texts(&AsyncState::Loading), (None, None));
+        assert_eq!(
+            badge_texts(&AsyncState::Error(StudioError::NotConnected)),
+            (None, None)
+        );
     }
 }

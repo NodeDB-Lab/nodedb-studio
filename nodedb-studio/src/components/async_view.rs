@@ -21,11 +21,33 @@
 //!     if let Some(data) = state.loaded() { /* caller's own markup for `data` */ }
 //! }
 //! ```
+//! A read that re-runs on a connection switch maps through `resource_state`
+//! instead, so it shows `Loading` rather than the previous server's result.
+//!
 //! Discrete props (rather than the generic `AsyncState<T>`) are used because
 //! Dioxus props must be `Clone + PartialEq`; `StudioError`/`T` need not be — so
 //! the caller decodes the state via the accessors and passes plain flags.
 
 use dioxus::prelude::*;
+
+use crate::services::async_state::{AsyncState, IsEmpty};
+use crate::services::error::StudioError;
+
+/// A resource read as `AsyncState`, `Loading` while a re-run is in flight.
+/// `Resource::read` keeps the previous result until the new one lands, so
+/// right after a connection switch it holds the last server's answer.
+/// Reading `state()` subscribes the caller, so it re-renders the moment the
+/// re-run starts.
+pub fn resource_state<T: IsEmpty + Clone>(
+    resource: &Resource<Result<T, StudioError>>,
+) -> AsyncState<T> {
+    match *resource.state().read() {
+        UseResourceState::Pending => AsyncState::Loading,
+        UseResourceState::Ready | UseResourceState::Paused | UseResourceState::Stopped => {
+            AsyncState::from_value(resource.read().clone())
+        }
+    }
+}
 
 #[derive(Clone, PartialEq, Props)]
 pub struct AsyncViewProps {

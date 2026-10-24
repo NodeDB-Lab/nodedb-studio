@@ -1,21 +1,34 @@
 //! The connected state: the studio shell.
 //!
-//! Provides the studio-scoped UI signals (which popover is open, whether the
-//! command palette is open) and mounts the router. The router renders
-//! `StudioLayout`, which consumes these signals. `App` mounts this only while
-//! connected, so the router never coexists with the Connection Manager.
+//! Provides the Explorer selection and mounts the router. The open popover and
+//! the palette flag live in `App`, whose root handles every key. `App` mounts
+//! this only while connected, so the router never coexists with the
+//! Connection Manager.
 
 use dioxus::prelude::*;
 
 use crate::routes::Route;
-use crate::state::ui::Popover;
+use crate::state::explorer::Selected;
 
 #[component]
 pub fn Studio() -> Element {
-    // Shared, studio-only UI state. Provided above the router so the layout and
-    // topbar (rendered inside the router) can consume them via context.
-    use_context_provider(|| Signal::new(None::<Popover>));
-    use_context_provider(|| Signal::new(false)); // command palette open
+    // The Explorer's selected collection, shared with the topbar breadcrumb.
+    // Provided above the router so views inside it can consume it.
+    let mut selected = use_context_provider(|| Signal::new(None::<Selected>));
+
+    // A selection names a collection on one server. Another server can lack
+    // it, or hold one by that name in another storage mode, so a switch
+    // clears it and the Explorer picks the new server's default. Only a
+    // change clears it: the first run must not undo the Explorer's default.
+    let conn = use_context::<Memo<Option<String>>>();
+    let mut seen = use_signal(|| conn.peek().clone());
+    use_effect(move || {
+        let now = conn();
+        if *seen.peek() != now {
+            seen.set(now);
+            selected.set(None);
+        }
+    });
 
     rsx! {
         Router::<Route> {}
