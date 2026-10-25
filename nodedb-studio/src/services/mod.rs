@@ -18,6 +18,7 @@ pub mod matview_data;
 pub mod mock;
 pub mod mock_behavior;
 pub mod nodedb;
+pub mod spatial_data;
 pub mod timeseries_data;
 pub mod topic_data;
 pub mod transfer_data;

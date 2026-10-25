@@ -13,6 +13,9 @@ pub fn OpenLink(
     label: String,
     icon: Icon,
     #[props(default = "link-btn".to_string())] class: String,
+    /// Runs just before the tool opens, so a caller can hand it what to show.
+    #[props(default)]
+    on_open: EventHandler<()>,
 ) -> Element {
     let nav = use_navigator();
     let active = use_context::<Signal<Option<ActiveConnection>>>();
@@ -30,7 +33,10 @@ pub fn OpenLink(
             class: "{class}",
             disabled: missing.is_some(),
             title: "{title}",
-            onclick: move |_| { nav.push(route.clone()); },
+            onclick: move |_| {
+                on_open.call(());
+                nav.push(route.clone());
+            },
             Ico { icon, size: 16 }
             "{label}"
         }

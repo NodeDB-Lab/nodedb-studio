@@ -54,6 +54,7 @@ pub enum Icon {
     Grid3x3,
     GripVertical,
     Hash,
+    Hexagon,
     History,
     Image,
     Info,
@@ -82,6 +83,7 @@ pub enum Icon {
     Plus,
     RefreshCw,
     RotateCcw,
+    Ruler,
     Save,
     Search,
     Send,
@@ -340,6 +342,18 @@ fn shapes(icon: Icon) -> &'static [Shape] {
                 "M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0",
             ),
             C(12.0, 10.0, 3.0),
+        ],
+        Icon::Hexagon => &[P(
+            "M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",
+        )],
+        Icon::Ruler => &[
+            P(
+                "M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z",
+            ),
+            P("m14.5 12.5 2-2"),
+            P("m11.5 9.5 2-2"),
+            P("m8.5 6.5 2-2"),
+            P("m17.5 15.5 2-2"),
         ],
         Icon::Maximize => &[
             P("M8 3H5a2 2 0 0 0-2 2v3"),

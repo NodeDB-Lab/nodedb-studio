@@ -9,10 +9,13 @@ use crate::models::collection::Profile;
 use crate::models::connections::ConnectionTest;
 use crate::models::records::Filter;
 use crate::models::workbench::TxAccess;
-use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab, GraphTab, TimeseriesTab, VectorTab};
+use crate::routes::tabs::{
+    AdminTab, ClusterTab, EventsTab, GraphTab, SpatialTab, TimeseriesTab, VectorTab,
+};
 use crate::routes::{Destination, Route};
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
+use crate::screenshots::spatial_scenes;
 use crate::screenshots::timeseries_scenes;
 use crate::screenshots::vector_scenes;
 use crate::screenshots::workbench_scenes;
@@ -24,6 +27,7 @@ use crate::state::explorer::{
 };
 use crate::state::query::QueryWorkspace;
 use crate::state::record_editor::RecordEditor;
+use crate::state::spatial::SpatialSeed;
 use crate::state::timeseries::TimeseriesSeed;
 use crate::state::ui::{ModalKind, Popover, PrefsPane};
 use crate::state::vector::VectorSeed;
@@ -147,6 +151,8 @@ pub struct Scene {
     pub vector: Option<Box<VectorSeed>>,
     /// The Timeseries drafts and open documents. `None` keeps the current ones.
     pub timeseries: Option<Box<TimeseriesSeed>>,
+    /// The Spatial view, drafts, and selection. `None` keeps the current ones.
+    pub spatial: Option<Box<SpatialSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -164,6 +170,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         events: None,
         vector: None,
         timeseries: None,
+        spatial: None,
     }
 }
 
@@ -337,11 +344,11 @@ pub fn scenes() -> Vec<Scene> {
             }),
             O::None,
         ),
-        scene("spatial", at(Destination::Spatial.route()), O::None),
         scene("search", at(Destination::Search.route()), O::None),
     ]);
     all.extend(vector());
     all.extend(timeseries());
+    all.extend(spatial());
     all.extend(events());
     for tab in ClusterTab::ALL {
         all.push(scene(
@@ -452,6 +459,27 @@ fn designer() -> Vec<Scene> {
         at_designer("designer", designer_scenes::workbench()),
         at_designer("designer-create", designer_scenes::create()),
         at_designer("designer-review", designer_scenes::review()),
+    ]
+}
+
+/// Spatial: Map, Analyze, and Raster.
+fn spatial() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: SpatialSeed| Scene {
+        spatial: Some(Box::new(seed)),
+        ..scene(name, at(Route::Spatial { tab }), Overlay::None)
+    };
+    vec![
+        at_tab("spatial-map", SpatialTab::Map, spatial_scenes::map()),
+        at_tab(
+            "spatial-analyze",
+            SpatialTab::Analyze,
+            spatial_scenes::analyze(),
+        ),
+        at_tab(
+            "spatial-raster",
+            SpatialTab::Raster,
+            spatial_scenes::raster(),
+        ),
     ]
 }
 
@@ -707,6 +735,16 @@ mod tests {
             assert!(names.contains(&expected), "no scene `{expected}`");
         }
         assert!(!names.contains(&"vector-space"));
+    }
+
+    /// The three Spatial views the design names, each once.
+    #[test]
+    fn every_spatial_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in ["spatial-map", "spatial-analyze", "spatial-raster"] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
+        }
+        assert!(!names.contains(&"spatial"), "the placeholder scene is gone");
     }
 
     #[test]

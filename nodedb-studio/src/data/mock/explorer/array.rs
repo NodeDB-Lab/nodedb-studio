@@ -50,7 +50,7 @@ fn tenths(v: f64) -> i64 {
 
 /// The value at one cell. Smooth, and exactly 22.4 °C at 40.5 N, 73.5 W,
 /// 12:00 UTC.
-fn sample(attribute: &str, lat: f64, lon: f64, hour: u32) -> f64 {
+pub fn sample(attribute: &str, lat: f64, lon: f64, hour: u32) -> f64 {
     let (dl, dn) = (lat - 40.5, lon + 73.5);
     let dt = (f64::from(hour) - 12.0) / 12.0;
     let raw = match attribute {

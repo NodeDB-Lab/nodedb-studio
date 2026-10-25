@@ -8,12 +8,11 @@ use dioxus::prelude::*;
 
 use crate::components::tabs::{RouteTabs, tab_items};
 use crate::routes::Route;
-use crate::routes::tabs::{AdminTab, SearchTab, SpatialTab, SyncTab};
+use crate::routes::tabs::{AdminTab, SearchTab, SyncTab};
 use crate::views::admin::audit::AuditView;
 use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
 use crate::views::fts_inspector::FtsInspector;
-use crate::views::spatial_view::SpatialView;
 use crate::views::sync::Sync;
 
 /// A page that has not been rebuilt yet.
@@ -26,17 +25,6 @@ fn Unbuilt(title: &'static str) -> Element {
                 p { "This page is being rebuilt for the new workspace." }
             }
         }
-    }
-}
-
-#[component]
-pub fn SpatialPage(tab: SpatialTab) -> Element {
-    rsx! {
-        RouteTabs {
-            items: tab_items(SpatialTab::ALL, |t| t.label(), |tab| Route::Spatial { tab }),
-            current: Route::Spatial { tab },
-        }
-        div { class: "legacy-page", SpatialView {} }
     }
 }
 

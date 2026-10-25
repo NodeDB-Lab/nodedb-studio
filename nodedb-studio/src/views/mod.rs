@@ -18,7 +18,7 @@ pub mod explorer;
 pub mod fts_inspector;
 pub mod graph;
 pub mod query;
-pub mod spatial_view;
+pub mod spatial;
 pub mod sync;
 pub mod timeseries;
 pub mod transitional;

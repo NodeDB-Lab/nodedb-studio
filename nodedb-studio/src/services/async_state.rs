@@ -9,6 +9,7 @@ use crate::models::cluster::ClusterMembers;
 use crate::models::designer::DesignSchema;
 use crate::models::designer_change::ChangeReview;
 use crate::models::feed_draft::FeedPreview;
+use crate::models::geo_ops::Validity;
 use crate::models::graph_records::EdgePage;
 use crate::models::jobs::JobList;
 use crate::models::matviews::ViewRows;
@@ -17,6 +18,8 @@ use crate::models::records::{CollectionAccess, Record, RecordPage};
 use crate::models::saved_query::QueryLibrary;
 use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
+use crate::models::spatial::{Feature, RasterSlice, SpatialSetup, Viewport};
+use crate::models::spatial_analyze::AnalysisResult;
 use crate::models::timeseries::{ExploreResult, TimeCatalog};
 use crate::models::topics::{MessageRange, ResetPreview};
 use crate::models::transfer::ExportPreview;
@@ -127,6 +130,54 @@ impl IsEmpty for CollectionSchema {
 }
 
 impl IsEmpty for CollectionAccess {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+/// A connection with no geometry source and no georeferenced array has
+/// nothing for the Spatial screens to open.
+impl IsEmpty for SpatialSetup {
+    fn is_empty(&self) -> bool {
+        self.sources.is_empty() && self.rasters.is_empty()
+    }
+}
+
+/// A viewport with no features still loaded: the map says the box is empty.
+impl IsEmpty for Viewport {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for Feature {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+/// A feature read with nothing selected is a loaded absence, not an empty
+/// result.
+impl IsEmpty for Option<Feature> {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for Validity {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+/// An analysis with no rows still ran: the table says nothing matched.
+impl IsEmpty for AnalysisResult {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for RasterSlice {
     fn is_empty(&self) -> bool {
         false
     }

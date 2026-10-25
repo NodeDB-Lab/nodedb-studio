@@ -8,6 +8,7 @@ pub mod designer_scenes;
 pub mod driver;
 pub mod events_scenes;
 pub mod scenes;
+pub mod spatial_scenes;
 pub mod sync;
 pub mod timeseries_scenes;
 pub mod vector_scenes;

@@ -203,6 +203,23 @@ const TIMESERIES_BACKFILL: &[PanelSpec] = &[
     panel("history", "Backfill history", "Show earlier jobs"),
 ];
 
+const SPATIAL_MAP: &[PanelSpec] = &[
+    panel("map", "Map", "Show the map"),
+    panel("layers", "Layers", "Show the layer list"),
+    panel("feature", "Feature", "Show the selected feature"),
+];
+
+const SPATIAL_ANALYZE: &[PanelSpec] = &[
+    panel("analysis", "Analysis", "Show the operation form"),
+    panel("results", "Results", "Show the result rows"),
+    panel("query", "Query", "Show the SQL and the source"),
+];
+
+const SPATIAL_RASTER: &[PanelSpec] = &[
+    panel("raster", "Raster", "Show the raster"),
+    panel("cell", "Cell", "Show the selected cell"),
+];
+
 const DESIGNER: &[PanelSpec] = &[panel(
     "properties",
     "Properties",
@@ -234,8 +251,10 @@ impl Surface {
             Surface::Timeseries(TimeseriesTab::Dashboards) => TIMESERIES_DASHBOARDS,
             Surface::Timeseries(TimeseriesTab::Lifecycle) => TIMESERIES_LIFECYCLE,
             Surface::Timeseries(TimeseriesTab::Backfill) => TIMESERIES_BACKFILL,
-            Surface::Spatial(SpatialTab::Map | SpatialTab::Analyze | SpatialTab::Raster)
-            | Surface::Search(SearchTab::Results | SearchTab::Analyze | SearchTab::Indexes)
+            Surface::Spatial(SpatialTab::Map) => SPATIAL_MAP,
+            Surface::Spatial(SpatialTab::Analyze) => SPATIAL_ANALYZE,
+            Surface::Spatial(SpatialTab::Raster) => SPATIAL_RASTER,
+            Surface::Search(SearchTab::Results | SearchTab::Analyze | SearchTab::Indexes)
             | Surface::Cluster(
                 ClusterTab::RaftGroups
                 | ClusterTab::Placement

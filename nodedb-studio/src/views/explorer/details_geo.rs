@@ -11,9 +11,11 @@ use crate::models::collection::Collection;
 use crate::models::record_json::pretty;
 use crate::models::records::{CollectionAccess, Record};
 use crate::models::schema::CollectionSchema;
+use crate::models::spatial::SourceRef;
 use crate::routes::Route;
 use crate::routes::tabs::SpatialTab;
 use crate::state::explorer::{DetailsTab, RecordView};
+use crate::state::spatial::SpatialUi;
 use crate::views::explorer::actions::use_launcher;
 use crate::views::explorer::cells::text_label;
 use crate::views::explorer::details::{DetailTabs, effective_tab};
@@ -90,6 +92,7 @@ pub fn SpatialDetails(
 ) -> Element {
     let launcher = use_launcher();
     let copier = use_copier();
+    let spatial = use_context::<SpatialUi>();
     let view = use_context::<Signal<RecordView>>();
     let tabs = DetailsTab::for_collection(&collection);
     let active = effective_tab(view.read().details_tab, &tabs).unwrap_or(DetailsTab::Properties);
@@ -156,6 +159,14 @@ pub fn SpatialDetails(
                     label: "Open in Spatial".to_string(),
                     icon: Icon::MapPin,
                     class: "btn".to_string(),
+                    on_open: {
+                        let source = SourceRef::new(
+                            &collection.name,
+                            schema.geometry().map_or("geometry", |(f, _)| f.name.as_str()),
+                        );
+                        let id = record.id.clone();
+                        move |_| spatial.open_feature(source.clone(), &id)
+                    },
                 }
             }
         }

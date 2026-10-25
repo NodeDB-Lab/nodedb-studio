@@ -15,6 +15,7 @@ use crate::services::graph_data::GraphData;
 use crate::services::job_data::JobData;
 use crate::services::listen_data::ListenData;
 use crate::services::matview_data::MatViewData;
+use crate::services::spatial_data::SpatialData;
 use crate::services::timeseries_data::TimeseriesData;
 use crate::services::topic_data::TopicData;
 use crate::services::transfer_data::TransferData;
@@ -36,6 +37,7 @@ pub trait Backend:
     + ViewersData
     + TimeseriesData
     + VectorData
+    + SpatialData
     + GraphData
     + TransferData
     + DesignerData
@@ -57,6 +59,7 @@ impl<T> Backend for T where
         + TimeseriesData
         + TimeseriesData
         + VectorData
+        + SpatialData
         + GraphData
         + TransferData
         + DesignerData

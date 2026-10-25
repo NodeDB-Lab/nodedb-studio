@@ -28,6 +28,7 @@ mod tests {
     use crate::services::job_data::JobData;
     use crate::services::listen_data::ListenData;
     use crate::services::matview_data::MatViewData;
+    use crate::services::spatial_data::SpatialData;
     use crate::services::timeseries_data::TimeseriesData;
     use crate::services::topic_data::TopicData;
     use crate::services::vector_data::VectorData;
@@ -192,7 +193,7 @@ mod tests {
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.spatial_features("places").await,
+            svc.spatial_setup().await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(

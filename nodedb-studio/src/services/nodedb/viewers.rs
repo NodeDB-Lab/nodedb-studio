@@ -2,20 +2,13 @@
 
 use async_trait::async_trait;
 
-use crate::models::viewers::{FtsHit, SpatialFeature, SyncPeer};
+use crate::models::viewers::{FtsHit, SyncPeer};
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::viewers_data::ViewersData;
 
 #[async_trait(?Send)]
 impl ViewersData for NodeDbConnectionService {
-    async fn spatial_features(
-        &self,
-        _collection: &str,
-    ) -> Result<Vec<SpatialFeature>, StudioError> {
-        Err(StudioError::NotConnected)
-    }
-
     async fn fts_hits(&self, _collection: &str, _query: &str) -> Result<Vec<FtsHit>, StudioError> {
         Err(StudioError::NotConnected)
     }

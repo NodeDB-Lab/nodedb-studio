@@ -13,6 +13,7 @@ use crate::state::designer::DesignerState;
 use crate::state::events::{EventsSeed, EventsUi};
 use crate::state::explorer::{RecordView, Selected};
 use crate::state::query::QueryWorkspace;
+use crate::state::spatial::{SpatialSeed, SpatialUi};
 use crate::state::timeseries::{TimeseriesSeed, TimeseriesUi};
 use crate::state::vector::{VectorSeed, VectorUi};
 
@@ -34,6 +35,8 @@ pub struct SceneTarget {
     pub vector: Option<VectorSeed>,
     /// The Timeseries tabs' drafts and open documents. `None` keeps them.
     pub timeseries: Option<TimeseriesSeed>,
+    /// The Spatial view, drafts, and selection. `None` keeps the current ones.
+    pub spatial: Option<SpatialSeed>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -56,6 +59,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let events = use_context::<EventsUi>();
     let vector = use_context::<VectorUi>();
     let timeseries = use_context::<TimeseriesUi>();
+    let spatial = use_context::<SpatialUi>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -84,6 +88,9 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         }
         if let Some(seed) = t.timeseries {
             timeseries.apply(seed);
+        }
+        if let Some(seed) = t.spatial {
+            spatial.apply(seed);
         }
         nav.replace(t.route);
     });

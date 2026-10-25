@@ -32,6 +32,7 @@ use crate::state::persist::{PREFERENCES, PersistMode, Store, WORKSPACE};
 use crate::state::preferences::Preferences;
 use crate::state::query::{QueryWorkspace, TxEpoch};
 use crate::state::record_editor::{DeleteRequest, RecordEditor};
+use crate::state::spatial::SpatialUi;
 use crate::state::timeseries::TimeseriesUi;
 use crate::state::ui::{
     ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover, PrefsPane,
@@ -58,6 +59,7 @@ const EVENTS: Asset = asset!("/assets/events.css");
 const GRAPH: Asset = asset!("/assets/graph.css");
 const VECTOR: Asset = asset!("/assets/vector.css");
 const TIMESERIES: Asset = asset!("/assets/timeseries.css");
+const SPATIAL: Asset = asset!("/assets/spatial.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -157,6 +159,9 @@ pub fn App() -> Element {
     // waiting for review. A page lists the panels it creates at run time here,
     // for the View menu.
     TimeseriesUi::provide();
+    // Spatial keeps the map view and selection, each source's analysis draft,
+    // and the raster cell while the user is on another page.
+    SpatialUi::provide();
     use_context_provider(|| DynamicPanels(Signal::new(Vec::new())));
     use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
@@ -301,6 +306,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: GRAPH }
         document::Stylesheet { href: VECTOR }
         document::Stylesheet { href: TIMESERIES }
+        document::Stylesheet { href: SPATIAL }
         {scene_driver}
         div {
             class: "studio-root",

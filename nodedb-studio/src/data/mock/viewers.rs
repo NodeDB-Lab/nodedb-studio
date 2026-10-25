@@ -1,29 +1,10 @@
-//! Specialized-viewer fixtures: spatial, FTS, sync.
+//! Specialized-viewer fixtures: FTS and sync.
 //!
 //! The client decodes `SearchResult.metadata` as empty, which is why `models::viewers` defines its own display-carrying
 //! types instead of reusing client types here. These fixtures are deterministic
 //! stand-ins for what the real implementation will decode from raw SQL rows.
 
-use crate::models::viewers::{FtsHit, SpatialFeature, SyncPeer};
-
-/// Spatial features for `collection`, with placeholder GeoJSON geometry. Ids
-/// are keyed off `collection` so a caller that passes the wrong collection
-/// produces visibly different data.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn spatial_features(collection: &str) -> Vec<SpatialFeature> {
-    vec![
-        SpatialFeature {
-            id: format!("{collection}-kl-tower"),
-            name: "KL Tower".into(),
-            geometry_json: r#"{"type":"Point","coordinates":[101.7038,3.1528]}"#.into(),
-        },
-        SpatialFeature {
-            id: format!("{collection}-petronas"),
-            name: "Petronas Towers".into(),
-            geometry_json: r#"{"type":"Point","coordinates":[101.7119,3.1579]}"#.into(),
-        },
-    ]
-}
+use crate::models::viewers::{FtsHit, SyncPeer};
 
 /// Full-text-search hits for `query` within `collection`. Ids are keyed off
 /// `collection` so a caller that passes the wrong collection produces

@@ -1,7 +1,8 @@
-//! Specialized-viewer reads at the backend seam: spatial, FTS, and sync.
-//! Vector Space has its own trait, `vector_data`; Timeseries has `timeseries_data`.
+//! Specialized-viewer reads at the backend seam: FTS and sync.
+//! Vector Space has its own trait, `vector_data`; Timeseries has `timeseries_data`;
+//! Spatial has `spatial_data`.
 //!
-//! `spatial_features` and `fts_hits` take a `collection`: the
+//! `fts_hits` takes a `collection`: the
 //! Explorer already scopes its selection to one collection per storage mode,
 //! so each viewer's read is parameterised the same way `records(collection)`
 //! is. `sync_peers` is deliberately left unparameterised: it is
@@ -9,15 +10,11 @@
 
 use async_trait::async_trait;
 
-use crate::models::viewers::{FtsHit, SpatialFeature, SyncPeer};
+use crate::models::viewers::{FtsHit, SyncPeer};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
 pub trait ViewersData {
-    /// Features for the spatial viewer's map, scoped to `collection`.
-    #[allow(dead_code)] // SEAM-UNWIRED
-    async fn spatial_features(&self, collection: &str) -> Result<Vec<SpatialFeature>, StudioError>;
-
     /// Full-text-search hits for `query` within `collection`.
     #[allow(dead_code)] // SEAM-UNWIRED
     async fn fts_hits(&self, collection: &str, query: &str) -> Result<Vec<FtsHit>, StudioError>;
@@ -36,13 +33,6 @@ mod tests {
     #[tokio::test]
     async fn every_viewer_read_is_keyed_and_non_empty() {
         let svc = MockConnectionService::ready();
-
-        let spatial = svc.spatial_features("places").await.expect("geo");
-        assert!(!spatial.is_empty());
-        assert!(
-            spatial.iter().all(|f| !f.id.is_empty()),
-            "every spatial feature needs a stable key"
-        );
 
         let fts = svc.fts_hits("articles", "nodedb").await.expect("fts");
         assert!(!fts.is_empty());
@@ -63,45 +53,6 @@ mod tests {
     // `apply(self.behavior, mock::x)` and a mis-wired `Ok(mock::x())` both
     // satisfy a single shared assertion, so every method needs its own proof
     // that it actually reads `self.behavior` (see admin_data.rs).
-
-    #[tokio::test]
-    async fn spatial_features_ready_have_geometry() {
-        let svc = MockConnectionService::ready();
-        let feats = svc
-            .spatial_features("places")
-            .await
-            .expect("ready yields features");
-        assert!(
-            feats.iter().all(|f| !f.geometry_json.is_empty()),
-            "every feature must carry display geometry"
-        );
-    }
-
-    #[tokio::test]
-    async fn spatial_features_ids_vary_by_collection() {
-        let svc = MockConnectionService::ready();
-        let a = svc.spatial_features("places").await.expect("geo");
-        let b = svc.spatial_features("orders").await.expect("geo");
-        assert_ne!(
-            a.first().map(|f| f.id.as_str()),
-            b.first().map(|f| f.id.as_str()),
-            "spatial feature ids must key off the requested collection"
-        );
-    }
-
-    #[tokio::test]
-    async fn spatial_features_empty_is_empty() {
-        let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.spatial_features("places").await));
-        assert!(s.is_empty());
-    }
-
-    #[tokio::test]
-    async fn spatial_features_erroring_is_err() {
-        let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.spatial_features("places").await));
-        assert!(s.error_message().is_some());
-    }
 
     #[tokio::test]
     async fn fts_hits_ready_excerpts_mention_the_query() {

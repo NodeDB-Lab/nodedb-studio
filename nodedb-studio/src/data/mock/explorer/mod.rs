@@ -16,7 +16,7 @@ mod sessions;
 mod shipments;
 
 pub use access::collection_access;
-pub use array::{array_schema, array_slice};
+pub use array::{array_schema, array_slice, sample as array_cell};
 pub use catalog::collections;
 pub use edges::{GRAPH, edge_page};
 pub use query::{
