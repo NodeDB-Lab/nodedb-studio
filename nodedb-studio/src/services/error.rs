@@ -52,6 +52,30 @@ pub enum StudioError {
     /// A database switch named a database the connection does not list.
     #[error("the connection has no database named `{0}`")]
     UnknownDatabase(String),
+    /// A record write named a revision the server no longer holds: someone
+    /// else wrote the record first. The editor keeps the edit and offers the
+    /// stored record.
+    #[error(
+        "revision conflict on {collection}/{id}: you edited revision {expected}, the server holds revision {stored}"
+    )]
+    RevisionConflict {
+        collection: String,
+        id: String,
+        expected: u64,
+        stored: u64,
+    },
+    /// A write or read named a record the collection does not hold.
+    #[error("{collection}/{id} does not exist")]
+    RecordMissing { collection: String, id: String },
+    /// The session lacks the privilege a write needs.
+    #[error("{privilege} permission required on {collection}")]
+    PermissionDenied {
+        privilege: &'static str,
+        collection: String,
+    },
+    /// The server's own validation refused a write.
+    #[error("the server rejected the write: {reason}")]
+    Rejected { reason: String },
 }
 
 impl StudioError {
@@ -65,7 +89,11 @@ impl StudioError {
             | StudioError::MissingUsername
             | StudioError::NameTaken(_)
             | StudioError::UnknownConnection(_)
-            | StudioError::UnknownDatabase(_) => false,
+            | StudioError::UnknownDatabase(_)
+            | StudioError::RevisionConflict { .. }
+            | StudioError::RecordMissing { .. }
+            | StudioError::PermissionDenied { .. }
+            | StudioError::Rejected { .. } => false,
             StudioError::Connection(e)
             | StudioError::Auth(e)
             | StudioError::NotFound(e)
@@ -217,6 +245,23 @@ mod tests {
             StudioError::from(NodeDbError::storage("x")),
             StudioError::Server(_)
         ));
+    }
+
+    #[test]
+    fn a_revision_conflict_names_both_revisions_and_is_not_retriable() {
+        let e = StudioError::RevisionConflict {
+            collection: "users".into(),
+            id: "u44182".into(),
+            expected: 18,
+            stored: 19,
+        };
+        let text = e.to_string();
+        assert!(text.contains("users/u44182"), "{text}");
+        assert!(
+            text.contains("revision 18") && text.contains("revision 19"),
+            "{text}"
+        );
+        assert!(!e.is_retriable());
     }
 
     #[test]

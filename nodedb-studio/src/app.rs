@@ -22,8 +22,10 @@ use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, ConnectError};
 use crate::state::connection_form::ConnectionForm;
 use crate::state::connections_registry::SavedConnection;
+use crate::state::explorer::{RecordView, RecordsEpoch, TransferNotice};
 use crate::state::persist::{PREFERENCES, PersistMode, Store, WORKSPACE};
 use crate::state::preferences::Preferences;
+use crate::state::record_editor::{DeleteRequest, RecordEditor};
 use crate::state::ui::{
     ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover, PrefsPane,
 };
@@ -41,6 +43,7 @@ const SHELL: Asset = asset!("/assets/shell.css");
 const PANELS: Asset = asset!("/assets/panels.css");
 const CONNECTIONS: Asset = asset!("/assets/connections.css");
 const OVERLAYS: Asset = asset!("/assets/overlays.css");
+const EXPLORER: Asset = asset!("/assets/explorer.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -113,6 +116,14 @@ pub fn App() -> Element {
     // The connection dialog's fields. The opener fills them, and the dialog
     // clears them (the secret included) when it closes.
     use_context_provider(|| Signal::new(ConnectionForm::blank()));
+    // The record dialogs read what their opener put here. The Explorer's
+    // view of its collection and the write counter sit above both the studio
+    // and the modal host, which are siblings.
+    use_context_provider(|| Signal::new(None::<RecordEditor>));
+    use_context_provider(|| Signal::new(None::<DeleteRequest>));
+    use_context_provider(|| RecordsEpoch(Signal::new(0)));
+    use_context_provider(|| TransferNotice(Signal::new(None)));
+    use_context_provider(|| Signal::new(RecordView::default()));
     // Whether the manager shows over an open session, and which connection it
     // highlights.
     let mut manager = use_context_provider(|| Signal::new(ManagerOpen::default()));
@@ -248,6 +259,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: PANELS }
         document::Stylesheet { href: CONNECTIONS }
         document::Stylesheet { href: OVERLAYS }
+        document::Stylesheet { href: EXPLORER }
         {scene_driver}
         div {
             class: "studio-root",

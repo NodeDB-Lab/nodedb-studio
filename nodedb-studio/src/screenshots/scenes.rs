@@ -4,26 +4,73 @@
 //! data on screen is whatever that backend serves, so the scene list does
 //! not change when the backend does.
 
-use crate::models::collection::StorageMode;
+use crate::data::mock;
+use crate::models::collection::Profile;
 use crate::models::connections::ConnectionTest;
+use crate::models::records::Filter;
 use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab};
 use crate::routes::{Destination, Route};
 use crate::state::connection_form::{ConnectionForm, TestState};
+use crate::state::explorer::{
+    CollectionTab, DetailsTab, GraphSub, RecordView, Selected, TransferTab,
+};
+use crate::state::record_editor::RecordEditor;
 use crate::state::ui::{ModalKind, Popover, PrefsPane};
 
 /// The saved connection every studio scene opens. It holds every capability,
 /// so every destination renders.
 pub const STUDIO_CONNECTION: &str = "staging-cluster";
 
+/// The saved connection whose credentials cannot write.
+pub const READ_ONLY_CONNECTION: &str = "Production";
+
+/// How a scene leaves the Explorer: the collection, and how it is viewed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExplorerSeed {
+    pub collection: &'static str,
+    pub tab: CollectionTab,
+    /// A `field = value` filter on the Data tab.
+    pub filter: Option<(&'static str, &'static str)>,
+    pub details_tab: Option<DetailsTab>,
+    /// The relation filter of the Graph tab.
+    pub relation: Option<&'static str>,
+    /// The Data Transfer tab. `None` is Export.
+    pub transfer: Option<TransferTab>,
+}
+
+impl ExplorerSeed {
+    /// The selection and view the Explorer starts the scene with.
+    pub fn target(&self) -> (Selected, RecordView) {
+        let view = RecordView {
+            tab: self.tab,
+            filter: self.filter.map(|(field, value)| Filter {
+                field: field.to_string(),
+                value: value.to_string(),
+            }),
+            details_tab: self.details_tab,
+            relation: self.relation.map(str::to_string),
+            graph_sub: GraphSub::Edges,
+            transfer_tab: self.transfer.unwrap_or_default(),
+            ..RecordView::default()
+        };
+        (
+            Selected {
+                name: self.collection.to_string(),
+            },
+            view,
+        )
+    }
+}
+
 /// What the window shows under any overlay.
 #[derive(Clone, PartialEq)]
 pub enum Screen {
     /// The Connection Manager.
     Disconnected,
-    /// The studio at `route`. `collection` sets the Explorer selection.
+    /// The studio at `route`. `explorer` sets the Explorer's selection.
     Studio {
         route: Route,
-        collection: Option<(&'static str, StorageMode)>,
+        explorer: Option<ExplorerSeed>,
     },
 }
 
@@ -35,6 +82,8 @@ pub enum Overlay {
     /// The connection dialog, open with these fields.
     NewConnection(Box<ConnectionForm>),
     Popover(Popover),
+    /// The record editor, open on this edit.
+    RecordEditor(Box<RecordEditor>),
     /// The palette, open with this text typed.
     Palette(&'static str),
 }
@@ -65,6 +114,8 @@ pub struct Scene {
     /// File stem of the PNG. Lowercase ASCII, digits and `-`.
     pub name: &'static str,
     pub screen: Screen,
+    /// The saved connection the scene runs on.
+    pub connection: &'static str,
     pub overlay: Overlay,
     /// Panels of the scene's page to hide, by `PanelSpec` id. Every other
     /// panel shows at its default size.
@@ -75,6 +126,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
     Scene {
         name,
         screen,
+        connection: STUDIO_CONNECTION,
         overlay,
         hidden: &[],
     }
@@ -83,22 +135,53 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
 fn at(route: Route) -> Screen {
     Screen::Studio {
         route,
-        collection: None,
+        explorer: None,
     }
 }
 
-fn collection(name: &'static str, mode: StorageMode) -> Screen {
+fn seed(collection: &'static str) -> ExplorerSeed {
+    ExplorerSeed {
+        collection,
+        tab: CollectionTab::Data,
+        filter: None,
+        details_tab: None,
+        relation: None,
+        transfer: None,
+    }
+}
+
+/// The Explorer on `collection`, with its default view.
+fn explorer(collection: &'static str) -> Screen {
+    explorer_with(seed(collection))
+}
+
+fn explorer_with(seed: ExplorerSeed) -> Screen {
     Screen::Studio {
         route: Route::Explorer {},
-        collection: Some((name, mode)),
+        explorer: Some(seed),
     }
+}
+
+/// The edit the record editor scene shows: `users/u44182` at revision 18,
+/// stored as pending, with the status changed to active.
+fn editor_seed() -> Option<RecordEditor> {
+    let schema = mock::collection_schema("users")?;
+    let mut stored = mock::stored_record("users", "u44182", &mock::Overlay::default())?;
+    if let nodedb_types::Value::Object(map) = &mut stored.value {
+        map.insert(
+            "status".into(),
+            nodedb_types::Value::String("pending".into()),
+        );
+    }
+    let mut editor = RecordEditor::edit("users", Profile::Document, schema, stored);
+    editor.text = editor.text.replace("\"pending\"", "\"active\"");
+    Some(editor)
 }
 
 /// Capture order. Scenes on the same connection run back to back, so the run
 /// connects once.
 pub fn scenes() -> Vec<Scene> {
     use Overlay as O;
-    use StorageMode as M;
     let mut all = vec![
         scene("connections-manager", Screen::Disconnected, O::None),
         scene(
@@ -107,37 +190,92 @@ pub fn scenes() -> Vec<Scene> {
             O::NewConnection(Box::new(staging_form())),
         ),
         scene(
-            "explorer-document",
-            collection("users", M::Document),
+            "explorer-documents",
+            explorer_with(ExplorerSeed {
+                filter: Some(("status", "active")),
+                ..seed("users")
+            }),
             O::None,
         ),
         scene(
-            "explorer-strict",
-            collection("accounts", M::Strict),
+            "explorer-strict-records",
+            explorer_with(ExplorerSeed {
+                filter: Some(("currency", "USD")),
+                ..seed("orders")
+            }),
             O::None,
         ),
         scene(
-            "explorer-vector",
-            collection("embeddings", M::Vector),
+            "explorer-graph-records",
+            explorer_with(ExplorerSeed {
+                tab: CollectionTab::Graph,
+                relation: Some("PURCHASED"),
+                ..seed("users")
+            }),
             O::None,
         ),
-        scene("explorer-graph", collection("social", M::Graph), O::None),
         scene(
-            "explorer-timeseries",
-            collection("metrics", M::Timeseries),
+            "explorer-vector-records",
+            explorer_with(ExplorerSeed {
+                details_tab: Some(DetailsTab::Vector),
+                ..seed("articles")
+            }),
             O::None,
         ),
-        scene("explorer-kv", collection("sessions", M::Kv), O::None),
+        scene("explorer-timeseries-records", explorer("sales"), O::None),
+        scene("explorer-spatial-records", explorer("places"), O::None),
+        scene("explorer-search-records", explorer("articles"), O::None),
         scene(
-            "explorer-spatial",
-            collection("places", M::Spatial),
+            "explorer-columnar-records",
+            explorer_with(ExplorerSeed {
+                filter: Some(("warehouse", "nyc")),
+                ..seed("inventory")
+            }),
             O::None,
         ),
-        scene("explorer-fts", collection("articles", M::Fts), O::None),
+        scene("explorer-array-data", explorer("climate_cube"), O::None),
+        scene("explorer", explorer("sessions"), O::None),
+    ];
+    if let Some(editor) = editor_seed() {
+        all.push(scene(
+            "explorer-record-editor",
+            explorer("users"),
+            O::RecordEditor(Box::new(editor)),
+        ));
+    }
+    all.extend([
         scene(
-            "insert-document",
-            collection("users", M::Document),
-            O::Modal(ModalKind::DocForm),
+            "data-import-export",
+            Screen::Studio {
+                route: Route::DataTransfer {},
+                explorer: Some(ExplorerSeed {
+                    filter: Some(("status", "active")),
+                    ..seed("users")
+                }),
+            },
+            O::None,
+        ),
+        scene(
+            "data-transfer-import",
+            Screen::Studio {
+                route: Route::DataTransfer {},
+                explorer: Some(ExplorerSeed {
+                    transfer: Some(TransferTab::Import),
+                    ..seed("users")
+                }),
+            },
+            O::None,
+        ),
+        scene(
+            "data-transfer-history",
+            Screen::Studio {
+                route: Route::DataTransfer {},
+                explorer: Some(ExplorerSeed {
+                    transfer: Some(TransferTab::History),
+                    ..seed("users")
+                }),
+            },
+            O::None,
         ),
         scene("query", at(Route::Query {}), O::None),
         scene(
@@ -147,7 +285,7 @@ pub fn scenes() -> Vec<Scene> {
         ),
         scene("designer", at(Route::Designer {}), O::None),
         scene("console", at(Route::Console {}), O::None),
-    ];
+    ]);
     all.extend([
         scene("graph-explorer", at(Destination::Graph.route()), O::None),
         scene("vector-space", at(Destination::Vector.route()), O::None),
@@ -184,22 +322,22 @@ pub fn scenes() -> Vec<Scene> {
     all.extend([
         scene(
             "shell-connection-switcher",
-            collection("users", M::Document),
+            explorer("users"),
             O::Popover(Popover::Connection),
         ),
         scene(
             "shell-database-selector",
-            collection("users", M::Document),
+            explorer("users"),
             O::Popover(Popover::Database),
         ),
         scene(
             "shell-account",
-            collection("users", M::Document),
+            explorer("users"),
             O::Popover(Popover::Avatar),
         ),
         scene(
             "shell-notifications",
-            collection("users", M::Document),
+            explorer("users"),
             O::Popover(Popover::Notifications),
         ),
         scene(
@@ -213,6 +351,21 @@ pub fn scenes() -> Vec<Scene> {
             O::Palette("graph"),
         ),
     ]);
+    // The only scene on another connection, so it runs last: a read-only
+    // analyst session, an empty filtered result, and the View menu open with
+    // Record details unchecked.
+    all.push(Scene {
+        connection: READ_ONLY_CONNECTION,
+        hidden: &["details"],
+        ..scene(
+            "state-access-empty",
+            explorer_with(ExplorerSeed {
+                filter: Some(("status", "delayed")),
+                ..seed("shipments")
+            }),
+            O::Popover(Popover::View),
+        )
+    });
     all
 }
 
@@ -274,14 +427,14 @@ mod tests {
     /// A route the connection cannot serve redirects to the Explorer, which
     /// would write an Explorer image under the wrong name.
     #[test]
-    fn studio_connection_serves_every_scene_route() {
-        let caps = mock::connections()
-            .into_iter()
-            .find(|c| c.name == STUDIO_CONNECTION)
-            .and_then(|c| c.profile)
-            .map(|p| p.capabilities)
-            .expect("the studio connection must be a reachable mock entry");
+    fn each_scene_connection_serves_its_route() {
         for s in scenes() {
+            let caps = mock::connections()
+                .into_iter()
+                .find(|c| c.name == s.connection)
+                .and_then(|c| c.profile)
+                .map(|p| p.capabilities)
+                .expect("a scene connection must be a reachable mock entry");
             if let Screen::Studio { route, .. } = &s.screen
                 && let Some(cap) = route.destination().required_cap()
             {
@@ -290,23 +443,90 @@ mod tests {
         }
     }
 
-    /// A selection absent from the collection list is replaced by the
-    /// Explorer's default, which would write the wrong viewer.
+    /// A selection absent from the catalog is replaced by the Explorer's
+    /// default, which would write the wrong view.
     #[test]
-    fn every_selected_collection_exists_with_its_mode() {
-        let groups = mock::collection_groups();
+    fn every_selected_collection_exists_in_the_catalog() {
+        let catalog = mock::collections();
         for s in scenes() {
             if let Screen::Studio {
-                collection: Some((name, mode)),
+                explorer: Some(seed),
                 ..
             } = s.screen
             {
-                let found = groups
-                    .iter()
-                    .flat_map(|g| &g.collections)
-                    .any(|c| c.name == name && c.mode == mode);
-                assert!(found, "scene `{}` selects missing `{name}`", s.name);
+                assert!(
+                    catalog.iter().any(|c| c.name == seed.collection),
+                    "scene `{}` selects missing `{}`",
+                    s.name,
+                    seed.collection
+                );
             }
         }
+    }
+
+    /// A tab the collection does not offer falls back to Data, which would
+    /// write the wrong view.
+    #[test]
+    fn every_seeded_tab_exists_for_its_collection() {
+        let catalog = mock::collections();
+        for s in scenes() {
+            if let Screen::Studio {
+                explorer: Some(seed),
+                ..
+            } = s.screen
+                && let Some(c) = catalog.iter().find(|c| c.name == seed.collection)
+            {
+                assert!(
+                    CollectionTab::for_collection(c).contains(&seed.tab),
+                    "scene `{}`: `{}` has no {:?} tab",
+                    s.name,
+                    seed.collection,
+                    seed.tab
+                );
+                if let Some(d) = seed.details_tab {
+                    assert!(
+                        DetailsTab::for_collection(c).contains(&d),
+                        "scene `{}`: `{}` has no {d:?} details tab",
+                        s.name,
+                        seed.collection
+                    );
+                }
+            }
+        }
+    }
+
+    /// The scenes the design names, each once.
+    #[test]
+    fn every_explorer_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in [
+            "explorer-documents",
+            "explorer-strict-records",
+            "explorer-graph-records",
+            "explorer-vector-records",
+            "explorer-timeseries-records",
+            "explorer-spatial-records",
+            "explorer-search-records",
+            "explorer-columnar-records",
+            "explorer-array-data",
+            "explorer",
+            "explorer-record-editor",
+            "data-import-export",
+            "state-access-empty",
+        ] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
+        }
+    }
+
+    /// The state scene hides Record details and runs on the read-only session.
+    #[test]
+    fn the_access_scene_is_read_only_with_the_inspector_hidden() {
+        let all = scenes();
+        let s = all
+            .iter()
+            .find(|s| s.name == "state-access-empty")
+            .expect("scene");
+        assert_eq!(s.connection, READ_ONLY_CONNECTION);
+        assert_eq!(s.hidden, ["details"]);
     }
 }

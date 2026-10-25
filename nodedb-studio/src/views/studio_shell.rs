@@ -8,7 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::routes::Route;
-use crate::state::explorer::Selected;
+use crate::state::explorer::{RecordView, Selected};
 
 #[component]
 pub fn Studio() -> Element {
@@ -17,9 +17,11 @@ pub fn Studio() -> Element {
     let mut selected = use_context_provider(|| Signal::new(None::<Selected>));
 
     // A selection names a collection on one server. Another server can lack
-    // it, or hold one by that name in another storage mode, so a switch
-    // clears it and the Explorer picks the new server's default. Only a
-    // change clears it: the first run must not undo the Explorer's default.
+    // it, or hold one by that name with another profile, so a switch clears
+    // it and how it was viewed, and the Explorer picks the new server's
+    // default. Only a change clears it: the first run must not undo the
+    // Explorer's default.
+    let mut view = use_context::<Signal<RecordView>>();
     let conn = use_context::<Memo<Option<String>>>();
     let mut seen = use_signal(|| conn.peek().clone());
     use_effect(move || {
@@ -27,6 +29,7 @@ pub fn Studio() -> Element {
         if *seen.peek() != now {
             seen.set(now);
             selected.set(None);
+            view.set(RecordView::default());
         }
     });
 

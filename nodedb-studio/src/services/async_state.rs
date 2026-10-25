@@ -4,9 +4,13 @@
 //! testable. Every later wiring phase maps a `use_resource` result into an
 //! `AsyncState<T>` via `from_value` and hands it to the `AsyncView` component.
 
+use crate::models::array_data::{ArraySchema, SliceResult};
 use crate::models::cluster::ClusterMembers;
-use crate::models::explorer::RecordDetail;
+use crate::models::graph_records::EdgePage;
+use crate::models::records::{CollectionAccess, Record, RecordPage};
+use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
+use crate::models::transfer::ExportPreview;
 use crate::models::viewers::SubGraph;
 use crate::models::workbench::{QueryPlan, ResultSet};
 use crate::services::error::StudioError;
@@ -49,7 +53,53 @@ impl IsEmpty for NavBadges {
     }
 }
 
-impl IsEmpty for RecordDetail {
+/// A record read is one value: it exists or it is `RecordMissing`.
+impl IsEmpty for Record {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+/// A page with no rows still loaded: the Explorer states why it is empty
+/// (a filter, a range) and offers the way out, which `AsyncView`'s one
+/// message cannot.
+impl IsEmpty for RecordPage {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for EdgePage {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for CollectionSchema {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for CollectionAccess {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for ArraySchema {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for SliceResult {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for ExportPreview {
     fn is_empty(&self) -> bool {
         false
     }
@@ -297,13 +347,15 @@ mod tests {
         let nav_badges = AsyncState::from_value(Some(Ok(NavBadges { query: 0 })));
         assert!(matches!(nav_badges, AsyncState::Loaded(_)));
 
-        let record_detail = AsyncState::from_value(Some(Ok(RecordDetail {
-            id: String::new(),
-            title: String::new(),
-            body_json: String::new(),
-            footer: String::new(),
+        let record = AsyncState::from_value(Some(Ok(Record::new("r1", 1, Vec::new()))));
+        assert!(matches!(record, AsyncState::Loaded(_)));
+
+        let page = AsyncState::from_value(Some(Ok(RecordPage {
+            rows: Vec::new(),
+            total: 0,
+            observed_at: 0,
         })));
-        assert!(matches!(record_detail, AsyncState::Loaded(_)));
+        assert!(matches!(page, AsyncState::Loaded(_)));
 
         let query_plan = AsyncState::from_value(Some(Ok(QueryPlan {
             text: String::new(),

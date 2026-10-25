@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 use crate::data::mock;
+use crate::models::transfer::TransferJob;
 use crate::services::mock_behavior::MockBehavior;
 use crate::state::connections_registry::SavedConnection;
 
@@ -33,6 +34,10 @@ pub struct MockConnectionService {
     /// How far the most recent `cdc_batch` read. Commit promotes this into
     /// `cdc_committed`.
     pub(super) cdc_read_end: Rc<Cell<usize>>,
+    /// Record writes made this session, laid over the Explorer fixtures.
+    pub(super) records: Rc<RefCell<mock::Overlay>>,
+    /// Import and export jobs, newest first. Starting and cancelling write here.
+    pub(super) jobs: Rc<RefCell<Vec<TransferJob>>>,
 }
 
 impl Default for MockConnectionService {
@@ -52,6 +57,8 @@ impl MockConnectionService {
             session: Rc::default(),
             cdc_committed: Rc::default(),
             cdc_read_end: Rc::default(),
+            records: Rc::default(),
+            jobs: Rc::new(RefCell::new(mock::transfer_jobs())),
         }
     }
 

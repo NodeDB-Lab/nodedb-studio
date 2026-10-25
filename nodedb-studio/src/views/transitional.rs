@@ -16,7 +16,6 @@ use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
 use crate::views::console::Console;
 use crate::views::designer::Designer;
-use crate::views::explorer::Explorer;
 use crate::views::fts_inspector::FtsInspector;
 use crate::views::graph_explorer::GraphExplorer;
 use crate::views::query::Query;
@@ -41,16 +40,6 @@ fn Unbuilt(title: &'static str) -> Element {
             }
         }
     }
-}
-
-#[component]
-pub fn ExplorerPage() -> Element {
-    rsx! { div { class: "legacy-page", Explorer {} } }
-}
-
-#[component]
-pub fn DataTransferPage() -> Element {
-    rsx! { Unbuilt { title: "Import and export" } }
 }
 
 #[component]

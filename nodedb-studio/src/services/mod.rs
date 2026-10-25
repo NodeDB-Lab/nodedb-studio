@@ -13,6 +13,7 @@ pub mod mock;
 pub mod mock_behavior;
 pub mod nodedb;
 pub mod streams_data;
+pub mod transfer_data;
 pub mod viewers_data;
 pub mod workbench_data;
 

@@ -135,8 +135,6 @@ pub fn Panel(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Side {
     /// The panel is left of (or above) the handle: dragging right grows it.
-    // First used by a left-hand resizable panel; that screen removes this.
-    #[allow(dead_code)]
     Before,
     /// The panel is right of (or below) the handle: dragging right shrinks it.
     After,

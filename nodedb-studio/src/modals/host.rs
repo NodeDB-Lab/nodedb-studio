@@ -3,13 +3,10 @@
 
 use dioxus::prelude::*;
 
-use crate::components::modal::Modal;
 use crate::modals::confirm_delete::ConfirmDelete;
 use crate::modals::connection_form::ConnectionDialog;
-use crate::modals::entity_forms::{
-    DocForm, GraphEdgeForm, GraphNodeForm, KvForm, SpatialForm, StrictForm, VectorForm,
-};
 use crate::modals::preferences::PreferencesDialog;
+use crate::modals::record_editor::RecordEditorDialog;
 use crate::state::ui::ModalKind;
 
 /// Renders the currently-open modal (from the shared `ModalKind` signal), or
@@ -21,30 +18,8 @@ pub fn ModalHost() -> Element {
         None => rsx! {},
         Some(ModalKind::NewConnection) => rsx! { ConnectionDialog {} },
         Some(ModalKind::Preferences(pane)) => rsx! { PreferencesDialog { pane } },
-        Some(ModalKind::DocForm) => rsx! {
-            Modal { title: "Edit document · evt_01H8QXG2K…", width: 640, DocForm {} }
-        },
-        Some(ModalKind::StrictForm) => rsx! {
-            Modal { title: "Edit row · orders / 442003", width: 560, StrictForm {} }
-        },
-        Some(ModalKind::VectorForm) => rsx! {
-            Modal { title: "Edit vector · e_001", width: 640, VectorForm {} }
-        },
-        Some(ModalKind::GraphNodeForm) => rsx! {
-            Modal { title: "Edit node · u_44182", width: 540, GraphNodeForm {} }
-        },
-        Some(ModalKind::GraphEdgeForm) => rsx! {
-            Modal { title: "New edge", width: 540, GraphEdgeForm {} }
-        },
-        Some(ModalKind::KvForm) => rsx! {
-            Modal { title: "Edit · session:u_44182", width: 540, KvForm {} }
-        },
-        Some(ModalKind::SpatialForm) => rsx! {
-            Modal { title: "Edit feature · feature_8281", width: 640, SpatialForm {} }
-        },
-        Some(ModalKind::ConfirmDelete) => rsx! {
-            Modal { title: "Delete record", width: 420, ConfirmDelete {} }
-        },
+        Some(ModalKind::RecordEditor) => rsx! { RecordEditorDialog {} },
+        Some(ModalKind::ConfirmDelete) => rsx! { ConfirmDelete {} },
     }
 }
 
@@ -53,13 +28,36 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
+    use crate::models::collection::Profile;
+    use crate::models::records::Record;
+    use crate::models::schema::{CollectionSchema, FieldType, SchemaField};
     use crate::services::MockConnectionService;
     use crate::services::backend::Backend;
     use crate::state::connection::{ActiveConnection, ConnectError};
     use crate::state::connection_form::{ConnectionForm, TestState};
     use crate::state::connections_registry::SavedConnection;
+    use crate::state::explorer::{RecordView, RecordsEpoch};
     use crate::state::preferences::Preferences;
+    use crate::state::record_editor::{DeleteRequest, DeleteTarget, RecordEditor};
     use crate::state::ui::{ManagerOpen, ManagerSelection, PrefsPane};
+
+    fn sample_editor() -> RecordEditor {
+        let mut schema = CollectionSchema::new("users");
+        schema.id_field = Some("id".into());
+        schema.fields = vec![SchemaField {
+            name: "id".into(),
+            ty: FieldType::String { max: None },
+            required: true,
+            reference: None,
+            time_key: false,
+        }];
+        let stored = Record::new(
+            "u1",
+            18,
+            vec![("id", nodedb_types::Value::String("u1".into()))],
+        );
+        RecordEditor::edit("users", Profile::Document, schema, stored)
+    }
 
     /// The context every dialog reads.
     fn provide_app(kind: ModalKind, form: ConnectionForm) {
@@ -72,6 +70,16 @@ mod tests {
         use_context_provider(|| Signal::new(ConnectError(None)));
         use_context_provider(|| Signal::new(ManagerOpen::default()));
         use_context_provider(|| Signal::new(ManagerSelection::default()));
+        use_context_provider(|| Signal::new(Some(sample_editor())));
+        use_context_provider(|| {
+            Signal::new(Some(DeleteRequest::new(DeleteTarget::Record {
+                collection: "users".into(),
+                id: "u1".into(),
+                revision: 18,
+            })))
+        });
+        use_context_provider(|| RecordsEpoch(Signal::new(0)));
+        use_context_provider(|| Signal::new(RecordView::default()));
     }
 
     fn render_with(kind: ModalKind, form: ConnectionForm) -> String {
@@ -90,28 +98,23 @@ mod tests {
         render_with(kind, ConnectionForm::blank())
     }
 
-    /// Each entity/confirm variant opens its own body, not a neighbour's.
+    /// The editor names the record and its revision, and offers the review
+    /// step before any write.
     #[test]
-    fn every_entity_variant_renders_its_own_body() {
-        let cases = [
-            (ModalKind::DocForm, "Edit document", "Document JSON"),
-            (ModalKind::StrictForm, "Edit row", "decimal(10,2)"),
-            (ModalKind::VectorForm, "Edit vector", "768 floats"),
-            (ModalKind::GraphNodeForm, "Edit node", "label schema"),
-            (ModalKind::GraphEdgeForm, "New edge", "Create edge"),
-            (ModalKind::KvForm, "session:u_44182", "no expiry"),
-            (ModalKind::SpatialForm, "Edit feature", "SRID 4326"),
-            (
-                ModalKind::ConfirmDelete,
-                "Delete record",
-                "Delete permanently",
-            ),
-        ];
-        for (kind, title, body) in cases {
-            let html = render(kind);
-            assert!(html.contains(title), "{kind:?} title: {html}");
-            assert!(html.contains(body), "{kind:?} body: {html}");
-        }
+    fn the_record_editor_states_the_revision_and_offers_review() {
+        let html = render(ModalKind::RecordEditor);
+        assert!(html.contains("Edit record users/u1, revision 18"), "{html}");
+        assert!(html.contains("Review changes"), "{html}");
+        assert!(html.contains("Revision check"), "{html}");
+        assert!(html.contains("Save as draft"), "{html}");
+    }
+
+    #[test]
+    fn an_untouched_edit_cannot_be_reviewed() {
+        let html = render(ModalKind::RecordEditor);
+        let at = html.find("Review changes").expect("button");
+        let button = &html[html[..at].rfind("<button").expect("tag")..at];
+        assert!(button.contains("disabled"), "{button}");
     }
 
     /// A deep-link lands on its pane, with the list marking that pane
@@ -217,8 +220,11 @@ mod tests {
     }
 
     #[test]
-    fn delete_button_starts_disabled() {
+    fn delete_button_starts_disabled_and_names_the_record() {
         let html = render(ModalKind::ConfirmDelete);
-        assert!(html.contains("disabled"), "{html}");
+        assert!(html.contains("Delete users/u1"), "{html}");
+        let at = html.find("Delete permanently").expect("button");
+        let button = &html[html[..at].rfind("<button").expect("tag")..at];
+        assert!(button.contains("disabled"), "{button}");
     }
 }

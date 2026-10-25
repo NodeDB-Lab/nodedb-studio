@@ -12,5 +12,6 @@ pub mod palette;
 pub mod panel_registry;
 pub mod persist;
 pub mod preferences;
+pub mod record_editor;
 pub mod ui;
 pub mod workspace;

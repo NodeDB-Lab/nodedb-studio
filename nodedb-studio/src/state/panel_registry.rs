@@ -30,6 +30,11 @@ const EXPLORER: &[PanelSpec] = &[
     panel("details", "Record details", "Show inspector panel"),
 ];
 
+const DATA_TRANSFER: &[PanelSpec] = &[
+    panel("transfer", "Transfer", "Show import and export"),
+    panel("jobs", "Background jobs", "Show import and export jobs"),
+];
+
 const QUERY: &[PanelSpec] = &[
     panel("library", "Saved queries", "Show query library"),
     panel("schema", "Schema", "Show tables and fields"),
@@ -51,10 +56,10 @@ impl Surface {
         match self {
             Surface::Connections => CONNECTIONS,
             Surface::Explorer => EXPLORER,
+            Surface::DataTransfer => DATA_TRANSFER,
             Surface::Query => QUERY,
             Surface::Cluster(ClusterTab::Nodes) => CLUSTER_NODES,
-            Surface::DataTransfer
-            | Surface::Designer
+            Surface::Designer
             | Surface::Console
             | Surface::Events(
                 EventsTab::ChangeFeeds

@@ -56,21 +56,14 @@ impl PrefsPane {
 
 /// Which modal is currently open. Preferences and the connection dialog are
 /// reachable in either app state. The connection dialog reads its fields from
-/// the shared `ConnectionForm`, which its opener fills.
-/// The entity-form and confirm-delete variants carry no record yet: nothing
-/// selects one until the Explorer's master-detail lands.
+/// the shared `ConnectionForm`, which its opener fills. The record editor and
+/// the delete confirmation read theirs from `RecordEditor` and
+/// `DeleteRequest`, filled the same way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
     NewConnection,
     Preferences(PrefsPane),
-    DocForm,
-    StrictForm,
-    VectorForm,
-    GraphNodeForm,
-    GraphEdgeForm,
-    KvForm,
-    SpatialForm,
-    #[allow(dead_code)] // SEAM-UNWIRED: opened from the detail-panel footer (Phase 4)
+    RecordEditor,
     ConfirmDelete,
 }
 

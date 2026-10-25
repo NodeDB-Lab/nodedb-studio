@@ -18,8 +18,8 @@ use crate::services::error::StudioError;
 use crate::state::connection::ActiveConnection;
 use crate::state::connection_form::ConnectionForm;
 use crate::state::connections_registry::SavedConnection;
-use crate::state::explorer::Selected;
 use crate::state::preferences::{Preferences, Theme};
+use crate::state::record_editor::RecordEditor;
 use crate::state::ui::{ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover};
 use crate::state::workspace::Workspace;
 
@@ -28,6 +28,9 @@ const SETTLE: Duration = Duration::from_millis(600);
 /// Longest wait for the saved-connection list to load.
 const REGISTRY_WAIT: Duration = Duration::from_secs(10);
 const REGISTRY_POLL: Duration = Duration::from_millis(50);
+/// Time the studio gets to react to a new connection before a scene sets
+/// its selection.
+const CONNECT_SETTLE: Duration = Duration::from_millis(300);
 
 /// Every run captures both themes, into `<out>/light` and `<out>/dark`.
 const THEMES: [Theme; 2] = [Theme::Light, Theme::Dark];
@@ -39,10 +42,13 @@ const FREEZE_CSS: &str = "*, *::before, *::after { animation: none !important; \
 
 #[derive(Debug, thiserror::Error)]
 pub enum DriverError {
-    #[error("connection `{STUDIO_CONNECTION}` is not in the saved list after {REGISTRY_WAIT:?}")]
-    RegistryTimeout,
-    #[error("connect to `{STUDIO_CONNECTION}` failed: {0}")]
-    Connect(Box<StudioError>),
+    #[error("connect to `{connection}` failed: {source}")]
+    Connect {
+        connection: &'static str,
+        source: Box<StudioError>,
+    },
+    #[error("connection `{0}` is not in the saved list after {REGISTRY_WAIT:?}")]
+    UnknownConnection(&'static str),
     #[error("cannot create {}: {source}", path.display())]
     CreateDir {
         path: PathBuf,
@@ -64,6 +70,7 @@ struct Handles {
     registry: Signal<Vec<SavedConnection>>,
     prefs: Signal<Preferences>,
     modal: Signal<Option<ModalKind>>,
+    editor: Signal<Option<RecordEditor>>,
     popover: Signal<Option<Popover>>,
     palette: Signal<bool>,
     palette_query: PaletteQuery,
@@ -91,6 +98,7 @@ fn Runner(run: RunConfig) -> Element {
         registry: use_context(),
         prefs: use_context(),
         modal: use_context(),
+        editor: use_context(),
         popover: use_context(),
         palette: use_context(),
         palette_query: use_context(),
@@ -157,10 +165,12 @@ async fn run_all(h: Handles, out: &Path) -> Result<usize, DriverError> {
 /// Close every overlay, move to the scene's screen, then open its overlay.
 async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
     let (mut modal, mut popover, mut palette) = (h.modal, h.popover, h.palette);
+    let mut editor = h.editor;
     let (mut active, mut target, mut workspace) = (h.active, h.target, h.workspace);
     let (mut form, mut manager, mut selection) = (h.form, h.manager, h.selection);
     let mut palette_query = h.palette_query.0;
     modal.set(None);
+    editor.set(None);
     popover.set(None);
     palette.set(false);
     palette_query.set(String::new());
@@ -182,21 +192,21 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
             // The manager highlights the studio connection, as the design does.
             selection.set(ManagerSelection(Some(STUDIO_CONNECTION.to_string())));
         }
-        Screen::Studio { route, collection } => {
+        Screen::Studio { route, explorer } => {
             let connected = active
                 .peek()
                 .as_ref()
-                .is_some_and(|c| c.name == STUDIO_CONNECTION);
+                .is_some_and(|c| c.name == scene.connection);
             if !connected {
-                let session = connect(h).await?;
+                let session = connect(h, scene.connection).await?;
                 active.set(Some(session));
+                // The studio clears its selection when the connection
+                // changes. Let that settle before the scene sets its own.
+                tokio::time::sleep(CONNECT_SETTLE).await;
             }
             target.set(Some(SceneTarget {
                 route: route.clone(),
-                selection: collection.map(|(name, mode)| Selected {
-                    name: name.to_string(),
-                    mode,
-                }),
+                explorer: explorer.as_ref().map(|seed| seed.target()),
             }));
         }
     }
@@ -209,6 +219,10 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
             modal.set(Some(ModalKind::NewConnection));
         }
         Overlay::Popover(which) => popover.set(Some(*which)),
+        Overlay::RecordEditor(open) => {
+            editor.set(Some((**open).clone()));
+            modal.set(Some(ModalKind::RecordEditor));
+        }
         Overlay::Palette(text) => {
             palette_query.set((*text).to_string());
             palette.set(true);
@@ -217,26 +231,30 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
     Ok(())
 }
 
-/// Open `STUDIO_CONNECTION` through the seam, as the Connection Manager does.
-async fn connect(h: &Handles) -> Result<ActiveConnection, DriverError> {
+/// Open the saved connection `name` through the seam, as the Connection
+/// Manager does.
+async fn connect(h: &Handles, name: &'static str) -> Result<ActiveConnection, DriverError> {
     let deadline = Instant::now() + REGISTRY_WAIT;
     let creds = loop {
         let found = h
             .registry
             .peek()
             .iter()
-            .find(|c| c.name == STUDIO_CONNECTION)
+            .find(|c| c.name == name)
             .map(SavedConnection::credentials);
         if let Some(creds) = found {
             break creds;
         }
         if Instant::now() >= deadline {
-            return Err(DriverError::RegistryTimeout);
+            return Err(DriverError::UnknownConnection(name));
         }
         tokio::time::sleep(REGISTRY_POLL).await;
     };
     h.service
-        .connect(STUDIO_CONNECTION, &creds)
+        .connect(name, &creds)
         .await
-        .map_err(|e| DriverError::Connect(Box::new(e)))
+        .map_err(|e| DriverError::Connect {
+            connection: name,
+            source: Box::new(e),
+        })
 }

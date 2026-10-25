@@ -44,3 +44,27 @@ pub async fn copy_text(text: String) -> Result<(), CopyError> {
         Err(e) => Err(CopyError::Script(e.to_string())),
     }
 }
+
+/// Copies text from an event handler. Call `use_copier` in a component
+/// body, `copy` in its handlers.
+#[derive(Clone, Copy)]
+pub struct Copier {
+    request: Signal<Option<String>>,
+}
+
+pub fn use_copier() -> Copier {
+    let request = use_signal(|| None::<String>);
+    // The resource copies whatever is requested. A refused copy has nowhere
+    // to show an error in a table of records, and the text stays selectable.
+    let _copied = use_resource(move || async move {
+        let text = request.read().clone()?;
+        Some(copy_text(text).await)
+    });
+    Copier { request }
+}
+
+impl Copier {
+    pub fn copy(mut self, text: String) {
+        self.request.set(Some(text));
+    }
+}
