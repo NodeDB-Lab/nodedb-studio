@@ -221,3 +221,49 @@ fn views_components_and_modals_never_use_scope_bound_spawn() {
         violations.join("\n")
     );
 }
+
+/// No `use_action` in views, components or modals.
+///
+/// `use_action` hides the same scope-bound `spawn` the rule above bans, so
+/// that scan cannot see it. It also cancels its running task on every new
+/// call. For a seam write that is worse than a lost click: a second Save
+/// drops a write that may already have reached the server, then sends it
+/// again. Writes use `spawn_forever` and report into root-scope state.
+#[test]
+fn views_components_and_modals_never_use_use_action() {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    let mut files = Vec::new();
+    for root in SCANNED_ROOTS {
+        collect_rs_files(&manifest_dir.join(root), &mut files);
+    }
+
+    let src_dir = manifest_dir.join("src");
+    let mut violations: Vec<String> = Vec::new();
+
+    for file in &files {
+        let rel = file
+            .strip_prefix(&src_dir)
+            .unwrap_or(file)
+            .to_string_lossy()
+            .replace('\\', "/");
+        let Ok(contents) = fs::read_to_string(file) else {
+            continue;
+        };
+        for (idx, line) in contents.lines().enumerate() {
+            if code_part(line).contains("use_action") {
+                violations.push(format!("{rel}:{} : {}", idx + 1, line.trim()));
+            }
+        }
+    }
+
+    assert!(
+        violations.is_empty(),
+        "found {} use_action reference(s). use_action runs a scope-bound task and \
+         cancels it on every new call, so a repeated Save can drop a committed \
+         write and send it again. Use spawn_forever and write the result into \
+         root-scope state:\n{}",
+        violations.len(),
+        violations.join("\n")
+    );
+}
