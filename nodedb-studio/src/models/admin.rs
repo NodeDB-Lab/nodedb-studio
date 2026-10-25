@@ -6,41 +6,6 @@
 
 use serde::{Deserialize, Serialize};
 
-/// One node in the cluster topology.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ClusterNode {
-    pub id: String,
-    pub address: String,
-    pub state: String,
-    pub raft_groups: String,
-}
-
-/// One Raft consensus group.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RaftGroup {
-    pub id: String,
-    pub role: String,
-    pub leader_id: String,
-    pub term: String,
-    pub commit_index: String,
-    pub last_applied: String,
-    pub members: String,
-}
-
-/// One shard range and its current leaseholder.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ShardRange {
-    pub id: String,
-    pub group_id: String,
-    pub leaseholder: String,
-    pub replicas: String,
-    pub qps: String,
-    pub p99_ms: String,
-}
-
 /// One RBAC user row.
 #[allow(dead_code)] // SEAM-UNWIRED
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -17,6 +17,7 @@ use crate::models::format::ago;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
+use crate::state::cluster::ClusterUi;
 use crate::state::workspace::Surface;
 use crate::views::cluster::node_details::NodeDetails;
 
@@ -72,8 +73,9 @@ pub fn NodesTab() -> Element {
     let conn = use_context::<Memo<Option<String>>>();
     let nav = use_navigator();
     let mut filter = use_signal(String::new);
-    let mut chosen_node = use_signal(|| None::<String>);
-    let mut chosen_group = use_signal(|| None::<String>);
+    // The selection lives above the page, so another tab can point at a node.
+    let ui = use_context::<ClusterUi>();
+    let (mut sel, mut raft) = (ui.nodes, ui.raft);
 
     let mut members = {
         let backend = backend.clone();
@@ -91,7 +93,7 @@ pub fn NodesTab() -> Element {
     // memo, so the groups read re-runs only when the selection changes.
     // Reading the resource and the chosen id inside subscribes it to both.
     let selected_id = use_memo(move || {
-        let chosen = chosen_node.read().clone();
+        let chosen = sel.read().node.clone();
         let read = members.read();
         let list = read.as_ref().and_then(|r| r.as_ref().ok())?;
         chosen
@@ -115,7 +117,7 @@ pub fn NodesTab() -> Element {
     });
     let group_state = resource_state(&groups);
     let group_list: Vec<HostedGroup> = group_state.loaded().cloned().unwrap_or_default();
-    let group = effective_group(&group_list, chosen_group.read().as_deref()).cloned();
+    let group = effective_group(&group_list, sel.read().group.as_deref()).cloned();
 
     let observed = list
         .as_ref()
@@ -203,8 +205,9 @@ pub fn NodesTab() -> Element {
                                                         class: if is_selected { "clickable selected" } else { "clickable" },
                                                         "aria-selected": "{is_selected}",
                                                         onclick: move |_| {
-                                                            chosen_node.set(Some(id.clone()));
-                                                            chosen_group.set(None);
+                                                            let mut w = sel.write();
+                                                            w.node = Some(id.clone());
+                                                            w.group = None;
                                                         },
                                                         td { class: "key", "{m.name}" }
                                                         td { class: "mono", "{m.endpoint}" }
@@ -261,7 +264,7 @@ pub fn NodesTab() -> Element {
                                                         key: "{g.group}",
                                                         class: if is_selected { "clickable selected" } else { "clickable" },
                                                         "aria-selected": "{is_selected}",
-                                                        onclick: move |_| chosen_group.set(Some(id.clone())),
+                                                        onclick: move |_| sel.write().group = Some(id.clone()),
                                                         td { class: "key", "{g.group}" }
                                                         td { "{g.kind.label()}" }
                                                         td { "{g.role_here.label()}" }
@@ -277,7 +280,14 @@ pub fn NodesTab() -> Element {
                             div { class: "panel-footer",
                                 button {
                                     class: "link-btn",
-                                    onclick: move |_| { nav.push(Route::Cluster { tab: ClusterTab::RaftGroups }); },
+                                    disabled: group.is_none(),
+                                    onclick: {
+                                        let id = group.as_ref().map(|g| g.group.clone());
+                                        move |_| {
+                                            raft.write().group = id.clone();
+                                            nav.push(Route::Cluster { tab: ClusterTab::RaftGroups });
+                                        }
+                                    },
                                     Ico { icon: Icon::ExternalLink, size: 16 }
                                     "Open selected Raft group"
                                 }

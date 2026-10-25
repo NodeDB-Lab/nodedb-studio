@@ -8,6 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::routes::Route;
+use crate::state::cluster::{ClusterSeed, ClusterUi};
 use crate::state::console::ConsoleState;
 use crate::state::designer::DesignerState;
 use crate::state::events::{EventsSeed, EventsUi};
@@ -40,6 +41,8 @@ pub struct SceneTarget {
     pub spatial: Option<SpatialSeed>,
     /// The Search queries, results, and selections. `None` keeps the current ones.
     pub search: Option<SearchSeed>,
+    /// The Cluster tabs' selections and open reviews. `None` keeps the current ones.
+    pub cluster: Option<ClusterSeed>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -64,6 +67,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let timeseries = use_context::<TimeseriesUi>();
     let spatial = use_context::<SpatialUi>();
     let search = use_context::<SearchUi>();
+    let cluster = use_context::<ClusterUi>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -98,6 +102,9 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         }
         if let Some(seed) = t.search {
             search.apply(seed);
+        }
+        if let Some(seed) = t.cluster {
+            cluster.apply(seed);
         }
         nav.replace(t.route);
     });

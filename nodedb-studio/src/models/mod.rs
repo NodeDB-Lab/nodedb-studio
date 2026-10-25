@@ -4,6 +4,12 @@
 pub mod admin;
 pub mod array_data;
 pub mod cluster;
+pub mod cluster_activity;
+pub mod cluster_chart;
+pub mod cluster_monitor;
+pub mod cluster_op;
+pub mod cluster_place;
+pub mod cluster_raft;
 pub mod collection;
 pub mod connections;
 pub mod console;

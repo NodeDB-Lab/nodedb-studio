@@ -6,10 +6,11 @@ use dioxus::prelude::*;
 use crate::components::tabs::{RouteTabs, tab_items};
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;
-use crate::views::admin::cluster::ClusterView;
-use crate::views::admin::raft::RaftView;
-use crate::views::admin::shards::ShardsView;
+use crate::views::cluster::activity::ActivityTab;
+use crate::views::cluster::monitor::MonitoringTab;
 use crate::views::cluster::nodes::NodesTab;
+use crate::views::cluster::placement::PlacementTab;
+use crate::views::cluster::raft::RaftTab;
 
 #[component]
 pub fn ClusterPage(tab: ClusterTab) -> Element {
@@ -20,10 +21,10 @@ pub fn ClusterPage(tab: ClusterTab) -> Element {
         }
         match tab {
             ClusterTab::Nodes => rsx! { NodesTab {} },
-            ClusterTab::RaftGroups => rsx! { div { class: "legacy-page", RaftView {} } },
-            ClusterTab::Placement => rsx! { div { class: "legacy-page", ShardsView {} } },
-            ClusterTab::Monitoring => rsx! { div { class: "legacy-page", ClusterView {} } },
-            ClusterTab::Activity => rsx! { div { class: "legacy-page" } },
+            ClusterTab::RaftGroups => rsx! { RaftTab {} },
+            ClusterTab::Placement => rsx! { PlacementTab {} },
+            ClusterTab::Monitoring => rsx! { MonitoringTab {} },
+            ClusterTab::Activity => rsx! { ActivityTab {} },
         }
     }
 }

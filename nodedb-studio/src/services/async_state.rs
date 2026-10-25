@@ -6,6 +6,10 @@
 
 use crate::models::array_data::{ArraySchema, SliceResult};
 use crate::models::cluster::ClusterMembers;
+use crate::models::cluster_activity::ActivityLog;
+use crate::models::cluster_monitor::Telemetry;
+use crate::models::cluster_place::Placement;
+use crate::models::cluster_raft::RaftGroups;
 use crate::models::designer::DesignSchema;
 use crate::models::designer_change::ChangeReview;
 use crate::models::feed_draft::FeedPreview;
@@ -58,6 +62,34 @@ impl IsEmpty for SessionInfo {
 impl IsEmpty for ClusterMembers {
     fn is_empty(&self) -> bool {
         self.members.is_empty()
+    }
+}
+
+/// The Raft groups are empty when the cluster reports no group.
+impl IsEmpty for RaftGroups {
+    fn is_empty(&self) -> bool {
+        self.groups.is_empty()
+    }
+}
+
+/// Placement is empty when no vShard is placed.
+impl IsEmpty for Placement {
+    fn is_empty(&self) -> bool {
+        self.vshards.is_empty()
+    }
+}
+
+/// Telemetry is empty when no node reports.
+impl IsEmpty for Telemetry {
+    fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
+    }
+}
+
+/// The activity log is empty when no event matches.
+impl IsEmpty for ActivityLog {
+    fn is_empty(&self) -> bool {
+        self.events.is_empty()
     }
 }
 

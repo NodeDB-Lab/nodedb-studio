@@ -13,6 +13,7 @@ use crate::routes::tabs::{
     AdminTab, ClusterTab, EventsTab, GraphTab, SearchTab, SpatialTab, TimeseriesTab, VectorTab,
 };
 use crate::routes::{Destination, Route};
+use crate::screenshots::cluster_scenes;
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
 use crate::screenshots::search_scenes;
@@ -20,6 +21,7 @@ use crate::screenshots::spatial_scenes;
 use crate::screenshots::timeseries_scenes;
 use crate::screenshots::vector_scenes;
 use crate::screenshots::workbench_scenes;
+use crate::state::cluster::ClusterSeed;
 use crate::state::connection_form::{ConnectionForm, TestState};
 use crate::state::console::ConsoleState;
 use crate::state::events::EventsSeed;
@@ -157,6 +159,8 @@ pub struct Scene {
     pub spatial: Option<Box<SpatialSeed>>,
     /// The Search queries, results, and selections. `None` keeps the current ones.
     pub search: Option<Box<SearchSeed>>,
+    /// The Cluster tabs' selections and open reviews. `None` keeps the current ones.
+    pub cluster: Option<Box<ClusterSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -176,6 +180,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         timeseries: None,
         spatial: None,
         search: None,
+        cluster: None,
     }
 }
 
@@ -355,13 +360,7 @@ pub fn scenes() -> Vec<Scene> {
     all.extend(spatial());
     all.extend(search());
     all.extend(events());
-    for tab in ClusterTab::ALL {
-        all.push(scene(
-            cluster_scene(*tab),
-            at(Route::Cluster { tab: *tab }),
-            O::None,
-        ));
-    }
+    all.extend(cluster());
     for tab in AdminTab::ALL {
         all.push(scene(
             admin_scene(*tab),
@@ -602,14 +601,45 @@ fn events() -> Vec<Scene> {
     ]
 }
 
-fn cluster_scene(tab: ClusterTab) -> &'static str {
-    match tab {
-        ClusterTab::Nodes => "cluster-nodes",
-        ClusterTab::RaftGroups => "cluster-raft-groups",
-        ClusterTab::Placement => "cluster-placement",
-        ClusterTab::Monitoring => "cluster-monitoring",
-        ClusterTab::Activity => "cluster-activity",
-    }
+/// Cluster: each tab, and the two reviews a membership operation opens.
+fn cluster() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: ClusterSeed| Scene {
+        cluster: Some(Box::new(seed)),
+        ..scene(name, at(Route::Cluster { tab }), Overlay::None)
+    };
+    vec![
+        at_tab("cluster-nodes", ClusterTab::Nodes, ClusterSeed::default()),
+        at_tab(
+            "cluster-raft-groups",
+            ClusterTab::RaftGroups,
+            cluster_scenes::raft_groups(),
+        ),
+        at_tab(
+            "cluster-raft-transfer-review",
+            ClusterTab::RaftGroups,
+            cluster_scenes::transfer_review(),
+        ),
+        at_tab(
+            "cluster-placement",
+            ClusterTab::Placement,
+            cluster_scenes::placement(),
+        ),
+        at_tab(
+            "cluster-placement-review",
+            ClusterTab::Placement,
+            cluster_scenes::plan_review(),
+        ),
+        at_tab(
+            "cluster-monitoring",
+            ClusterTab::Monitoring,
+            cluster_scenes::monitoring(),
+        ),
+        at_tab(
+            "cluster-activity",
+            ClusterTab::Activity,
+            cluster_scenes::activity(),
+        ),
+    ]
 }
 
 fn admin_scene(tab: AdminTab) -> &'static str {

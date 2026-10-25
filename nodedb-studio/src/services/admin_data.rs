@@ -1,26 +1,13 @@
-//! Admin-tier reads at the backend seam: cluster, raft, shards, RBAC, RLS,
-//! audit. Every one has a real server-side source, so these signatures are
+//! Admin-tier reads at the backend seam: RBAC, RLS, audit. Every one has a real server-side source, so these signatures are
 //! designed for a real implementation rather than as permanent mock stubs.
 
 use async_trait::async_trait;
 
-use crate::models::admin::{AuditEntry, ClusterNode, RaftGroup, RlsPolicy, ShardRange, UserRow};
+use crate::models::admin::{AuditEntry, RlsPolicy, UserRow};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
 pub trait AdminData {
-    /// Cluster topology: one row per node.
-    #[allow(dead_code)] // SEAM-UNWIRED
-    async fn cluster_nodes(&self) -> Result<Vec<ClusterNode>, StudioError>;
-
-    /// Raft groups for the cluster.
-    #[allow(dead_code)] // SEAM-UNWIRED
-    async fn raft_groups(&self) -> Result<Vec<RaftGroup>, StudioError>;
-
-    /// Shard ranges and their leaseholders.
-    #[allow(dead_code)] // SEAM-UNWIRED
-    async fn shard_ranges(&self) -> Result<Vec<ShardRange>, StudioError>;
-
     /// RBAC: all users in the tenant.
     #[allow(dead_code)] // SEAM-UNWIRED
     async fn users(&self) -> Result<Vec<UserRow>, StudioError>;
@@ -43,16 +30,10 @@ mod tests {
     #[tokio::test]
     async fn every_admin_read_has_unique_ids() {
         let svc = MockConnectionService::ready();
-        let nodes = svc.cluster_nodes().await.expect("nodes");
-        let groups = svc.raft_groups().await.expect("raft");
-        let shards = svc.shard_ranges().await.expect("shards");
         let users = svc.users().await.expect("users");
         let policies = svc.rls_policies().await.expect("rls");
         let audit = svc.audit_entries().await.expect("audit");
 
-        assert_unique(nodes.iter().map(|x| x.id.as_str()), "cluster_nodes");
-        assert_unique(groups.iter().map(|x| x.id.as_str()), "raft_groups");
-        assert_unique(shards.iter().map(|x| x.id.as_str()), "shard_ranges");
         assert_unique(users.iter().map(|x| x.id.as_str()), "users");
         assert_unique(policies.iter().map(|x| x.id.as_str()), "rls_policies");
         assert_unique(audit.iter().map(|x| x.id.as_str()), "audit_entries");
@@ -71,48 +52,6 @@ mod tests {
     // check per behaviour: `apply(self.behavior, mock::x)` and a mis-wired
     // `Ok(mock::x())` both satisfy a single shared assertion, so every method
     // needs its own proof that it actually reads `self.behavior`.
-
-    #[tokio::test]
-    async fn cluster_nodes_empty_is_empty() {
-        let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.cluster_nodes().await));
-        assert!(s.is_empty());
-    }
-
-    #[tokio::test]
-    async fn cluster_nodes_erroring_is_err() {
-        let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.cluster_nodes().await));
-        assert!(s.error_message().is_some());
-    }
-
-    #[tokio::test]
-    async fn raft_groups_empty_is_empty() {
-        let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.raft_groups().await));
-        assert!(s.is_empty());
-    }
-
-    #[tokio::test]
-    async fn raft_groups_erroring_is_err() {
-        let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.raft_groups().await));
-        assert!(s.error_message().is_some());
-    }
-
-    #[tokio::test]
-    async fn shard_ranges_empty_is_empty() {
-        let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.shard_ranges().await));
-        assert!(s.is_empty());
-    }
-
-    #[tokio::test]
-    async fn shard_ranges_erroring_is_err() {
-        let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.shard_ranges().await));
-        assert!(s.error_message().is_some());
-    }
 
     #[tokio::test]
     async fn users_empty_is_empty() {

@@ -1,0 +1,136 @@
+/*
+ * Cluster: Raft groups, Placement, Monitoring, and Activity. Built on
+ * controls.css, panels.css, and events.css (sheets, reviews). Nodes uses the
+ * shared classes only. Charts reuse the .ts-* chart classes.
+ *
+ *   Controls   .cl-ctl  .cl-bar  .cl-filters  .cl-switch  .cl-observed  .cl-static
+ *   Tables     .cl-table (compact)  .cl-peers  .cl-replica  .cl-stale-row
+ *   Facts      .cl-details  .cl-facts  .cl-fact  .cl-actions  .cl-action  .cl-chips
+ *   Placement  .cl-members  .cl-member  .cl-rebalance-bar  .cl-readout  .cl-x
+ *   Monitoring .cl-chart  .cl-ended  .cl-age
+ *   Activity   .cl-event  .cl-scope-note  .cl-links  .cl-raw-toggle
+ */
+
+.muted { color: var(--text-tertiary); }
+
+/* ---------- Controls ---------- */
+
+.cl-ctl { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cl-ctl > label { color: var(--text-secondary); font-size: var(--fs-md); white-space: nowrap; }
+.cl-ctl select.select.native {
+  min-width: 0;
+  width: auto;
+  height: var(--control-h);
+  padding-right: 30px;
+  font-size: var(--fs-md);
+}
+.cl-static { display: inline-flex; align-items: center; height: var(--control-h); color: var(--text-primary); }
+.cl-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: var(--control-h);
+  padding: 0 2px;
+  flex: none;
+  min-width: 0;
+}
+.cl-observed { color: var(--text-secondary); font-size: var(--fs-md); white-space: nowrap; }
+.cl-filters { gap: 14px; padding-bottom: 0; }
+.cl-filters + .cl-filters { padding-top: 8px; }
+.cl-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+/* ---------- Tables ---------- */
+
+.cl-table th { padding: 0 8px; }
+.cl-table td { padding: 0 8px; max-width: 320px; }
+.cl-table th:first-child, .cl-table td:first-child { padding-left: 12px; }
+.cl-table th:last-child, .cl-table td:last-child { padding-right: 12px; }
+.cl-peers .dt th { padding: 0 6px; height: 34px; }
+.cl-peers .dt td { padding: 0 6px; }
+.cl-peers .dt th:first-child, .cl-peers .dt td:first-child { padding-left: 0; }
+.cl-peers .dt th:last-child, .cl-peers .dt td:last-child { padding-right: 0; }
+.cl-sep { color: var(--text-tertiary); }
+.cl-replica.down { color: var(--text-warning); font-weight: 500; }
+.dt tbody tr.cl-stale-row td { color: var(--text-secondary); }
+.dt tbody tr.cl-stale-row td.key { color: var(--text-primary); }
+.cl-age { color: var(--text-tertiary); }
+.cl-x { width: 40px; padding-left: 0; padding-right: 8px; text-align: right; }
+.cl-chips { display: inline-flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.cl-chips .chip { height: 24px; padding: 0 10px; background: var(--surface-hover); border-color: transparent; }
+.cl-chips .chip.active { background: var(--surface-selected); color: var(--text-link); }
+
+/* ---------- Details ---------- */
+
+.cl-details { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 16px; min-width: 0; }
+.cl-details .inspector-head { margin-bottom: 0; }
+.cl-details .tab-bar { margin: 0 -16px; padding: 0 16px; }
+.cl-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 20px; }
+.cl-fact-col { display: flex; flex-direction: column; min-width: 0; }
+.cl-fact { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 32px; }
+.cl-fact-label { color: var(--text-secondary); white-space: nowrap; }
+.cl-fact-value { text-align: right; min-width: 0; font-variant-numeric: tabular-nums; }
+.cl-details .inspector-section { margin-top: 6px; }
+.cl-details .num { font-variant-numeric: tabular-nums; }
+.cl-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.cl-action { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.cl-action-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cl-action-head h4 { font-size: var(--fs-lg); font-weight: 600; }
+.cl-action .hint { margin: 0; color: var(--text-secondary); font-size: var(--fs-sm); }
+.cl-config .kv-row { min-height: 40px; }
+.cl-effects { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+
+/* ---------- Placement ---------- */
+
+.cl-members { display: flex; flex-wrap: wrap; gap: 8px; }
+.cl-member {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius);
+  background: var(--surface-panel);
+}
+.cl-member.lead { background: var(--surface-selected); border-color: var(--surface-selected-strong); }
+.cl-member-role { color: var(--text-tertiary); font-size: var(--fs-xs); }
+.cl-rebalance-bar { gap: 8px; padding-bottom: 6px; }
+.cl-rebalance-bar .cl-ctl, .cl-rebalance-bar .cl-readout, .cl-rebalance-bar .btn { flex: none; }
+.cl-rebalance-bar select.select.native { min-width: 0; }
+.cl-rebalance-bar .cl-ctl > label { font-size: var(--fs-sm); }
+.cl-readout { display: flex; flex-direction: column; justify-content: center; gap: 2px; min-width: 0; line-height: 1.2; }
+.cl-readout-label { color: var(--text-tertiary); font-size: var(--fs-xs); white-space: nowrap; }
+.cl-readout-value { font-weight: 500; white-space: nowrap; }
+.cl-move-note { padding: 0 12px 8px; }
+
+/* ---------- Monitoring ---------- */
+
+.cl-chart { padding: 4px 12px 6px; }
+.cl-chart .ts-plot { min-height: 90px; }
+.cl-ended { stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 3 3; }
+
+/* ---------- Activity ---------- */
+
+.cl-event { gap: 10px; padding: 14px 16px 16px; }
+.cl-scope-note { margin: 0; color: var(--text-secondary); }
+.cl-links { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 4px; }
+.cl-raw-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  font-weight: 500;
+  text-align: left;
+}
+.cl-raw-toggle:hover { background: var(--surface-hover); }
+.cl-raw { max-height: 280px; overflow: auto; }

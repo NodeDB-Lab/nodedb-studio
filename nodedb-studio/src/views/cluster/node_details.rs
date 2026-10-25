@@ -7,6 +7,7 @@ use crate::models::cluster::{ClusterMember, HostedGroup, NodeState};
 use crate::models::format::thousands;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;
+use crate::state::cluster::ClusterUi;
 
 fn state_badge(state: NodeState) -> (&'static str, &'static str) {
     match state {
@@ -19,6 +20,7 @@ fn state_badge(state: NodeState) -> (&'static str, &'static str) {
 #[component]
 pub fn NodeDetails(member: ClusterMember, group: Option<HostedGroup>) -> Element {
     let nav = use_navigator();
+    let mut raft = use_context::<ClusterUi>().raft;
     let (badge, dot) = state_badge(member.state);
     rsx! {
         div { class: "inspector",
@@ -56,7 +58,13 @@ pub fn NodeDetails(member: ClusterMember, group: Option<HostedGroup>) -> Element
                 button {
                     class: "btn primary",
                     disabled: group.is_none(),
-                    onclick: move |_| { nav.push(Route::Cluster { tab: ClusterTab::RaftGroups }); },
+                    onclick: {
+                        let id = group.as_ref().map(|g| g.group.clone());
+                        move |_| {
+                            raft.write().group = id.clone();
+                            nav.push(Route::Cluster { tab: ClusterTab::RaftGroups });
+                        }
+                    },
                     Ico { icon: Icon::ExternalLink, size: 16 }
                     "Open group"
                 }

@@ -71,6 +71,39 @@ const CLUSTER_NODES: &[PanelSpec] = &[
     panel("details", "Node details", "Show the selected node"),
 ];
 
+const CLUSTER_RAFT: &[PanelSpec] = &[
+    panel("groups", "Raft groups", "Show every Raft group"),
+    panel("details", "Raft group details", "Show the selected group"),
+];
+
+const CLUSTER_PLACEMENT: &[PanelSpec] = &[
+    panel("vshards", "vShards", "Show the vShard list"),
+    panel(
+        "rebalance",
+        "Rebalance preview",
+        "Show the staged replica moves",
+    ),
+    panel("details", "vShard details", "Show the selected vShard"),
+    panel("health", "Nodes health", "Show node health and disk use"),
+];
+
+const CLUSTER_MONITORING: &[PanelSpec] = &[
+    panel("queries", "Queries", "Show queries per second"),
+    panel("latency", "p99 latency", "Show p99 latency"),
+    panel("cpu", "CPU usage", "Show CPU use"),
+    panel("memory", "Memory usage", "Show memory use"),
+    panel("nodes", "Nodes", "Show each node's latest report"),
+];
+
+const CLUSTER_ACTIVITY: &[PanelSpec] = &[
+    panel(
+        "activity",
+        "Activity",
+        "Show membership and operation events",
+    ),
+    panel("details", "Event details", "Show the selected event"),
+];
+
 const EVENTS_FEEDS: &[PanelSpec] = &[
     panel("feeds", "Change feeds", "Show the feed list"),
     panel("events", "Recent events", "Show the selected feed's events"),
@@ -262,6 +295,10 @@ impl Surface {
             Surface::Console => CONSOLE,
             Surface::Designer => DESIGNER,
             Surface::Cluster(ClusterTab::Nodes) => CLUSTER_NODES,
+            Surface::Cluster(ClusterTab::RaftGroups) => CLUSTER_RAFT,
+            Surface::Cluster(ClusterTab::Placement) => CLUSTER_PLACEMENT,
+            Surface::Cluster(ClusterTab::Monitoring) => CLUSTER_MONITORING,
+            Surface::Cluster(ClusterTab::Activity) => CLUSTER_ACTIVITY,
             Surface::Events(EventsTab::ChangeFeeds) => EVENTS_FEEDS,
             Surface::Events(EventsTab::MaterializedViews) => EVENTS_VIEWS,
             Surface::Events(EventsTab::Topics) => EVENTS_TOPICS,
@@ -283,13 +320,7 @@ impl Surface {
             Surface::Search(SearchTab::Results) => SEARCH_RESULTS,
             Surface::Search(SearchTab::Analyze) => SEARCH_ANALYZE,
             Surface::Search(SearchTab::Indexes) => SEARCH_INDEXES,
-            Surface::Cluster(
-                ClusterTab::RaftGroups
-                | ClusterTab::Placement
-                | ClusterTab::Monitoring
-                | ClusterTab::Activity,
-            )
-            | Surface::Sync(
+            Surface::Sync(
                 SyncTab::Devices
                 | SyncTab::Subscriptions
                 | SyncTab::RejectedWrites

@@ -156,20 +156,6 @@
   .sql-comment { color: var(--text-tertiary); font-style: italic; }
 
   /* ============================================================
-     Cluster topology
-     ============================================================ */
-  .cluster-canvas {
-    height: 100%;
-    background: radial-gradient(circle at center, var(--bg-secondary) 0%, var(--bg-primary) 80%);
-    position: relative;
-  }
-  .cluster-canvas svg { width: 100%; height: 100%; }
-  .node-circle { stroke: var(--bg-primary); stroke-width: 3; }
-  .node-leader { fill: var(--text-info); }
-  .node-follower { fill: var(--text-success); }
-  .node-degraded { fill: var(--text-warning); }
-
-  /* ============================================================
      Generic placeholders for "lighter" screens
      ============================================================ */
   .placeholder-grid {

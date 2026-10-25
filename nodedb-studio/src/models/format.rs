@@ -135,6 +135,12 @@ pub fn clock(at: i64, offset_min: i16) -> String {
     format!("{:02}:{:02}", c.hour, c.minute)
 }
 
+/// `13:21:05`.
+pub fn clock_second(at: i64, offset_min: i16) -> String {
+    let c = civil(at, offset_min);
+    format!("{:02}:{:02}:{:02}", c.hour, c.minute, c.second)
+}
+
 /// Whether two instants fall on the same calendar day in the zone.
 pub fn same_day(a: i64, b: i64, offset_min: i16) -> bool {
     let (a, b) = (civil(a, offset_min), civil(b, offset_min));
@@ -225,6 +231,7 @@ mod tests {
         assert_eq!(date_minute(at, 0), "2026-06-13 13:21");
         assert_eq!(date_second(at, 0), "2026-06-13 13:21:05");
         assert_eq!(clock(at, 0), "13:21");
+        assert_eq!(clock_second(at, 0), "13:21:05");
         // Leap day and a year boundary.
         assert_eq!(date(epoch(2024, 2, 29, 23, 59, 59), 0), "2024-02-29");
         assert_eq!(date(epoch(2025, 12, 31, 23, 59, 59) + 1, 0), "2026-01-01");

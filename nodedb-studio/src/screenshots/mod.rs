@@ -3,6 +3,7 @@
 //! feature on Linux. `scripts/screenshots.sh` runs it.
 
 pub mod capture;
+pub mod cluster_scenes;
 pub mod config;
 pub mod designer_scenes;
 pub mod driver;

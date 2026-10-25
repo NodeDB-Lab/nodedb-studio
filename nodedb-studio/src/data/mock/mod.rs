@@ -23,8 +23,8 @@ mod vector;
 mod viewers;
 mod workbench;
 
-pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_ranges, users};
-pub use cluster::{cluster_members, hosted_groups};
+pub use admin::{audit_entries, rls_policies, users};
+pub use cluster::{ClusterStore, cluster_members, telemetry};
 pub use connections::{
     connection_activity, connections, nav_badges, notifications, recent_items, saved_from_draft,
     session_info,

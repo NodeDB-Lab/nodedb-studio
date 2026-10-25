@@ -53,6 +53,8 @@ pub struct MockConnectionService {
     pub(super) timeseries: Rc<RefCell<mock::TimeseriesStore>>,
     /// Search executions and the rebuild jobs created this session.
     pub(super) search: Rc<RefCell<mock::SearchStore>>,
+    /// Raft groups, placement, and activity, with the operations applied.
+    pub(super) cluster: Rc<RefCell<mock::ClusterStore>>,
 }
 
 impl Default for MockConnectionService {
@@ -81,6 +83,7 @@ impl MockConnectionService {
             designer: Rc::new(RefCell::new(mock::DesignerStore::seeded())),
             timeseries: Rc::new(RefCell::new(mock::TimeseriesStore::seeded())),
             search: Rc::default(),
+            cluster: Rc::new(RefCell::new(mock::ClusterStore::seeded())),
         }
     }
 
