@@ -220,6 +220,32 @@ const SPATIAL_RASTER: &[PanelSpec] = &[
     panel("cell", "Cell", "Show the selected cell"),
 ];
 
+const SEARCH_RESULTS: &[PanelSpec] = &[
+    panel("results", "Ranked results", "Show the ranked records"),
+    panel("details", "Result details", "Show the selected result"),
+];
+
+const SEARCH_ANALYZE: &[PanelSpec] = &[
+    panel("input", "Input text", "Show the text to analyze"),
+    panel(
+        "tokens",
+        "Analyzed tokens",
+        "Show the tokens and their spans",
+    ),
+    panel("trace", "Processing trace", "Show each processing stage"),
+    panel("details", "Analyzer details", "Show the bound analyzer"),
+];
+
+const SEARCH_INDEXES: &[PanelSpec] = &[
+    panel(
+        "indexes",
+        "Search indexes",
+        "Show the text and vector indexes",
+    ),
+    panel("history", "Build history", "Show the index's builds"),
+    panel("details", "Index details", "Show the selected index"),
+];
+
 const DESIGNER: &[PanelSpec] = &[panel(
     "properties",
     "Properties",
@@ -254,8 +280,10 @@ impl Surface {
             Surface::Spatial(SpatialTab::Map) => SPATIAL_MAP,
             Surface::Spatial(SpatialTab::Analyze) => SPATIAL_ANALYZE,
             Surface::Spatial(SpatialTab::Raster) => SPATIAL_RASTER,
-            Surface::Search(SearchTab::Results | SearchTab::Analyze | SearchTab::Indexes)
-            | Surface::Cluster(
+            Surface::Search(SearchTab::Results) => SEARCH_RESULTS,
+            Surface::Search(SearchTab::Analyze) => SEARCH_ANALYZE,
+            Surface::Search(SearchTab::Indexes) => SEARCH_INDEXES,
+            Surface::Cluster(
                 ClusterTab::RaftGroups
                 | ClusterTab::Placement
                 | ClusterTab::Monitoring

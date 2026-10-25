@@ -8,10 +8,12 @@ use crate::components::icon::Icon;
 use crate::models::format::offset_label;
 use crate::models::records::Record;
 use crate::models::schema::{CollectionSchema, IndexDef, TextIndex};
+use crate::models::search::{SearchMode, VectorInput};
 use crate::routes::Route;
 use crate::routes::tabs::VectorTab;
 use crate::state::explorer::{CollectionTab, RecordView};
 use crate::state::preferences::Preferences;
+use crate::state::search::SearchUi;
 use crate::views::explorer::cells::{text_label, time_label};
 use crate::views::explorer::links::OpenLink;
 
@@ -82,6 +84,7 @@ pub fn VectorTabBody(schema: CollectionSchema, record: Record) -> Element {
     let mut view = use_context::<Signal<RecordView>>();
     let prefs = use_context::<Signal<Preferences>>();
     let mut full = use_signal(|| false);
+    let search = try_use_context::<SearchUi>();
     let Some(vector) = schema.vector.clone() else {
         return rsx! {};
     };
@@ -145,6 +148,14 @@ pub fn VectorTabBody(schema: CollectionSchema, record: Record) -> Element {
                         label: "Open Semantic Search".to_string(),
                         icon: Icon::Search,
                         class: "btn".to_string(),
+                        on_open: {
+                            let (name, id) = (schema.collection.clone(), record.id.clone());
+                            move |_| {
+                                if let Some(search) = search {
+                                    search.open_query(&name, SearchMode::Semantic, "", VectorInput::Record(id.clone()));
+                                }
+                            }
+                        },
                     }
                 }
                 OpenLink {

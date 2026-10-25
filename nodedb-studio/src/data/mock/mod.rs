@@ -13,6 +13,7 @@ mod designer;
 mod events;
 mod explorer;
 mod graph;
+mod search;
 mod spatial;
 #[cfg(test)]
 mod test_support;
@@ -42,6 +43,10 @@ pub use explorer::{
     collections, edge_page, observed_at, record_page, stored_record, transfer_preview,
 };
 pub use graph::{expand_node, find_paths, graph_bindings, rag_search, rag_setup, run_cypher};
+pub use search::{
+    SearchStore, attached_query_vector, search_analyze, search_indexes, search_rebuild_plan,
+    search_run, search_setup,
+};
 pub use spatial::{
     raster_slice, spatial_analyze, spatial_feature, spatial_setup, spatial_validity,
     spatial_viewport,
@@ -52,7 +57,7 @@ pub use timeseries::{
 };
 pub use transfer::transfer_jobs;
 pub use vector::{vector_index_status, vector_project, vector_record, vector_search, vector_setup};
-pub use viewers::{fts_hits, sync_peers};
+pub use viewers::sync_peers;
 pub use workbench::{WorkbenchStore, empty_result_set, query_plan, query_session, schema_tree};
 // Only the screenshot scenes and the tests name these.
 #[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]

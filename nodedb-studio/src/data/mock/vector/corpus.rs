@@ -70,6 +70,10 @@ impl Topic {
                 "Distributed databases",
                 "Replication and consensus",
                 "Scaling your cluster",
+                "Distributed database architecture",
+                "Database replication explained",
+                "Scaling distributed queries",
+                "Database consistency models",
             ],
             Topic::Search => &[
                 "Vector search basics",
@@ -86,10 +90,55 @@ impl Topic {
                 "Monitoring and metrics",
                 "Performance tuning",
                 "Security and access control",
+                "Storage engines overview",
             ],
             Topic::Streams => &["Change feeds explained", "Time series retention"],
             Topic::Basics => &["Getting started", "Building with NodeDB"],
             Topic::Spatial => &["Spatial queries in practice"],
+        }
+    }
+
+    /// Passages a generated record's body is drawn from. They read like the
+    /// text of a documentation page, so a keyword search finds varied matches.
+    fn passages(self) -> &'static [&'static str] {
+        match self {
+            Topic::Architecture => &[
+                "A distributed database partitions data across multiple nodes to provide high availability, scalability, and fault tolerance in modern applications.",
+                "Consensus lets the nodes of a distributed database agree on one order of writes, so a copy that falls behind can catch up safely.",
+                "Scaling a cluster adds nodes and moves partitions to them, while queries keep running against the database.",
+                "The architecture of a distributed database splits storage, query planning, and coordination into layers that scale on their own.",
+                "Replication in a distributed database ensures data consistency and availability by maintaining copies across multiple nodes and regions.",
+                "Query planning in a distributed database must account for data locality, network latency, and parallel execution across many nodes.",
+                "A distributed database can implement different consistency models, including strong, eventual, and causal consistency, depending on application requirements.",
+            ],
+            Topic::Search => &[
+                "Vector search ranks records by the distance between embeddings, and a filter narrows the candidates before the top results are cut.",
+                "Hybrid search fuses a keyword ranking with a vector ranking, so a record that both rankings favor rises to the top of the results.",
+                "An index trades build time and storage for faster reads, and each index kind suits a different query shape.",
+            ],
+            Topic::Modeling => &[
+                "A data model names the collections, fields, and relations an application stores, and a schema makes those names enforceable.",
+                "Schema evolution adds, renames, and retires fields without rewriting every stored record at once.",
+                "The query language reads records with filters, joins, and aggregates, and returns rows in a defined order.",
+            ],
+            Topic::Operations => &[
+                "Backups copy a consistent snapshot of the database, and a restore replays it to a chosen point in time.",
+                "Monitoring tracks latency, throughput, and error rates, and an alert fires when a metric leaves its expected range.",
+                "Performance tuning starts from measured query plans and changes one setting at a time.",
+                "Access control grants each role only the privileges it needs, and every grant is recorded in the audit log.",
+                "Storage engines write records to disk in different layouts, which changes how fast a database reads, writes, and compacts them.",
+            ],
+            Topic::Streams => &[
+                "A change feed delivers each committed write to its consumers in order, so a downstream system can follow the database.",
+                "Time series retention drops raw points after a set age and keeps the rolled-up aggregates.",
+            ],
+            Topic::Basics => &[
+                "Getting started covers installing the server, connecting a client, and creating the first collection.",
+                "Building an application with the database combines documents, indexes, and queries in one process.",
+            ],
+            Topic::Spatial => &[
+                "Spatial queries find features near a point or inside an area, using an index over their geometry.",
+            ],
         }
     }
 
@@ -189,11 +238,13 @@ pub fn meta(n: u64) -> Meta {
     }
     let topic = Topic::ALL[(mix(n, 1) % Topic::ALL.len() as u64) as usize];
     let titles = topic.titles();
-    let title = titles[(mix(n, 2) % titles.len() as u64) as usize];
+    let pick = (mix(n, 2) % titles.len() as u64) as usize;
+    let title = titles[pick];
+    let passages = topic.passages();
     Meta {
         n,
         title: format!("{title}, part {}", 1 + mix(n, 3) % 24),
-        body: format!("{title}: a guide to the concepts, trade-offs, and operations involved."),
+        body: passages[pick % passages.len()].to_string(),
         language: language_of(n),
         model: MODEL,
         embedded_at: epoch(2026, 6, 12, 10, 24, 31) - (n % 40_000) as i64 * 31,

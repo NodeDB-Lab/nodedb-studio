@@ -16,3 +16,4 @@ mod tasks;
 mod toolbar;
 
 pub use page::DesignerPage;
+pub use toolbar::open_index_form;

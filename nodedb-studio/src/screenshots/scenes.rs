@@ -10,11 +10,12 @@ use crate::models::connections::ConnectionTest;
 use crate::models::records::Filter;
 use crate::models::workbench::TxAccess;
 use crate::routes::tabs::{
-    AdminTab, ClusterTab, EventsTab, GraphTab, SpatialTab, TimeseriesTab, VectorTab,
+    AdminTab, ClusterTab, EventsTab, GraphTab, SearchTab, SpatialTab, TimeseriesTab, VectorTab,
 };
 use crate::routes::{Destination, Route};
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
+use crate::screenshots::search_scenes;
 use crate::screenshots::spatial_scenes;
 use crate::screenshots::timeseries_scenes;
 use crate::screenshots::vector_scenes;
@@ -27,6 +28,7 @@ use crate::state::explorer::{
 };
 use crate::state::query::QueryWorkspace;
 use crate::state::record_editor::RecordEditor;
+use crate::state::search::SearchSeed;
 use crate::state::spatial::SpatialSeed;
 use crate::state::timeseries::TimeseriesSeed;
 use crate::state::ui::{ModalKind, Popover, PrefsPane};
@@ -153,6 +155,8 @@ pub struct Scene {
     pub timeseries: Option<Box<TimeseriesSeed>>,
     /// The Spatial view, drafts, and selection. `None` keeps the current ones.
     pub spatial: Option<Box<SpatialSeed>>,
+    /// The Search queries, results, and selections. `None` keeps the current ones.
+    pub search: Option<Box<SearchSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -171,6 +175,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         vector: None,
         timeseries: None,
         spatial: None,
+        search: None,
     }
 }
 
@@ -344,11 +349,11 @@ pub fn scenes() -> Vec<Scene> {
             }),
             O::None,
         ),
-        scene("search", at(Destination::Search.route()), O::None),
     ]);
     all.extend(vector());
     all.extend(timeseries());
     all.extend(spatial());
+    all.extend(search());
     all.extend(events());
     for tab in ClusterTab::ALL {
         all.push(scene(
@@ -479,6 +484,31 @@ fn spatial() -> Vec<Scene> {
             "spatial-raster",
             SpatialTab::Raster,
             spatial_scenes::raster(),
+        ),
+    ]
+}
+
+/// Search: Search, Analyze, and Indexes.
+fn search() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: SearchSeed| Scene {
+        search: Some(Box::new(seed)),
+        ..scene(name, at(Route::Search { tab }), Overlay::None)
+    };
+    vec![
+        at_tab(
+            "search-results",
+            SearchTab::Results,
+            search_scenes::results(),
+        ),
+        at_tab(
+            "search-analyze",
+            SearchTab::Analyze,
+            search_scenes::analyze(),
+        ),
+        at_tab(
+            "search-indexes",
+            SearchTab::Indexes,
+            search_scenes::indexes(),
         ),
     ]
 }
@@ -735,6 +765,31 @@ mod tests {
             assert!(names.contains(&expected), "no scene `{expected}`");
         }
         assert!(!names.contains(&"vector-space"));
+    }
+
+    /// The three Search views the design names, each once.
+    #[test]
+    fn every_search_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in ["search-results", "search-analyze", "search-indexes"] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
+        }
+        assert!(!names.contains(&"search"), "the placeholder scene is gone");
+    }
+
+    /// The Search seeds hold a request each page runs.
+    #[test]
+    fn the_search_scenes_seed_a_run_to_show() {
+        let seed = search_scenes::results();
+        let state = seed.results.expect("the results scene seeds a query");
+        assert!(state.pending.is_some());
+        assert!(
+            search_scenes::analyze()
+                .analyze
+                .expect("analyze")
+                .pending
+                .is_some()
+        );
     }
 
     /// The three Spatial views the design names, each once.

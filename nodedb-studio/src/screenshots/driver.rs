@@ -237,6 +237,7 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
                 vector: scene.vector.as_deref().cloned(),
                 timeseries: scene.timeseries.as_deref().cloned(),
                 spatial: scene.spatial.as_deref().cloned(),
+                search: scene.search.as_deref().cloned(),
             }));
         }
     }

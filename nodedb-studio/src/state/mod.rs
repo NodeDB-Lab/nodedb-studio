@@ -18,6 +18,7 @@ pub mod persist;
 pub mod preferences;
 pub mod query;
 pub mod record_editor;
+pub mod search;
 pub mod spatial;
 pub mod timeseries;
 pub mod ui;

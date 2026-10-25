@@ -1,24 +1,17 @@
-//! Specialized-viewer reads at the backend seam: FTS and sync.
+//! Specialized-viewer reads at the backend seam: sync.
 //! Vector Space has its own trait, `vector_data`; Timeseries has `timeseries_data`;
-//! Spatial has `spatial_data`.
+//! Spatial has `spatial_data`; Search has `search_data`.
 //!
-//! `fts_hits` takes a `collection`: the
-//! Explorer already scopes its selection to one collection per storage mode,
-//! so each viewer's read is parameterised the same way `records(collection)`
-//! is. `sync_peers` is deliberately left unparameterised: it is
+//! `sync_peers` is deliberately left unparameterised: it is
 //! instance-scoped, not per-collection.
 
 use async_trait::async_trait;
 
-use crate::models::viewers::{FtsHit, SyncPeer};
+use crate::models::viewers::SyncPeer;
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
 pub trait ViewersData {
-    /// Full-text-search hits for `query` within `collection`.
-    #[allow(dead_code)] // SEAM-UNWIRED
-    async fn fts_hits(&self, collection: &str, query: &str) -> Result<Vec<FtsHit>, StudioError>;
-
     /// Sync/replication peers.
     #[allow(dead_code)] // SEAM-UNWIRED
     async fn sync_peers(&self) -> Result<Vec<SyncPeer>, StudioError>;
@@ -31,66 +24,14 @@ mod tests {
     use crate::services::mock::MockConnectionService;
 
     #[tokio::test]
-    async fn every_viewer_read_is_keyed_and_non_empty() {
+    async fn every_sync_peer_is_keyed_and_non_empty() {
         let svc = MockConnectionService::ready();
-
-        let fts = svc.fts_hits("articles", "nodedb").await.expect("fts");
-        assert!(!fts.is_empty());
-        assert!(
-            fts.iter().all(|h| !h.id.is_empty()),
-            "every fts hit needs a stable key"
-        );
-
         let peers = svc.sync_peers().await.expect("peers");
         assert!(!peers.is_empty());
         assert!(
             peers.iter().all(|p| !p.id.is_empty()),
             "every sync peer needs a stable key"
         );
-    }
-
-    // Each method below gets its own named ready/empty/erroring coverage:
-    // `apply(self.behavior, mock::x)` and a mis-wired `Ok(mock::x())` both
-    // satisfy a single shared assertion, so every method needs its own proof
-    // that it actually reads `self.behavior` (see admin_data.rs).
-
-    #[tokio::test]
-    async fn fts_hits_ready_excerpts_mention_the_query() {
-        let svc = MockConnectionService::ready();
-        let hits = svc
-            .fts_hits("articles", "nodedb")
-            .await
-            .expect("ready yields hits");
-        assert!(
-            hits.iter().all(|h| h.excerpt.contains("nodedb")),
-            "excerpts must reflect the requested query, not a fixed string"
-        );
-    }
-
-    #[tokio::test]
-    async fn fts_hits_ids_vary_by_collection() {
-        let svc = MockConnectionService::ready();
-        let a = svc.fts_hits("articles", "nodedb").await.expect("fts");
-        let b = svc.fts_hits("orders", "nodedb").await.expect("fts");
-        assert_ne!(
-            a.first().map(|h| h.id.as_str()),
-            b.first().map(|h| h.id.as_str()),
-            "fts hit ids must key off the requested collection"
-        );
-    }
-
-    #[tokio::test]
-    async fn fts_hits_empty_is_empty() {
-        let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.fts_hits("articles", "nodedb").await));
-        assert!(s.is_empty());
-    }
-
-    #[tokio::test]
-    async fn fts_hits_erroring_is_err() {
-        let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.fts_hits("articles", "nodedb").await));
-        assert!(s.error_message().is_some());
     }
 
     #[tokio::test]

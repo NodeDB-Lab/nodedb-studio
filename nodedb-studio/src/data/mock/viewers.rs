@@ -1,24 +1,6 @@
-//! Specialized-viewer fixtures: FTS and sync.
-//!
-//! The client decodes `SearchResult.metadata` as empty, which is why `models::viewers` defines its own display-carrying
-//! types instead of reusing client types here. These fixtures are deterministic
-//! stand-ins for what the real implementation will decode from raw SQL rows.
+//! Specialized-viewer fixtures: sync.
 
-use crate::models::viewers::{FtsHit, SyncPeer};
-
-/// Full-text-search hits for `query` within `collection`. Ids are keyed off
-/// `collection` so a caller that passes the wrong collection produces
-/// visibly different data.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn fts_hits(collection: &str, query: &str) -> Vec<FtsHit> {
-    (0..3)
-        .map(|i| FtsHit {
-            id: format!("{collection}-hit-{i}"),
-            excerpt: format!("...an excerpt in {collection} mentioning {query}..."),
-            score: format!("0.{}", 9 - i),
-        })
-        .collect()
-}
+use crate::models::viewers::SyncPeer;
 
 /// Sync/replication peers.
 #[allow(dead_code)] // SEAM-UNWIRED

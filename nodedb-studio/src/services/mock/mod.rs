@@ -10,6 +10,7 @@ pub mod graph;
 pub mod jobs;
 pub mod listen;
 pub mod matviews;
+pub mod search;
 pub mod service;
 pub mod spatial;
 pub mod timeseries;

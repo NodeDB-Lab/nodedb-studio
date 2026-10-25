@@ -51,6 +51,8 @@ pub struct MockConnectionService {
     pub(super) designer: Rc<RefCell<mock::DesignerStore>>,
     /// Saved dashboards, the `sales` lifecycle, and backfill jobs.
     pub(super) timeseries: Rc<RefCell<mock::TimeseriesStore>>,
+    /// Search executions and the rebuild jobs created this session.
+    pub(super) search: Rc<RefCell<mock::SearchStore>>,
 }
 
 impl Default for MockConnectionService {
@@ -78,6 +80,7 @@ impl MockConnectionService {
             workbench: Rc::new(RefCell::new(mock::WorkbenchStore::seeded())),
             designer: Rc::new(RefCell::new(mock::DesignerStore::seeded())),
             timeseries: Rc::new(RefCell::new(mock::TimeseriesStore::seeded())),
+            search: Rc::default(),
         }
     }
 

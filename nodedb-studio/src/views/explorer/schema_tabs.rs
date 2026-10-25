@@ -7,7 +7,10 @@ use dioxus::prelude::*;
 use crate::components::icon::Icon;
 use crate::models::collection::Collection;
 use crate::models::schema::CollectionSchema;
+use crate::models::search::{SearchMode, VectorInput};
 use crate::routes::Route;
+use crate::state::explorer::RecordView;
+use crate::state::search::SearchUi;
 use crate::views::explorer::details_vector::{IndexList, IndexedFields};
 use crate::views::explorer::links::OpenLink;
 
@@ -76,6 +79,8 @@ pub fn IndexesTab(collection: Collection, schema: CollectionSchema) -> Element {
 
 #[component]
 pub fn FullTextTab(collection: Collection, schema: CollectionSchema) -> Element {
+    let view = use_context::<Signal<RecordView>>();
+    let search = try_use_context::<SearchUi>();
     rsx! {
         div { class: "tab-body",
             if let Some(index) = schema.text_index.clone() {
@@ -86,6 +91,15 @@ pub fn FullTextTab(collection: Collection, schema: CollectionSchema) -> Element 
                         route: Route::Search { tab: crate::routes::tabs::SearchTab::Results },
                         label: "Open in Search".to_string(),
                         icon: Icon::Search,
+                        on_open: {
+                            let name = collection.name.clone();
+                            move |_| {
+                                let query = view.peek().text.trim().to_string();
+                                if let Some(search) = search {
+                                    search.open_query(&name, SearchMode::Keyword, &query, VectorInput::None);
+                                }
+                            }
+                        },
                     }
                 }
             } else {

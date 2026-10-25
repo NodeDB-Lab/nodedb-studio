@@ -28,6 +28,7 @@ mod tests {
     use crate::services::job_data::JobData;
     use crate::services::listen_data::ListenData;
     use crate::services::matview_data::MatViewData;
+    use crate::services::search_data::SearchData;
     use crate::services::spatial_data::SpatialData;
     use crate::services::timeseries_data::TimeseriesData;
     use crate::services::topic_data::TopicData;
@@ -197,7 +198,11 @@ mod tests {
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.fts_hits("articles", "nodedb").await,
+            svc.search_setup().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.search_indexes("articles").await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(

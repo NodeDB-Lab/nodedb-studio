@@ -8,11 +8,10 @@ use dioxus::prelude::*;
 
 use crate::components::tabs::{RouteTabs, tab_items};
 use crate::routes::Route;
-use crate::routes::tabs::{AdminTab, SearchTab, SyncTab};
+use crate::routes::tabs::{AdminTab, SyncTab};
 use crate::views::admin::audit::AuditView;
 use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
-use crate::views::fts_inspector::FtsInspector;
 use crate::views::sync::Sync;
 
 /// A page that has not been rebuilt yet.
@@ -25,17 +24,6 @@ fn Unbuilt(title: &'static str) -> Element {
                 p { "This page is being rebuilt for the new workspace." }
             }
         }
-    }
-}
-
-#[component]
-pub fn SearchPage(tab: SearchTab) -> Element {
-    rsx! {
-        RouteTabs {
-            items: tab_items(SearchTab::ALL, |t| t.label(), |tab| Route::Search { tab }),
-            current: Route::Search { tab },
-        }
-        div { class: "legacy-page", FtsInspector {} }
     }
 }
 

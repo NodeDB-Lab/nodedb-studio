@@ -117,7 +117,7 @@ tab_set! {
 tab_set! {
     /// Search views. Search replaces the earlier FTS Inspector.
     SearchTab {
-        Results => "results", "Results";
+        Results => "results", "Search";
         Analyze => "analyze", "Analyze";
         Indexes => "indexes", "Indexes";
     }

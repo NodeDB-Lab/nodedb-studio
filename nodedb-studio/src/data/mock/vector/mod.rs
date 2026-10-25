@@ -9,7 +9,7 @@ mod search;
 use crate::models::vector::{Metric, VectorRecord, VectorSetup, VectorTarget};
 use crate::services::error::StudioError;
 use corpus::{
-    COLLECTION, DIMENSIONS, FIELD, INDEX, MODEL, POPULATION, REVISION, meta, n_of, vector_of,
+    COLLECTION, DIMENSIONS, FIELD, INDEX, MODEL, POPULATION, REVISION, id_of, meta, n_of, vector_of,
 };
 
 pub use index::index_status as vector_index_status;
@@ -55,6 +55,37 @@ pub fn vector_record(collection: &str, field: &str, id: &str) -> Result<VectorRe
         embedded_at: Some(m.embedded_at),
         vector: vector_of(n),
     })
+}
+
+/// How many articles a mock search scans: the ones with a resident vector.
+pub const RESIDENT_ARTICLES: u64 = corpus::RESIDENT;
+
+/// The text of one article, for the keyword index built over the same
+/// records the vector index holds.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArticleText {
+    pub id: String,
+    pub title: String,
+    pub body: String,
+    pub language: Option<&'static str>,
+    pub model: &'static str,
+}
+
+/// Article `n`, in `1..=RESIDENT_ARTICLES`.
+pub fn article_text(n: u64) -> ArticleText {
+    let m = meta(n);
+    ArticleText {
+        id: id_of(n),
+        title: m.title,
+        body: m.body,
+        language: m.language,
+        model: m.model,
+    }
+}
+
+/// The number of the article with this id, when the index holds it.
+pub fn article_number(id: &str) -> Option<u64> {
+    n_of(id)
 }
 
 #[cfg(test)]

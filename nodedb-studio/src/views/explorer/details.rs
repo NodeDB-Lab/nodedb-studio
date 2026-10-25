@@ -5,6 +5,7 @@
 //! embedding's metadata for a vector attribute.
 
 use dioxus::prelude::*;
+use nodedb_types::Value;
 
 use crate::components::clipboard::use_copier;
 use crate::components::icon::{Ico, Icon};
@@ -13,9 +14,11 @@ use crate::models::collection::{Attached, Collection, Profile};
 use crate::models::record_json::{compact, pretty};
 use crate::models::records::{CollectionAccess, Record};
 use crate::models::schema::CollectionSchema;
+use crate::models::search::{SearchMode, VectorInput};
 use crate::routes::Route;
 use crate::routes::tabs::SearchTab;
 use crate::state::explorer::{DetailsTab, RecordView};
+use crate::state::search::SearchUi;
 use crate::views::explorer::actions::use_launcher;
 use crate::views::explorer::cells::{bytes_label, ttl_label};
 use crate::views::explorer::details_geo::SpatialDetails;
@@ -240,6 +243,7 @@ fn RichDocument(
     let nav = use_navigator();
     let launcher = use_launcher();
     let view = use_context::<Signal<RecordView>>();
+    let search = try_use_context::<SearchUi>();
     let tabs = DetailsTab::for_collection(&collection);
     let active = effective_tab(view.read().details_tab, &tabs).unwrap_or(DetailsTab::Document);
     let can_update = access.as_ref().is_some_and(|a| a.update.allowed());
@@ -252,7 +256,22 @@ fn RichDocument(
                 if collection.has(Attached::FullText) {
                     button {
                         class: "link-btn",
-                        onclick: move |_| { nav.push(Route::Search { tab: SearchTab::Results }); },
+                        title: "Open Search on this collection, with the Explorer's text filter or this record's title as the query",
+                        onclick: {
+                            let name = collection.name.clone();
+                            let title = match record.get("title") {
+                                Some(Value::String(s)) => s.clone(),
+                                _ => String::new(),
+                            };
+                            move |_| {
+                                let typed = view.peek().text.trim().to_string();
+                                let query = if typed.is_empty() { title.clone() } else { typed };
+                                if let Some(search) = search {
+                                    search.open_query(&name, SearchMode::Keyword, &query, VectorInput::None);
+                                }
+                                nav.push(Route::Search { tab: SearchTab::Results });
+                            }
+                        },
                         Ico { icon: Icon::Search, size: 16 }
                         "Open in Search"
                     }

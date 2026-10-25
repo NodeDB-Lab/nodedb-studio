@@ -156,26 +156,6 @@
   .sql-comment { color: var(--text-tertiary); font-style: italic; }
 
   /* ============================================================
-     View: Streams & Events landing
-     ============================================================ */
-  .se-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 16px; }
-  .se-card { padding: 16px 18px; }
-  .se-card .head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
-  .se-card .icon-box {
-    width: 32px; height: 32px;
-    background: var(--bg-secondary);
-    border-radius: 6px;
-    display: grid; place-items: center;
-    font-family: var(--font-mono); font-size: 12px;
-    color: var(--text-primary);
-  }
-  .se-card .title { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-  .se-card .desc { font-size: 12px; color: var(--text-secondary); margin-bottom: 14px; }
-  .se-card .stats { display: flex; gap: 16px; padding-top: 10px; border-top: 0.5px solid var(--border-soft); }
-  .se-card .stats .s .v { font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
-  .se-card .stats .s .l { font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; }
-
-  /* ============================================================
      Cluster topology
      ============================================================ */
   .cluster-canvas {
