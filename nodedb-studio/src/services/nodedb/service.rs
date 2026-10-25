@@ -28,6 +28,7 @@ mod tests {
     use crate::services::job_data::JobData;
     use crate::services::listen_data::ListenData;
     use crate::services::matview_data::MatViewData;
+    use crate::services::timeseries_data::TimeseriesData;
     use crate::services::topic_data::TopicData;
     use crate::services::vector_data::VectorData;
     use crate::services::viewers_data::ViewersData;
@@ -183,7 +184,11 @@ mod tests {
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.series("qps").await,
+            svc.time_sources().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.backfill_runs(None).await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(

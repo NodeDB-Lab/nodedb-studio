@@ -27,10 +27,12 @@ use crate::state::designer::DesignerState;
 use crate::state::events::EventsUi;
 use crate::state::explorer::{RecordView, RecordsEpoch, TransferNotice};
 use crate::state::graph::GraphUi;
+use crate::state::panel_registry::DynamicPanels;
 use crate::state::persist::{PREFERENCES, PersistMode, Store, WORKSPACE};
 use crate::state::preferences::Preferences;
 use crate::state::query::{QueryWorkspace, TxEpoch};
 use crate::state::record_editor::{DeleteRequest, RecordEditor};
+use crate::state::timeseries::TimeseriesUi;
 use crate::state::ui::{
     ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover, PrefsPane,
 };
@@ -55,6 +57,7 @@ const DESIGNER: Asset = asset!("/assets/designer.css");
 const EVENTS: Asset = asset!("/assets/events.css");
 const GRAPH: Asset = asset!("/assets/graph.css");
 const VECTOR: Asset = asset!("/assets/vector.css");
+const TIMESERIES: Asset = asset!("/assets/timeseries.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -150,6 +153,11 @@ pub fn App() -> Element {
     GraphUi::provide();
     // Vector Space keeps each tab's drafts, results, and the selected record.
     VectorUi::provide();
+    // Timeseries keeps each tab's draft, result, open dashboard, and changes
+    // waiting for review. A page lists the panels it creates at run time here,
+    // for the View menu.
+    TimeseriesUi::provide();
+    use_context_provider(|| DynamicPanels(Signal::new(Vec::new())));
     use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
     // highlights.
@@ -292,6 +300,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: EVENTS }
         document::Stylesheet { href: GRAPH }
         document::Stylesheet { href: VECTOR }
+        document::Stylesheet { href: TIMESERIES }
         {scene_driver}
         div {
             class: "studio-root",

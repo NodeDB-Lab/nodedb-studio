@@ -58,6 +58,12 @@ pub fn plain_text(value: &Value) -> String {
     }
 }
 
+/// Every record of `collection` in natural order, this session's writes
+/// included. `None` for a collection without records.
+pub fn all_records(collection: &str, overlay: &Overlay) -> Option<Vec<Record>> {
+    natural(collection, overlay)
+}
+
 fn natural(collection: &str, overlay: &Overlay) -> Option<Vec<Record>> {
     let set = dataset(collection)?;
     let mut all: Vec<Record> = overlay

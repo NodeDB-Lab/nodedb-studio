@@ -10,6 +10,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::routes::Route;
+use crate::state::panel_registry::DynamicPanels;
 use crate::state::workspace::{Surface, Workspace};
 
 /// The View menu of the page the router shows.
@@ -27,11 +28,35 @@ pub fn ViewMenuFor(surface: Surface, navigation: bool) -> Element {
     let mut workspace = use_context::<Signal<Workspace>>();
     let ws = workspace.read();
     let nav_visible = ws.nav_visible();
-    let rows: Vec<_> = surface
+    let mut rows: Vec<(String, String, String, bool)> = surface
         .panels()
         .iter()
-        .map(|p| (p.id, p.label, p.hint, ws.is_visible(surface, p.id)))
+        .map(|p| {
+            (
+                p.id.to_string(),
+                p.label.to_string(),
+                p.hint.to_string(),
+                ws.is_visible(surface, p.id),
+            )
+        })
         .collect();
+    if let Some(extra) = try_use_context::<DynamicPanels>() {
+        rows.extend(
+            extra
+                .0
+                .read()
+                .iter()
+                .filter(|p| p.surface == surface)
+                .map(|p| {
+                    (
+                        p.id.clone(),
+                        p.label.clone(),
+                        p.hint.clone(),
+                        ws.is_visible(surface, &p.id),
+                    )
+                }),
+        );
+    }
     drop(ws);
 
     rsx! {
@@ -43,8 +68,8 @@ pub fn ViewMenuFor(surface: Surface, navigation: bool) -> Element {
             div { class: "menu-title", "View" }
             if navigation {
                 ViewItem {
-                    label: "Navigation",
-                    hint: "Show sidebar",
+                    label: "Navigation".to_string(),
+                    hint: "Show sidebar".to_string(),
                     checked: nav_visible,
                     on_toggle: move |on: bool| workspace.write().set_nav_visible(on),
                 }
@@ -55,7 +80,7 @@ pub fn ViewMenuFor(surface: Surface, navigation: bool) -> Element {
                     label,
                     hint,
                     checked,
-                    on_toggle: move |on: bool| workspace.write().set_visible(surface, id, on),
+                    on_toggle: move |on: bool| workspace.write().set_visible(surface, &id, on),
                 }
             }
             div { class: "menu-sep" }
@@ -71,12 +96,7 @@ pub fn ViewMenuFor(surface: Surface, navigation: bool) -> Element {
 }
 
 #[component]
-fn ViewItem(
-    label: &'static str,
-    hint: &'static str,
-    checked: bool,
-    on_toggle: EventHandler<bool>,
-) -> Element {
+fn ViewItem(label: String, hint: String, checked: bool, on_toggle: EventHandler<bool>) -> Element {
     rsx! {
         label { class: "menu-check", role: "menuitemcheckbox", "aria-checked": "{checked}",
             input {

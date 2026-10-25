@@ -11,6 +11,7 @@ pub mod jobs;
 pub mod listen;
 pub mod matviews;
 pub mod service;
+pub mod timeseries;
 pub mod topics;
 pub mod transfer;
 pub mod vector;

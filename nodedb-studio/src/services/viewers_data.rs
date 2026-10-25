@@ -1,5 +1,5 @@
-//! Specialized-viewer reads at the backend seam: timeseries, spatial, FTS, and
-//! sync. Vector Space has its own trait, `vector_data`.
+//! Specialized-viewer reads at the backend seam: spatial, FTS, and sync.
+//! Vector Space has its own trait, `vector_data`; Timeseries has `timeseries_data`.
 //!
 //! `spatial_features` and `fts_hits` take a `collection`: the
 //! Explorer already scopes its selection to one collection per storage mode,
@@ -9,15 +9,11 @@
 
 use async_trait::async_trait;
 
-use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer};
+use crate::models::viewers::{FtsHit, SpatialFeature, SyncPeer};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
 pub trait ViewersData {
-    /// Samples for one timeseries metric.
-    #[allow(dead_code)] // SEAM-UNWIRED
-    async fn series(&self, metric: &str) -> Result<Vec<SeriesPoint>, StudioError>;
-
     /// Features for the spatial viewer's map, scoped to `collection`.
     #[allow(dead_code)] // SEAM-UNWIRED
     async fn spatial_features(&self, collection: &str) -> Result<Vec<SpatialFeature>, StudioError>;
@@ -40,13 +36,6 @@ mod tests {
     #[tokio::test]
     async fn every_viewer_read_is_keyed_and_non_empty() {
         let svc = MockConnectionService::ready();
-
-        let series = svc.series("qps").await.expect("series");
-        assert!(!series.is_empty());
-        assert!(
-            series.iter().all(|p| !p.id.is_empty()),
-            "every series point needs a stable key"
-        );
 
         let spatial = svc.spatial_features("places").await.expect("geo");
         assert!(!spatial.is_empty());
@@ -74,30 +63,6 @@ mod tests {
     // `apply(self.behavior, mock::x)` and a mis-wired `Ok(mock::x())` both
     // satisfy a single shared assertion, so every method needs its own proof
     // that it actually reads `self.behavior` (see admin_data.rs).
-
-    #[tokio::test]
-    async fn series_ready_ids_are_prefixed_with_the_requested_metric() {
-        let svc = MockConnectionService::ready();
-        let points = svc.series("qps").await.expect("ready yields points");
-        assert!(
-            points.iter().all(|p| p.id.starts_with("qps-")),
-            "series ids must key off the requested metric, not a fixed name"
-        );
-    }
-
-    #[tokio::test]
-    async fn series_empty_is_empty() {
-        let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.series("qps").await));
-        assert!(s.is_empty());
-    }
-
-    #[tokio::test]
-    async fn series_erroring_is_err() {
-        let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.series("qps").await));
-        assert!(s.error_message().is_some());
-    }
 
     #[tokio::test]
     async fn spatial_features_ready_have_geometry() {

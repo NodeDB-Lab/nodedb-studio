@@ -49,6 +49,8 @@ pub struct MockConnectionService {
     /// Staged schema changes and the schema changes applied. An applied
     /// collection joins the catalog the Explorer reads.
     pub(super) designer: Rc<RefCell<mock::DesignerStore>>,
+    /// Saved dashboards, the `sales` lifecycle, and backfill jobs.
+    pub(super) timeseries: Rc<RefCell<mock::TimeseriesStore>>,
 }
 
 impl Default for MockConnectionService {
@@ -75,6 +77,7 @@ impl MockConnectionService {
             jobs: Rc::new(RefCell::new(mock::transfer_jobs())),
             workbench: Rc::new(RefCell::new(mock::WorkbenchStore::seeded())),
             designer: Rc::new(RefCell::new(mock::DesignerStore::seeded())),
+            timeseries: Rc::new(RefCell::new(mock::TimeseriesStore::seeded())),
         }
     }
 

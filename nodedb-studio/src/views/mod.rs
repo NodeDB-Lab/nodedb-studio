@@ -20,6 +20,6 @@ pub mod graph;
 pub mod query;
 pub mod spatial_view;
 pub mod sync;
-pub mod timeseries_dashboard;
+pub mod timeseries;
 pub mod transitional;
 pub mod vector;

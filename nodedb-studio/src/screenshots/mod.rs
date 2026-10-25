@@ -9,6 +9,7 @@ pub mod driver;
 pub mod events_scenes;
 pub mod scenes;
 pub mod sync;
+pub mod timeseries_scenes;
 pub mod vector_scenes;
 pub mod workbench_scenes;
 

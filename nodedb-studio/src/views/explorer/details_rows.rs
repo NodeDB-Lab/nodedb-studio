@@ -10,9 +10,10 @@ use crate::models::format::offset_label;
 use crate::models::records::{CollectionAccess, Grant, Record};
 use crate::models::schema::{CollectionSchema, FieldType};
 use crate::routes::Route;
-use crate::routes::tabs::AdminTab;
+use crate::routes::tabs::{AdminTab, TimeseriesTab};
 use crate::state::explorer::{DetailsTab, RecordView, Selected, select_record};
 use crate::state::preferences::Preferences;
+use crate::state::timeseries::TimeseriesUi;
 use crate::views::explorer::cells::{status_tone, text_label, time_label};
 use crate::views::explorer::details::{DetailTabs, RecordActions, Stepper, effective_tab};
 
@@ -270,6 +271,7 @@ pub fn SeriesDetails(
     next: Option<String>,
 ) -> Element {
     let nav = use_navigator();
+    let timeseries = use_context::<TimeseriesUi>();
     let prefs = use_context::<Signal<Preferences>>();
     let offset = prefs.read().utc_offset_minutes;
     let zone = offset_label(offset);
@@ -333,6 +335,18 @@ pub fn SeriesDetails(
                     onclick: move |_| { nav.push(Route::Admin { tab: AdminTab::Access }); },
                     Ico { icon: Icon::Pencil, size: 16 }
                     "Edit permissions"
+                }
+                button {
+                    class: "btn",
+                    onclick: {
+                        let (name, key) = (collection.name.clone(), time_key.clone());
+                        move |_| {
+                            timeseries.open_collection(&name, (!key.is_empty()).then_some(key.as_str()));
+                            nav.push(Route::Timeseries { tab: TimeseriesTab::Explore });
+                        }
+                    },
+                    Ico { icon: Icon::ChartColumn, size: 16 }
+                    "Open in Timeseries"
                 }
             }
         }

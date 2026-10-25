@@ -1,4 +1,4 @@
-//! Specialized-viewer models: timeseries, spatial, FTS, sync.
+//! Specialized-viewer models: spatial, FTS, sync.
 //!
 //! The client decodes `SearchResult.metadata` as empty, so Studio cannot get
 //! display fields (coordinates, excerpts) by calling those typed client
@@ -7,15 +7,6 @@
 //! than the client's typed search types.
 
 use serde::{Deserialize, Serialize};
-
-/// One sample in a timeseries metric.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SeriesPoint {
-    pub id: String,
-    pub t: String,
-    pub value: f32,
-}
 
 /// One feature in a spatial viewer. `geometry_json` is display GeoJSON
 /// produced at the seam, never a raw client value.

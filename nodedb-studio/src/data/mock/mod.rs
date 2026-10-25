@@ -15,6 +15,7 @@ mod explorer;
 mod graph;
 #[cfg(test)]
 mod test_support;
+mod timeseries;
 mod transfer;
 mod vector;
 mod viewers;
@@ -36,13 +37,17 @@ pub use events::{
 #[cfg(test)]
 pub use events::{seeded_feeds, seeded_jobs};
 pub use explorer::{
-    GRAPH, Overlay, array_schema, array_slice, collection_access, collection_schema, collections,
-    edge_page, observed_at, record_page, stored_record, transfer_preview,
+    GRAPH, Overlay, all_records, array_schema, array_slice, collection_access, collection_schema,
+    collections, edge_page, observed_at, record_page, stored_record, transfer_preview,
 };
 pub use graph::{expand_node, find_paths, graph_bindings, rag_search, rag_setup, run_cypher};
+pub use timeseries::{
+    BackfillError, DashError, ExploreError, LifecycleError, TimeseriesStore, backfill_preview,
+    explore, time_sources,
+};
 pub use transfer::transfer_jobs;
 pub use vector::{vector_index_status, vector_project, vector_record, vector_search, vector_setup};
-pub use viewers::{fts_hits, series, spatial_features, sync_peers};
+pub use viewers::{fts_hits, spatial_features, sync_peers};
 pub use workbench::{WorkbenchStore, empty_result_set, query_plan, query_session, schema_tree};
 // Only the screenshot scenes and the tests name these.
 #[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]

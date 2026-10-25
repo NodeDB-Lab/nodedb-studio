@@ -20,7 +20,8 @@ use crate::views::events::EventsPage;
 use crate::views::explorer::{DataTransferPage, ExplorerPage};
 use crate::views::graph::GraphPage;
 use crate::views::query::QueryPage;
-use crate::views::transitional::{AdminPage, SearchPage, SpatialPage, SyncPage, TimeseriesPage};
+use crate::views::timeseries::TimeseriesPage;
+use crate::views::transitional::{AdminPage, SearchPage, SpatialPage, SyncPage};
 use crate::views::vector::VectorPage;
 
 #[derive(Routable, Clone, PartialEq, Debug)]

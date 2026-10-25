@@ -9,10 +9,11 @@ use crate::models::collection::Profile;
 use crate::models::connections::ConnectionTest;
 use crate::models::records::Filter;
 use crate::models::workbench::TxAccess;
-use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab, GraphTab, VectorTab};
+use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab, GraphTab, TimeseriesTab, VectorTab};
 use crate::routes::{Destination, Route};
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
+use crate::screenshots::timeseries_scenes;
 use crate::screenshots::vector_scenes;
 use crate::screenshots::workbench_scenes;
 use crate::state::connection_form::{ConnectionForm, TestState};
@@ -23,6 +24,7 @@ use crate::state::explorer::{
 };
 use crate::state::query::QueryWorkspace;
 use crate::state::record_editor::RecordEditor;
+use crate::state::timeseries::TimeseriesSeed;
 use crate::state::ui::{ModalKind, Popover, PrefsPane};
 use crate::state::vector::VectorSeed;
 
@@ -143,6 +145,8 @@ pub struct Scene {
     pub events: Option<Box<EventsSeed>>,
     /// The Vector Space drafts and selection. `None` keeps the current ones.
     pub vector: Option<Box<VectorSeed>>,
+    /// The Timeseries drafts and open documents. `None` keeps the current ones.
+    pub timeseries: Option<Box<TimeseriesSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -159,6 +163,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         designer: None,
         events: None,
         vector: None,
+        timeseries: None,
     }
 }
 
@@ -332,11 +337,11 @@ pub fn scenes() -> Vec<Scene> {
             }),
             O::None,
         ),
-        scene("timeseries", at(Destination::Timeseries.route()), O::None),
         scene("spatial", at(Destination::Spatial.route()), O::None),
         scene("search", at(Destination::Search.route()), O::None),
     ]);
     all.extend(vector());
+    all.extend(timeseries());
     all.extend(events());
     for tab in ClusterTab::ALL {
         all.push(scene(
@@ -464,6 +469,42 @@ fn vector() -> Vec<Scene> {
             vector_scenes::projection(),
         ),
         at_tab("vector-index", VectorTab::Index, vector_scenes::index()),
+    ]
+}
+
+/// Timeseries: Explore with the picker open, Dashboards, the panel editor,
+/// Lifecycle, and the backfill review.
+fn timeseries() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: TimeseriesSeed| Scene {
+        timeseries: Some(Box::new(seed)),
+        ..scene(name, at(Route::Timeseries { tab }), Overlay::None)
+    };
+    vec![
+        at_tab(
+            "timeseries-explore",
+            TimeseriesTab::Explore,
+            timeseries_scenes::explore(),
+        ),
+        at_tab(
+            "timeseries-dashboards",
+            TimeseriesTab::Dashboards,
+            timeseries_scenes::dashboards(),
+        ),
+        at_tab(
+            "timeseries-dashboard-editor",
+            TimeseriesTab::Dashboards,
+            timeseries_scenes::dashboard_editor(),
+        ),
+        at_tab(
+            "timeseries-lifecycle",
+            TimeseriesTab::Lifecycle,
+            timeseries_scenes::lifecycle(),
+        ),
+        at_tab(
+            "timeseries-backfill",
+            TimeseriesTab::Backfill,
+            timeseries_scenes::backfill(),
+        ),
     ]
 }
 
@@ -681,6 +722,24 @@ mod tests {
         ] {
             assert!(names.contains(&expected), "no scene `{expected}`");
         }
+    }
+
+    #[test]
+    fn every_timeseries_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in [
+            "timeseries-explore",
+            "timeseries-dashboards",
+            "timeseries-dashboard-editor",
+            "timeseries-lifecycle",
+            "timeseries-backfill",
+        ] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
+        }
+        assert!(
+            !names.contains(&"timeseries"),
+            "the placeholder scene is gone"
+        );
     }
 
     #[test]

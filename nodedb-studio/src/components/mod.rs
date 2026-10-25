@@ -16,8 +16,6 @@ pub mod panel;
 pub mod popovers;
 pub mod sheet;
 pub mod sidebar;
-pub mod sparkline;
-pub mod stat_card;
 pub mod tabs;
 pub mod tx_badge;
 pub mod view_menu;

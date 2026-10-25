@@ -10,6 +10,21 @@ use crate::routes::tabs::{
 };
 use crate::state::workspace::{PanelSpec, Surface};
 
+/// A panel a page creates at run time, such as one panel of the open
+/// dashboard. The View menu lists it under its page after the fixed ones.
+#[derive(Debug, Clone, PartialEq)]
+pub struct DynamicPanel {
+    pub surface: Surface,
+    pub id: String,
+    pub label: String,
+    pub hint: String,
+}
+
+/// The run-time panels of the page on screen. A page sets the list while
+/// it shows panels of its own and clears it when it goes.
+#[derive(Clone, Copy)]
+pub struct DynamicPanels(pub dioxus::prelude::Signal<Vec<DynamicPanel>>);
+
 const fn panel(id: &'static str, label: &'static str, hint: &'static str) -> PanelSpec {
     PanelSpec { id, label, hint }
 }
@@ -142,6 +157,52 @@ const VECTOR_INDEX: &[PanelSpec] = &[
     panel("definition", "Definition", "Show the index definition"),
 ];
 
+const TIMESERIES_EXPLORE: &[PanelSpec] = &[
+    panel("chart", "Chart", "Show the chart"),
+    panel("results", "Results", "Show the result rows"),
+    panel("query", "Query", "Show the SQL and the fields"),
+];
+
+const TIMESERIES_DASHBOARDS: &[PanelSpec] = &[panel(
+    "library",
+    "Saved dashboards",
+    "Show the dashboard library",
+)];
+
+const TIMESERIES_LIFECYCLE: &[PanelSpec] = &[
+    panel(
+        "retention",
+        "Retention & rollups",
+        "Show the tiers of the collection",
+    ),
+    panel(
+        "late",
+        "Late data & backfill",
+        "Show the late-data policy and backfill",
+    ),
+    panel("rollup", "Rollup", "Show the selected rollup"),
+];
+
+const TIMESERIES_BACKFILL: &[PanelSpec] = &[
+    panel(
+        "preview",
+        "Backfill preview",
+        "Show the job's source and range",
+    ),
+    panel(
+        "buckets",
+        "Affected buckets",
+        "Show the buckets a run replaces",
+    ),
+    panel("job", "Job identity", "Show the job name and key"),
+    panel(
+        "run",
+        "Run backfill",
+        "Show the dry run and the run controls",
+    ),
+    panel("history", "Backfill history", "Show earlier jobs"),
+];
+
 const DESIGNER: &[PanelSpec] = &[panel(
     "properties",
     "Properties",
@@ -169,10 +230,11 @@ impl Surface {
             Surface::Vector(VectorTab::Search) => VECTOR_SEARCH,
             Surface::Vector(VectorTab::Projection) => VECTOR_PROJECTION,
             Surface::Vector(VectorTab::Index) => VECTOR_INDEX,
-            Surface::Timeseries(
-                TimeseriesTab::Explore | TimeseriesTab::Dashboards | TimeseriesTab::Lifecycle,
-            )
-            | Surface::Spatial(SpatialTab::Map | SpatialTab::Analyze | SpatialTab::Raster)
+            Surface::Timeseries(TimeseriesTab::Explore) => TIMESERIES_EXPLORE,
+            Surface::Timeseries(TimeseriesTab::Dashboards) => TIMESERIES_DASHBOARDS,
+            Surface::Timeseries(TimeseriesTab::Lifecycle) => TIMESERIES_LIFECYCLE,
+            Surface::Timeseries(TimeseriesTab::Backfill) => TIMESERIES_BACKFILL,
+            Surface::Spatial(SpatialTab::Map | SpatialTab::Analyze | SpatialTab::Raster)
             | Surface::Search(SearchTab::Results | SearchTab::Analyze | SearchTab::Indexes)
             | Surface::Cluster(
                 ClusterTab::RaftGroups

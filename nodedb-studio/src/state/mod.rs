@@ -18,6 +18,7 @@ pub mod persist;
 pub mod preferences;
 pub mod query;
 pub mod record_editor;
+pub mod timeseries;
 pub mod ui;
 pub mod vector;
 pub mod workspace;

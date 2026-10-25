@@ -31,6 +31,36 @@ impl Env {
     }
 }
 
+/// Open `sql` in a new Query tab, where it can be read, edited, and run, and
+/// show the Query page. Studio never runs it.
+pub async fn open_in_query(
+    mut ws: Signal<QueryWorkspace>,
+    backend: Rc<dyn Backend>,
+    nav: dioxus::router::Navigator,
+    database: String,
+    title: String,
+    sql: String,
+) {
+    // The Query page restores the session's tabs once. Do that first, or the
+    // restore would replace the tab opened here.
+    if !ws.peek().is_loaded()
+        && let Ok(drafts) = backend.query_session().await
+    {
+        ws.set(QueryWorkspace::from_drafts(&drafts));
+    }
+    {
+        let mut w = ws.write();
+        let id = w.new_tab(&database);
+        if let Some(tab) = w.tab_mut(id) {
+            tab.title.clone_from(&title);
+            tab.baseline.title = title;
+            tab.set_sql(sql.clone());
+            tab.baseline.sql = sql;
+        }
+    }
+    nav.push(crate::routes::Route::Query {});
+}
+
 /// Run `request` in tab `id` and keep its result there.
 pub async fn run(env: Env, backend: Rc<dyn Backend>, id: u32, request: QueryRequest) {
     let mut ws = env.ws;

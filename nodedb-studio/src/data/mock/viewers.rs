@@ -1,22 +1,10 @@
-//! Specialized-viewer fixtures: timeseries, spatial, FTS, sync.
+//! Specialized-viewer fixtures: spatial, FTS, sync.
 //!
 //! The client decodes `SearchResult.metadata` as empty, which is why `models::viewers` defines its own display-carrying
 //! types instead of reusing client types here. These fixtures are deterministic
 //! stand-ins for what the real implementation will decode from raw SQL rows.
 
-use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer};
-
-/// Samples for one timeseries metric.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn series(metric: &str) -> Vec<SeriesPoint> {
-    (0..8)
-        .map(|i| SeriesPoint {
-            id: format!("{metric}-{i}"),
-            t: format!("2026-08-08T10:0{i}:00Z"),
-            value: 10.0 + i as f32,
-        })
-        .collect()
-}
+use crate::models::viewers::{FtsHit, SpatialFeature, SyncPeer};
 
 /// Spatial features for `collection`, with placeholder GeoJSON geometry. Ids
 /// are keyed off `collection` so a caller that passes the wrong collection

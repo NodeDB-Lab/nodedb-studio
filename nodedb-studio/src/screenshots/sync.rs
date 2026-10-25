@@ -13,6 +13,7 @@ use crate::state::designer::DesignerState;
 use crate::state::events::{EventsSeed, EventsUi};
 use crate::state::explorer::{RecordView, Selected};
 use crate::state::query::QueryWorkspace;
+use crate::state::timeseries::{TimeseriesSeed, TimeseriesUi};
 use crate::state::vector::{VectorSeed, VectorUi};
 
 /// Where the current studio scene points.
@@ -31,6 +32,8 @@ pub struct SceneTarget {
     pub events: Option<EventsSeed>,
     /// The Vector Space drafts and selection. `None` keeps the current ones.
     pub vector: Option<VectorSeed>,
+    /// The Timeseries tabs' drafts and open documents. `None` keeps them.
+    pub timeseries: Option<TimeseriesSeed>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -52,6 +55,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let mut designer = use_context::<Signal<DesignerState>>();
     let events = use_context::<EventsUi>();
     let vector = use_context::<VectorUi>();
+    let timeseries = use_context::<TimeseriesUi>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -77,6 +81,9 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         }
         if let Some(seed) = t.vector {
             vector.apply(seed, crate::screenshots::vector_scenes::TARGET);
+        }
+        if let Some(seed) = t.timeseries {
+            timeseries.apply(seed);
         }
         nav.replace(t.route);
     });

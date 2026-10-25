@@ -17,8 +17,12 @@ use crate::models::records::{CollectionAccess, Record, RecordPage};
 use crate::models::saved_query::QueryLibrary;
 use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
+use crate::models::timeseries::{ExploreResult, TimeCatalog};
 use crate::models::topics::{MessageRange, ResetPreview};
 use crate::models::transfer::ExportPreview;
+use crate::models::ts_backfill::BackfillPreview;
+use crate::models::ts_dashboard::Dashboard;
+use crate::models::ts_lifecycle::Lifecycle;
 use crate::models::workbench::{QueryRun, ResultSet, SchemaTree};
 use crate::services::error::StudioError;
 
@@ -190,6 +194,41 @@ impl IsEmpty for ChangeReview {
 impl IsEmpty for SchemaTree {
     fn is_empty(&self) -> bool {
         self.tables.is_empty() && self.views.is_empty()
+    }
+}
+
+/// A result is empty when no series holds a point. The range and the
+/// counts of rows read still say what was asked.
+impl IsEmpty for ExploreResult {
+    fn is_empty(&self) -> bool {
+        ExploreResult::is_empty(self)
+    }
+}
+
+/// A catalog is empty when the database offers no collection.
+impl IsEmpty for TimeCatalog {
+    fn is_empty(&self) -> bool {
+        self.sources.is_empty()
+    }
+}
+
+/// A dashboard document is never an empty state: an empty one is a draft.
+impl IsEmpty for Dashboard {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+/// A lifecycle always has its raw tier.
+impl IsEmpty for Lifecycle {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for BackfillPreview {
+    fn is_empty(&self) -> bool {
+        self.buckets.is_empty()
     }
 }
 

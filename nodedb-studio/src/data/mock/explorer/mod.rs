@@ -19,7 +19,9 @@ pub use access::collection_access;
 pub use array::{array_schema, array_slice};
 pub use catalog::collections;
 pub use edges::{GRAPH, edge_page};
-pub use query::{Overlay, observed_at, record_page, stored_record, transfer_preview};
+pub use query::{
+    Overlay, all_records, observed_at, plain_text, record_page, stored_record, transfer_preview,
+};
 pub use schemas::collection_schema;
 
 /// How many articles the Explorer holds. Vector Space reads the same records.

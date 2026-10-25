@@ -95,11 +95,13 @@ tab_set! {
 }
 
 tab_set! {
-    /// Timeseries views.
+    /// Timeseries views. Backfill is the job review Lifecycle opens: it is
+    /// addressable like a tab and lights Lifecycle, but the strip omits it.
     TimeseriesTab {
         Explore => "explore", "Explore";
         Dashboards => "dashboards", "Dashboards";
         Lifecycle => "lifecycle", "Lifecycle";
+        Backfill => "backfill", "Backfill";
     }
 }
 
