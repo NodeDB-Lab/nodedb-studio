@@ -46,6 +46,33 @@ fn target_route(target: NotificationTarget) -> Route {
     }
 }
 
+/// Persists mark-all-read, then reconciles the shared store with the result.
+/// The local list changes only once the seam acknowledges the write (see
+/// `apply_mark_all_read`), and no signal guard is held across the await.
+///
+/// Runs under `spawn_forever`: the popover is conditionally mounted, and
+/// Dioxus drops a scope's tasks on unmount. Clicking away mid-write would
+/// kill the task at the await, leaving the server's state unknown and the
+/// store never reconciled. `store` is app-level context and outlives the
+/// task, so the reconcile always lands.
+///
+/// `write_error` belongs to the popover and is dropped when it closes.
+/// `Signal::set` on a dropped signal panics, so the error is written only
+/// while the popover is open. A failure the user closed the popover on is
+/// not shown: the failure path leaves the list untouched, which is what
+/// reopening the popover shows.
+async fn mark_all_read_and_reconcile(
+    backend: Rc<dyn Backend>,
+    mut store: Signal<AsyncState<Vec<Notification>>>,
+    mut write_error: Signal<Option<StudioError>>,
+) {
+    let result = backend.mark_all_read().await;
+    let err = apply_mark_all_read(&mut store.write(), result);
+    if let Ok(mut slot) = write_error.try_write() {
+        *slot = err;
+    }
+}
+
 #[component]
 pub fn NotificationPopover() -> Element {
     // The one shared store (mutated here for mark-all-read + per-item read) and
@@ -57,29 +84,17 @@ pub fn NotificationPopover() -> Element {
     let backend = use_context::<Rc<dyn Backend>>();
     let nav = use_navigator();
     // Write failure for mark-all-read, separate from the read store.
-    let mut write_error: Signal<Option<StudioError>> = use_signal(|| None);
-    // Persist first; the local list changes only once the seam acknowledges
-    // the write (see apply_mark_all_read). The spawn keeps every signal guard
-    // out of the await. Built once so the header button and its Retry are the
-    // same operation, not two copies that can drift.
-    //
-    // spawn_forever, not spawn: this popover is conditionally mounted, and
-    // Dioxus drops a scope's tasks on unmount. Clicking away while the write
-    // is in flight would kill it at the await, leaving the server's state
-    // unknown and the shared store never reconciled. The store is app-level
-    // context, so the reconcile still lands; only `write_error` is scoped
-    // here, so a failure the user navigated away from is not shown. That is
-    // acceptable because the failure path leaves the list untouched, which is
-    // what reopening the popover shows.
+    let write_error: Signal<Option<StudioError>> = use_signal(|| None);
+    // Built once so the header button and its Retry are the same operation,
+    // not two copies that can drift.
     let mark_all = {
         let backend = backend.clone();
         move || {
-            let backend = backend.clone();
-            spawn_forever(async move {
-                let result = backend.mark_all_read().await;
-                let err = apply_mark_all_read(&mut store.write(), result);
-                write_error.set(err);
-            });
+            spawn_forever(mark_all_read_and_reconcile(
+                backend.clone(),
+                store,
+                write_error,
+            ));
         }
     };
 
@@ -217,5 +232,61 @@ mod tests {
         let v: Option<Result<Vec<Notification>, StudioError>> =
             Some(Err(StudioError::NotConnected));
         assert!(matches!(AsyncState::from_value(v), AsyncState::Error(_)));
+    }
+
+    /// The popover can close while mark-all-read waits on the server. The
+    /// result then lands after the popover's own signals are dropped. A mock
+    /// in `Ready` resolves on the first poll and never reaches this, so the
+    /// write here runs against a backend that yields.
+    #[tokio::test]
+    async fn mark_all_read_finishing_after_the_popover_closed_does_not_panic() {
+        use std::time::Duration;
+
+        use crate::services::connection_service::{ConnectionService, MockConnectionService};
+
+        #[component]
+        fn Popover(store: Signal<AsyncState<Vec<Notification>>>) -> Element {
+            let backend = use_context::<Rc<dyn Backend>>();
+            let write_error = use_signal(|| None);
+            use_hook(move || {
+                spawn_forever(mark_all_read_and_reconcile(backend, store, write_error));
+            });
+            rsx! {}
+        }
+
+        fn app(mock: Rc<MockConnectionService>) -> Element {
+            use_context_provider(|| mock as Rc<dyn Backend>);
+            let store = use_signal(|| AsyncState::Loading);
+            let mut open = use_signal(|| true);
+            // Close the popover while the write is still in flight.
+            use_future(move || async move {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+                open.set(false);
+            });
+            rsx! {
+                if open() {
+                    Popover { store }
+                }
+            }
+        }
+
+        let mock = Rc::new(MockConnectionService::delayed(Duration::from_millis(30)));
+        let mut dom = VirtualDom::new_with_props(app, Rc::clone(&mock));
+        dom.rebuild_in_place();
+        // Drive renders and tasks until nothing is left to run.
+        while tokio::time::timeout(Duration::from_millis(200), dom.wait_for_work())
+            .await
+            .is_ok()
+        {
+            dom.render_immediate(&mut dioxus::core::NoOpMutations);
+        }
+
+        // The write reached the backend, so its continuation (reconcile and
+        // write-back) ran in the same poll, after the popover had closed.
+        let feed = mock.notifications().await.expect("delayed mock reads");
+        assert!(
+            feed.iter().all(|n| !n.unread),
+            "mark-all-read never completed, so the test proved nothing"
+        );
     }
 }
