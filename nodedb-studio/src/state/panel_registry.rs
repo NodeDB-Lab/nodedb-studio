@@ -104,6 +104,44 @@ const CLUSTER_ACTIVITY: &[PanelSpec] = &[
     panel("details", "Event details", "Show the selected event"),
 ];
 
+const SYNC_DEVICES: &[PanelSpec] = &[
+    panel("devices", "Devices", "Show the registered Lite devices"),
+    panel(
+        "subscribed",
+        "Subscribed data",
+        "Show the selected device's subscriptions",
+    ),
+    panel("details", "Device details", "Show the selected device"),
+];
+
+const SYNC_SUBSCRIPTIONS: &[PanelSpec] = &[
+    panel("subscriptions", "Subscriptions", "Show every subscription"),
+    panel(
+        "status",
+        "Synchronization status",
+        "Show the selected subscription's progress",
+    ),
+    panel(
+        "details",
+        "Subscription details",
+        "Show the selected subscription's definition",
+    ),
+];
+
+const SYNC_REJECTED: &[PanelSpec] = &[
+    panel("rejected", "Rejected writes", "Show the quarantined writes"),
+    panel(
+        "details",
+        "Write attempt details",
+        "Show the selected rejected write",
+    ),
+];
+
+const SYNC_ACTIVITY: &[PanelSpec] = &[
+    panel("activity", "Sync activity", "Show the sync event log"),
+    panel("details", "Event details", "Show the selected event"),
+];
+
 const EVENTS_FEEDS: &[PanelSpec] = &[
     panel("feeds", "Change feeds", "Show the feed list"),
     panel("events", "Recent events", "Show the selected feed's events"),
@@ -320,13 +358,11 @@ impl Surface {
             Surface::Search(SearchTab::Results) => SEARCH_RESULTS,
             Surface::Search(SearchTab::Analyze) => SEARCH_ANALYZE,
             Surface::Search(SearchTab::Indexes) => SEARCH_INDEXES,
-            Surface::Sync(
-                SyncTab::Devices
-                | SyncTab::Subscriptions
-                | SyncTab::RejectedWrites
-                | SyncTab::Activity,
-            )
-            | Surface::Admin(
+            Surface::Sync(SyncTab::Devices) => SYNC_DEVICES,
+            Surface::Sync(SyncTab::Subscriptions) => SYNC_SUBSCRIPTIONS,
+            Surface::Sync(SyncTab::RejectedWrites) => SYNC_REJECTED,
+            Surface::Sync(SyncTab::Activity) => SYNC_ACTIVITY,
+            Surface::Admin(
                 AdminTab::Access
                 | AdminTab::RowPolicies
                 | AdminTab::Audit

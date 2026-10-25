@@ -20,7 +20,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::AsyncView;
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::stamp;
-use crate::models::notification::{Notification, ScopeKind, Severity};
+use crate::models::notification::{Notification, NotificationTarget, ScopeKind, Severity};
 use crate::routes::Route;
 use crate::routes::tabs::EventsTab;
 use crate::services::async_state::AsyncState;
@@ -31,6 +31,7 @@ use crate::state::notifications::{
     Filter, apply_mark_all_read, apply_mark_read, listed, unread_count, visible,
 };
 use crate::state::preferences::Preferences;
+use crate::state::sync::SyncUi;
 use crate::state::ui::Popover;
 
 fn severity_icon(s: Severity) -> (Icon, &'static str) {
@@ -67,6 +68,7 @@ pub fn NotificationDrawer() -> Element {
     let prefs = use_context::<Signal<Preferences>>();
     let mut error = use_context::<Signal<ConnectError>>();
     let backend = use_context::<Rc<dyn Backend>>();
+    let sync_rejects = use_context::<SyncUi>().rejects;
     let nav = use_navigator();
     let mut tab = use_signal(Filter::default);
 
@@ -219,9 +221,15 @@ pub fn NotificationDrawer() -> Element {
                                             onclick: {
                                                 let id = n.id.clone();
                                                 let route = route.clone();
+                                                let target = (n.target, n.subject.clone());
                                                 move |_| {
                                                     mark_for_link(id.clone());
                                                     popover.set(None);
+                                                    // A rejection opens on its own write.
+                                                    if let (NotificationTarget::SyncRejectedWrites, Some(m)) = &target {
+                                                        let mut rejects = sync_rejects;
+                                                        rejects.write().selected = Some(m.clone());
+                                                    }
                                                     nav.push(route.clone());
                                                 }
                                             },

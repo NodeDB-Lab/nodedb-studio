@@ -12,6 +12,7 @@ pub mod scenes;
 pub mod search_scenes;
 pub mod spatial_scenes;
 pub mod sync;
+pub mod sync_scenes;
 pub mod timeseries_scenes;
 pub mod vector_scenes;
 pub mod workbench_scenes;

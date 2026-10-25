@@ -117,6 +117,7 @@ mod tests {
             scope_kind: ScopeKind::Database,
             at: 0,
             target: NotificationTarget::AdminAudit,
+            subject: None,
             unread,
         }
     }

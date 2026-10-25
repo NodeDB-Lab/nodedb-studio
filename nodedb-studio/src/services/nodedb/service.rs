@@ -30,10 +30,10 @@ mod tests {
     use crate::services::matview_data::MatViewData;
     use crate::services::search_data::SearchData;
     use crate::services::spatial_data::SpatialData;
+    use crate::services::sync_data::SyncData;
     use crate::services::timeseries_data::TimeseriesData;
     use crate::services::topic_data::TopicData;
     use crate::services::vector_data::VectorData;
-    use crate::services::viewers_data::ViewersData;
     use crate::services::workbench_data::WorkbenchData;
     use crate::state::connections_registry::Credentials;
 
@@ -206,7 +206,7 @@ mod tests {
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.sync_peers().await,
+            svc.sync_devices().await,
             Err(StudioError::NotConnected)
         ));
     }

@@ -1,0 +1,148 @@
+/*
+ * Sync: Devices, Subscriptions, Rejected writes, and Activity. Built on
+ * controls.css, panels.css, events.css (sheets, reviews), and cluster.css
+ * (filter bars, tables, fact rows). Only what is specific to Sync is here.
+ *
+ *   Devices      .sy-origin  .sy-device  .sy-observed  .sy-more  .sy-menu
+ *                .sy-subs-actions  .sy-reject-bar
+ *   Forms        .sy-form  .sy-command  .sy-param  .sy-inline  .sy-includes
+ *   Definition   .sy-json  .sy-json-head  .sy-pane  .sy-sub
+ *   Status       .sy-status  .sy-status-facts  .sy-status-events  .sy-events-head
+ *   Rejections   .sy-reject  .sy-fold  .sy-repairs  .sy-repair  .sy-steps
+ *   Activity     .sy-activity-bar  .sy-links
+ */
+
+/* ---------- Devices ---------- */
+
+.sy-origin {
+  display: inline-flex;
+  align-items: center;
+  height: var(--control-h);
+  padding: 0 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.sy-device .kv-row { min-height: 28px; }
+.sy-observed { margin-top: 4px; }
+.sy-device .inspector-actions { padding-top: 12px; }
+.sy-device .inspector-actions > .btn { flex: 1; }
+.sy-device .inspector-actions > .anchor > .btn.icon { width: var(--control-h); padding: 0; flex: none; }
+.sy-menu { min-width: 230px; bottom: calc(100% + 4px); top: auto; }
+.sy-subs-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 8px 12px; }
+.sy-reject-bar { margin: 0 12px 12px; align-items: center; }
+.sy-reject-bar .link-btn { margin-left: 4px; }
+
+/* ---------- Forms ---------- */
+
+/* Label left, control right, as the design draws the enrollment sheet. */
+.sy-form { gap: 12px; }
+.sy-form .field {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 4px;
+  align-items: center;
+}
+.sy-form .field > label { color: var(--text-primary); font-size: var(--fs-md); font-weight: 400; }
+.sy-form .field > .hint, .sy-form .field > .error { grid-column: 2; }
+.sy-form .field > .input, .sy-form .field > .select { width: 100%; }
+.sy-form input.input[readonly] { background: var(--surface-sunken); color: var(--text-secondary); }
+.sy-form input.input.mono[readonly] { color: var(--text-primary); }
+.sy-command { display: flex; }
+.sy-command .input { width: 100%; }
+.sy-param { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr); gap: 8px; }
+.sy-inline { display: flex; align-items: center; gap: 8px; }
+.sy-inline .select { flex: 1; }
+.sy-sub .sy-form .field { grid-template-columns: 120px minmax(0, 1fr); }
+.sy-sub .sy-form .field > .input, .sy-sub .sy-form .field > .select { width: 100%; }
+.sy-includes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+
+/* ---------- Subscription details ---------- */
+
+.sy-sub { padding: 0 0 12px; gap: 0; }
+.sy-sub .tab-bar { padding: 0 16px; flex: none; }
+.sy-sub .sy-form, .sy-pane { padding: 14px 16px 4px; }
+.sy-pane { display: flex; flex-direction: column; gap: 10px; }
+.sy-sub .inspector-actions { padding: 8px 16px 0; flex-wrap: wrap; }
+.sy-json { display: flex; flex-direction: column; gap: 4px; }
+.sy-json-head { display: flex; align-items: center; justify-content: space-between; }
+.sy-json .json-view { max-height: 180px; }
+
+/* ---------- Synchronization status ---------- */
+
+.sy-status { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 8px 16px 12px; }
+.sy-status-facts .kv-row { min-height: 28px; }
+.sy-status-events { min-width: 0; display: flex; flex-direction: column; }
+.sy-events-head { display: flex; align-items: center; justify-content: space-between; }
+.sy-events-head .inspector-section { margin-top: 4px; }
+.sy-snapshot { margin: 0 16px 12px; }
+
+/* ---------- Rejected writes ---------- */
+
+.sy-reject { gap: 10px; }
+.sy-reject .kv-row { min-height: 26px; }
+.sy-constraint { border-top: 1px solid var(--border-soft); padding-top: 6px; }
+.sy-hint { margin: 0; color: var(--text-secondary); font-size: var(--fs-sm); }
+.sy-fold { border: 1px solid var(--border-soft); border-radius: var(--radius); overflow: hidden; }
+.sy-fold-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  background: var(--surface-sunken);
+  text-align: left;
+  font-weight: 500;
+}
+.sy-fold-head:hover { background: var(--surface-hover); }
+.sy-fold-title { flex: 1; }
+.sy-fold-body { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+.sy-fold-body .json-view { max-height: 170px; margin: 0; }
+.sy-repairs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: start; }
+.sy-repairs .btn { width: 100%; white-space: normal; height: auto; min-height: var(--control-h); padding-top: 4px; padding-bottom: 4px; line-height: 1.2; text-align: left; }
+.sy-repair { display: flex; flex-direction: column; gap: 4px; }
+.sy-repair-note { color: var(--text-tertiary); font-size: var(--fs-xs); }
+.sy-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.sy-step-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sy-step-label { font-weight: 500; }
+.sy-steps p { margin: 2px 0 0; }
+
+/* ---------- Activity ---------- */
+
+.sy-activity-bar { flex-wrap: nowrap; gap: 12px; }
+.sy-links { padding-top: 0; }
+
+/* ---------- Fit ---------- */
+
+/* A filter control keeps its width. The search field takes what is left. */
+.cl-filters .cl-ctl, .sy-activity-bar .cl-ctl { flex: none; }
+.cl-filters > select.select.native { width: auto; flex: none; min-width: 0; }
+.cl-filters .search-field.grow { min-width: 120px; }
+.sy-reject > * { flex: none; }
+.sy-fold-body .json-view { flex: none; min-height: 96px; max-height: 150px; }
+.sy-activity-bar .search-field.grow { min-width: 110px; }
+.sy-activity-bar .select.native { max-width: 140px; }
+
+/* Details bodies keep the inspector's inset inside the panel. */
+.panel-body .sy-device, .panel-body .sy-reject { padding: 16px; }
+.panel-body .sy-sub .tab-bar { margin: 0; }
+.cl-table td.sy-detail { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-filters .search-field.grow { min-width: 110px; }
+
+/* Recent events fit the panel: a long event truncates in its cell, and its
+   full text is the tooltip. A fixed layout lets the cell shrink. */
+.sy-events { table-layout: fixed; }
+.sy-events .sy-time { width: 72px; }
+.sy-event-cell .status { display: flex; min-width: 0; }
+.sy-event-cell .truncate { min-width: 0; }

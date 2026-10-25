@@ -9,15 +9,17 @@ use crate::models::collection::Profile;
 use crate::models::connections::ConnectionTest;
 use crate::models::records::Filter;
 use crate::models::workbench::TxAccess;
+use crate::routes::Route;
 use crate::routes::tabs::{
-    AdminTab, ClusterTab, EventsTab, GraphTab, SearchTab, SpatialTab, TimeseriesTab, VectorTab,
+    AdminTab, ClusterTab, EventsTab, GraphTab, SearchTab, SpatialTab, SyncTab, TimeseriesTab,
+    VectorTab,
 };
-use crate::routes::{Destination, Route};
 use crate::screenshots::cluster_scenes;
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
 use crate::screenshots::search_scenes;
 use crate::screenshots::spatial_scenes;
+use crate::screenshots::sync_scenes;
 use crate::screenshots::timeseries_scenes;
 use crate::screenshots::vector_scenes;
 use crate::screenshots::workbench_scenes;
@@ -32,6 +34,7 @@ use crate::state::query::QueryWorkspace;
 use crate::state::record_editor::RecordEditor;
 use crate::state::search::SearchSeed;
 use crate::state::spatial::SpatialSeed;
+use crate::state::sync::SyncSeed;
 use crate::state::timeseries::TimeseriesSeed;
 use crate::state::ui::{ModalKind, Popover, PrefsPane};
 use crate::state::vector::VectorSeed;
@@ -161,6 +164,8 @@ pub struct Scene {
     pub search: Option<Box<SearchSeed>>,
     /// The Cluster tabs' selections and open reviews. `None` keeps the current ones.
     pub cluster: Option<Box<ClusterSeed>>,
+    /// The Sync tabs' selections and open sheets. `None` keeps the current ones.
+    pub sync: Option<Box<SyncSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -181,6 +186,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         spatial: None,
         search: None,
         cluster: None,
+        sync: None,
     }
 }
 
@@ -368,11 +374,7 @@ pub fn scenes() -> Vec<Scene> {
             O::None,
         ));
     }
-    all.push(scene(
-        "sync-devices",
-        at(Destination::Sync.route()),
-        O::None,
-    ));
+    all.extend(sync());
     all.extend([
         scene(
             "shell-connection-switcher",
@@ -639,6 +641,43 @@ fn cluster() -> Vec<Scene> {
             ClusterTab::Activity,
             cluster_scenes::activity(),
         ),
+    ]
+}
+
+/// Sync: each tab, the enrollment sheet, and the two reviews a repair opens.
+fn sync() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: SyncSeed| Scene {
+        sync: Some(Box::new(seed)),
+        ..scene(name, at(Route::Sync { tab }), Overlay::None)
+    };
+    vec![
+        at_tab("sync-devices", SyncTab::Devices, sync_scenes::devices()),
+        at_tab(
+            "sync-enrollment",
+            SyncTab::Devices,
+            sync_scenes::enrollment(),
+        ),
+        at_tab(
+            "sync-subscriptions",
+            SyncTab::Subscriptions,
+            sync_scenes::subscriptions(),
+        ),
+        at_tab(
+            "sync-subscription-review",
+            SyncTab::Subscriptions,
+            sync_scenes::subscription_review(),
+        ),
+        at_tab(
+            "sync-rejected-writes",
+            SyncTab::RejectedWrites,
+            sync_scenes::rejected_writes(),
+        ),
+        at_tab(
+            "sync-rejected-edit",
+            SyncTab::RejectedWrites,
+            sync_scenes::reject_edit(),
+        ),
+        at_tab("sync-activity", SyncTab::Activity, sync_scenes::activity()),
     ]
 }
 

@@ -22,8 +22,9 @@ use crate::views::graph::GraphPage;
 use crate::views::query::QueryPage;
 use crate::views::search::SearchPage;
 use crate::views::spatial::SpatialPage;
+use crate::views::sync::SyncPage;
 use crate::views::timeseries::TimeseriesPage;
-use crate::views::transitional::{AdminPage, SyncPage};
+use crate::views::transitional::AdminPage;
 use crate::views::vector::VectorPage;
 
 #[derive(Routable, Clone, PartialEq, Debug)]

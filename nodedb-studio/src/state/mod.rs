@@ -21,6 +21,7 @@ pub mod query;
 pub mod record_editor;
 pub mod search;
 pub mod spatial;
+pub mod sync;
 pub mod timeseries;
 pub mod ui;
 pub mod vector;

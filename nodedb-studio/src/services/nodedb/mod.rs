@@ -13,11 +13,11 @@ pub mod matviews;
 pub mod search;
 pub mod service;
 pub mod spatial;
+pub mod sync;
 pub mod timeseries;
 pub mod topics;
 pub mod transfer;
 pub mod vector;
-pub mod viewers;
 pub mod workbench;
 
 pub use service::NodeDbConnectionService;

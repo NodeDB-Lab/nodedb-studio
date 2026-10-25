@@ -104,5 +104,8 @@ pub struct Notification {
     /// When it happened, seconds since the epoch.
     pub at: i64,
     pub target: NotificationTarget,
+    /// The object the action link opens on the target page, e.g. the
+    /// mutation id of a rejected write.
+    pub subject: Option<String>,
     pub unread: bool,
 }

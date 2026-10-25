@@ -8,11 +8,10 @@ use dioxus::prelude::*;
 
 use crate::components::tabs::{RouteTabs, tab_items};
 use crate::routes::Route;
-use crate::routes::tabs::{AdminTab, SyncTab};
+use crate::routes::tabs::AdminTab;
 use crate::views::admin::audit::AuditView;
 use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
-use crate::views::sync::Sync;
 
 /// A page that has not been rebuilt yet.
 #[component]
@@ -24,17 +23,6 @@ fn Unbuilt(title: &'static str) -> Element {
                 p { "This page is being rebuilt for the new workspace." }
             }
         }
-    }
-}
-
-#[component]
-pub fn SyncPage(tab: SyncTab) -> Element {
-    rsx! {
-        RouteTabs {
-            items: tab_items(SyncTab::ALL, |t| t.label(), |tab| Route::Sync { tab }),
-            current: Route::Sync { tab },
-        }
-        div { class: "legacy-page", Sync {} }
     }
 }
 

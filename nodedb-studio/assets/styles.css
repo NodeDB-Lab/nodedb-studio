@@ -155,26 +155,6 @@
   .sql-num { color: var(--text-warning); }
   .sql-comment { color: var(--text-tertiary); font-style: italic; }
 
-  /* ============================================================
-     Generic placeholders for "lighter" screens
-     ============================================================ */
-  .placeholder-grid {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px; margin-top: 14px;
-  }
-  .ph-stat {
-    background: var(--bg-primary);
-    border: 0.5px solid var(--border-mid);
-    border-radius: 8px;
-    padding: 14px 16px;
-  }
-  .ph-stat .l { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-tertiary); }
-  .ph-stat .v { font-family: var(--font-mono); font-size: 24px; margin-top: 4px; font-weight: 500; }
-  .ph-stat .sub { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
-
-  .ph-section { margin-top: 22px; }
-  .ph-section h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; }
-
   /* Sub-nav tabs (for Admin etc.) */
   .subnav {
     display: flex; gap: 2px;

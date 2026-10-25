@@ -293,10 +293,29 @@ pub fn notifications() -> Vec<Notification> {
             scope_kind,
             at,
             target,
+            subject: None,
             unread,
         }
     }
     vec![
+        // The Origin received mutation m104 from d17 at 13:40:00. The entry
+        // opens that rejected write.
+        Notification {
+            subject: Some("m104".into()),
+            ..entry(
+                "sync-write-rejected",
+                NotificationKind::SyncRejection,
+                Severity::Err,
+                Some(Capability::Sync),
+                "Sync write rejected",
+                "UNIQUE_VIOLATION for device d17.",
+                "analytics.orders",
+                ScopeKind::Collection,
+                epoch(2026, 6, 13, 13, 40, 0),
+                NotificationTarget::SyncRejectedWrites,
+                true,
+            )
+        },
         entry(
             "index-build-embedding",
             NotificationKind::IndexBuild,
@@ -308,19 +327,6 @@ pub fn notifications() -> Vec<Notification> {
             ScopeKind::Collection,
             epoch(2026, 6, 13, 13, 21, 0),
             NotificationTarget::SearchIndexes,
-            true,
-        ),
-        entry(
-            "sync-write-rejected",
-            NotificationKind::SyncRejection,
-            Severity::Err,
-            Some(Capability::Sync),
-            "Sync write rejected",
-            "UNIQUE_VIOLATION for device d17.",
-            "devices",
-            ScopeKind::Collection,
-            epoch(2026, 6, 13, 12, 6, 0),
-            NotificationTarget::SyncRejectedWrites,
             true,
         ),
         entry(

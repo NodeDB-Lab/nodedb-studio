@@ -17,11 +17,11 @@ use crate::services::listen_data::ListenData;
 use crate::services::matview_data::MatViewData;
 use crate::services::search_data::SearchData;
 use crate::services::spatial_data::SpatialData;
+use crate::services::sync_data::SyncData;
 use crate::services::timeseries_data::TimeseriesData;
 use crate::services::topic_data::TopicData;
 use crate::services::transfer_data::TransferData;
 use crate::services::vector_data::VectorData;
-use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
 
 pub trait Backend:
@@ -35,7 +35,7 @@ pub trait Backend:
     + AdminData
     + ClusterData
     + WorkbenchData
-    + ViewersData
+    + SyncData
     + TimeseriesData
     + VectorData
     + SearchData
@@ -57,7 +57,7 @@ impl<T> Backend for T where
         + AdminData
         + ClusterData
         + WorkbenchData
-        + ViewersData
+        + SyncData
         + TimeseriesData
         + TimeseriesData
         + VectorData

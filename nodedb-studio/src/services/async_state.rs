@@ -24,6 +24,11 @@ use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
 use crate::models::spatial::{Feature, RasterSlice, SpatialSetup, Viewport};
 use crate::models::spatial_analyze::AnalysisResult;
+use crate::models::sync::SyncDevices;
+use crate::models::sync_activity::SyncLog;
+use crate::models::sync_enroll::EnrollOptions;
+use crate::models::sync_reject::{CompensationState, RejectedWrites};
+use crate::models::sync_sub::{ChangePreview, Subscriptions};
 use crate::models::timeseries::{ExploreResult, TimeCatalog};
 use crate::models::topics::{MessageRange, ResetPreview};
 use crate::models::transfer::ExportPreview;
@@ -90,6 +95,50 @@ impl IsEmpty for Telemetry {
 impl IsEmpty for ActivityLog {
     fn is_empty(&self) -> bool {
         self.events.is_empty()
+    }
+}
+
+/// The device list is empty when no device is registered.
+impl IsEmpty for SyncDevices {
+    fn is_empty(&self) -> bool {
+        self.devices.is_empty()
+    }
+}
+
+impl IsEmpty for Subscriptions {
+    fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+}
+
+impl IsEmpty for RejectedWrites {
+    fn is_empty(&self) -> bool {
+        self.rows.is_empty()
+    }
+}
+
+impl IsEmpty for SyncLog {
+    fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
+}
+
+/// A repair state, a preview, and the options always carry something.
+impl IsEmpty for CompensationState {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for ChangePreview {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for EnrollOptions {
+    fn is_empty(&self) -> bool {
+        false
     }
 }
 

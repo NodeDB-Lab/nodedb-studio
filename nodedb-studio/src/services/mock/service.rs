@@ -55,6 +55,9 @@ pub struct MockConnectionService {
     pub(super) search: Rc<RefCell<mock::SearchStore>>,
     /// Raft groups, placement, and activity, with the operations applied.
     pub(super) cluster: Rc<RefCell<mock::ClusterStore>>,
+    /// Devices, subscriptions, rejected writes, and activity, with the
+    /// writes applied to them.
+    pub(super) sync: Rc<RefCell<mock::SyncStore>>,
 }
 
 impl Default for MockConnectionService {
@@ -84,6 +87,7 @@ impl MockConnectionService {
             timeseries: Rc::new(RefCell::new(mock::TimeseriesStore::seeded())),
             search: Rc::default(),
             cluster: Rc::new(RefCell::new(mock::ClusterStore::seeded())),
+            sync: Rc::new(RefCell::new(mock::SyncStore::seeded())),
         }
     }
 
@@ -105,6 +109,16 @@ impl MockConnectionService {
     #[allow(dead_code)]
     pub fn delayed(d: std::time::Duration) -> Self {
         Self::with(MockBehavior::Delayed(d))
+    }
+
+    /// Test-only: the same session with a principal that lacks the
+    /// subscription privilege.
+    #[cfg(test)]
+    pub(crate) fn without_sync_permission(self) -> Self {
+        Self {
+            sync: Rc::new(RefCell::new(mock::SyncStore::without_permission())),
+            ..self
+        }
     }
 
     /// Test-only: a clone that shares this instance's state cells but

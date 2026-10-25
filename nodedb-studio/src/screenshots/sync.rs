@@ -16,6 +16,7 @@ use crate::state::explorer::{RecordView, Selected};
 use crate::state::query::QueryWorkspace;
 use crate::state::search::{SearchSeed, SearchUi};
 use crate::state::spatial::{SpatialSeed, SpatialUi};
+use crate::state::sync::{SyncSeed, SyncUi};
 use crate::state::timeseries::{TimeseriesSeed, TimeseriesUi};
 use crate::state::vector::{VectorSeed, VectorUi};
 
@@ -43,6 +44,8 @@ pub struct SceneTarget {
     pub search: Option<SearchSeed>,
     /// The Cluster tabs' selections and open reviews. `None` keeps the current ones.
     pub cluster: Option<ClusterSeed>,
+    /// The Sync tabs' selections and open sheets. `None` keeps the current ones.
+    pub sync: Option<SyncSeed>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -68,6 +71,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let spatial = use_context::<SpatialUi>();
     let search = use_context::<SearchUi>();
     let cluster = use_context::<ClusterUi>();
+    let sync = use_context::<SyncUi>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -105,6 +109,9 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         }
         if let Some(seed) = t.cluster {
             cluster.apply(seed);
+        }
+        if let Some(seed) = t.sync {
+            sync.apply(seed);
         }
         nav.replace(t.route);
     });

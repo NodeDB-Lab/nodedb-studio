@@ -15,12 +15,12 @@ mod explorer;
 mod graph;
 mod search;
 mod spatial;
+mod sync;
 #[cfg(test)]
 mod test_support;
 mod timeseries;
 mod transfer;
 mod vector;
-mod viewers;
 mod workbench;
 
 pub use admin::{audit_entries, rls_policies, users};
@@ -51,13 +51,13 @@ pub use spatial::{
     raster_slice, spatial_analyze, spatial_feature, spatial_setup, spatial_validity,
     spatial_viewport,
 };
+pub use sync::SyncStore;
 pub use timeseries::{
     BackfillError, DashError, ExploreError, LifecycleError, TimeseriesStore, backfill_preview,
     explore, time_sources,
 };
 pub use transfer::transfer_jobs;
 pub use vector::{vector_index_status, vector_project, vector_record, vector_search, vector_setup};
-pub use viewers::sync_peers;
 pub use workbench::{WorkbenchStore, empty_result_set, query_plan, query_session, schema_tree};
 // Only the screenshot scenes and the tests name these.
 #[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]

@@ -35,6 +35,7 @@ use crate::state::query::{QueryWorkspace, TxEpoch};
 use crate::state::record_editor::{DeleteRequest, RecordEditor};
 use crate::state::search::SearchUi;
 use crate::state::spatial::SpatialUi;
+use crate::state::sync::SyncUi;
 use crate::state::timeseries::TimeseriesUi;
 use crate::state::ui::{
     ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover, PrefsPane,
@@ -64,6 +65,7 @@ const TIMESERIES: Asset = asset!("/assets/timeseries.css");
 const SPATIAL: Asset = asset!("/assets/spatial.css");
 const SEARCH: Asset = asset!("/assets/search.css");
 const CLUSTER: Asset = asset!("/assets/cluster.css");
+const SYNC: Asset = asset!("/assets/sync.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -170,6 +172,8 @@ pub fn App() -> Element {
     SearchUi::provide();
     // Cluster keeps each tab's selection, filters, and open review.
     ClusterUi::provide();
+    // Sync keeps each tab's selection, filters, and open sheet.
+    SyncUi::provide();
     use_context_provider(|| DynamicPanels(Signal::new(Vec::new())));
     use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
@@ -317,6 +321,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: SPATIAL }
         document::Stylesheet { href: SEARCH }
         document::Stylesheet { href: CLUSTER }
+        document::Stylesheet { href: SYNC }
         {scene_driver}
         div {
             class: "studio-root",

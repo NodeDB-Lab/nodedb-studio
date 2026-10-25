@@ -20,11 +20,11 @@ pub mod mock_behavior;
 pub mod nodedb;
 pub mod search_data;
 pub mod spatial_data;
+pub mod sync_data;
 pub mod timeseries_data;
 pub mod topic_data;
 pub mod transfer_data;
 pub mod vector_data;
-pub mod viewers_data;
 pub mod workbench_data;
 
 pub use mock::MockConnectionService;
