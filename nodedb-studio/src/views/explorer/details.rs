@@ -223,7 +223,15 @@ fn PlainDocument(
                 DetailsTab::Raw => rsx! {
                     pre { class: "code-block raw-json", "{compact(&record.value, &schema.fields)}" }
                 },
-                _ => rsx! { JsonView { text } },
+                DetailsTab::Json
+                | DetailsTab::Document
+                | DetailsTab::FullText
+                | DetailsTab::Vector
+                | DetailsTab::Indexes
+                | DetailsTab::Fields
+                | DetailsTab::History
+                | DetailsTab::Properties
+                | DetailsTab::Geometry => rsx! { JsonView { text } },
             }
         }
     }

@@ -3,7 +3,7 @@
  * controls.css, panels.css, events.css (sheets, reviews), and cluster.css
  * (filter bars, tables, fact rows). Only what is specific to Sync is here.
  *
- *   Devices      .sy-origin  .sy-device  .sy-observed  .sy-more  .sy-menu
+ *   Devices      .sy-origin  .sy-device  .sy-observed  .sy-menu
  *                .sy-subs-actions  .sy-reject-bar
  *   Forms        .sy-form  .sy-command  .sy-param  .sy-inline  .sy-includes
  *   Definition   .sy-json  .sy-json-head  .sy-pane  .sy-sub

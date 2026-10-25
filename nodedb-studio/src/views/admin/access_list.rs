@@ -34,7 +34,9 @@ pub fn PrincipalsList(dir: AccessDirectory, chosen: Option<String>) -> Element {
                 description,
                 credential_expiry,
             } => Some((name.clone(), *kind, description.clone(), *credential_expiry)),
-            _ => None,
+            AccessChange::CreateRole { .. }
+            | AccessChange::AddMembership { .. }
+            | AccessChange::RemoveMembership { .. } => None,
         })
         .collect();
     rsx! {
@@ -153,7 +155,9 @@ pub fn RolesList(dir: AccessDirectory, chosen: Option<String>) -> Element {
             AccessChange::CreateRole { name, description } => {
                 Some((name.clone(), description.clone()))
             }
-            _ => None,
+            AccessChange::CreatePrincipal { .. }
+            | AccessChange::AddMembership { .. }
+            | AccessChange::RemoveMembership { .. } => None,
         })
         .collect();
     rsx! {

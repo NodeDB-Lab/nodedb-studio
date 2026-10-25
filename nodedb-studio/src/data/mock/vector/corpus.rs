@@ -35,7 +35,7 @@ enum Topic {
     Search,
     Modeling,
     Operations,
-    Streams,
+    Events,
     Basics,
     Spatial,
 }
@@ -46,7 +46,7 @@ impl Topic {
         Topic::Search,
         Topic::Modeling,
         Topic::Operations,
-        Topic::Streams,
+        Topic::Events,
         Topic::Basics,
         Topic::Spatial,
     ];
@@ -60,7 +60,7 @@ impl Topic {
         match self {
             Topic::Architecture | Topic::Operations => 0,
             Topic::Search | Topic::Modeling | Topic::Basics => 1,
-            Topic::Streams | Topic::Spatial => 2,
+            Topic::Events | Topic::Spatial => 2,
         }
     }
 
@@ -92,7 +92,7 @@ impl Topic {
                 "Security and access control",
                 "Storage engines overview",
             ],
-            Topic::Streams => &["Change feeds explained", "Time series retention"],
+            Topic::Events => &["Change feeds explained", "Time series retention"],
             Topic::Basics => &["Getting started", "Building with NodeDB"],
             Topic::Spatial => &["Spatial queries in practice"],
         }
@@ -128,7 +128,7 @@ impl Topic {
                 "Access control grants each role only the privileges it needs, and every grant is recorded in the audit log.",
                 "Storage engines write records to disk in different layouts, which changes how fast a database reads, writes, and compacts them.",
             ],
-            Topic::Streams => &[
+            Topic::Events => &[
                 "A change feed delivers each committed write to its consumers in order, so a downstream system can follow the database.",
                 "Time series retention drops raw points after a set age and keeps the rolled-up aggregates.",
             ],

@@ -335,7 +335,7 @@ mod tests {
             username: "alice".into(),
             password: None,
         };
-        // `staging-cluster` is a connectable Online mock connection (data/mock.rs).
+        // `staging-cluster` is a connectable Online mock connection (data/mock/connections.rs).
         let session = svc.connect("staging-cluster", &creds).await;
         assert!(session.is_ok());
     }
@@ -423,7 +423,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn session_info_populates_the_statusbar() {
+    async fn session_info_populates_the_footer() {
         let svc = MockConnectionService::ready();
         let s = svc.session_info().await.expect("session info");
         assert!(!s.server_version.is_empty());

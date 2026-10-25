@@ -3,82 +3,22 @@
 //! a change. The review is where a change is read in full, bound to the
 //! catalog revision, and applied.
 
-use std::rc::Rc;
-
-use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
 use crate::models::timeseries::Bucket;
 use crate::models::ts_lifecycle::{
-    BeyondHorizon, ChangeReview, DraftField, LatePolicy, LateWrites, Lifecycle, LifecycleChange,
-    RefreshPolicy, Retention, RetentionDraft, RollupDraft,
+    BeyondHorizon, DraftField, LatePolicy, LateWrites, Lifecycle, LifecycleChange, RefreshPolicy,
+    Retention, RetentionDraft, RollupDraft,
 };
-use crate::services::backend::Backend;
 use crate::state::timeseries::{LifeSheet, TimeseriesUi};
-use crate::views::events::common::{FormField, SqlBlock};
+use crate::views::events::common::FormField;
 use crate::views::timeseries::life_ops::{
     candidate_dimensions, candidate_outputs, queue, set_input, toggle_dimension, toggle_output,
 };
-use crate::views::timeseries::life_tasks;
-
-/// Parse a retention typed as a number and a unit.
-fn retention(text: &str, years: bool) -> Option<Retention> {
-    let n: u32 = text.trim().parse().ok()?;
-    Some(if years {
-        Retention::CalendarYears(n)
-    } else {
-        Retention::Days(n)
-    })
-}
-
-/// A retention as the number and unit boxes show it.
-fn parts(r: Retention) -> (String, bool) {
-    (
-        r.amount().to_string(),
-        matches!(r, Retention::CalendarYears(_)),
-    )
-}
-
-#[component]
-fn RetentionInput(
-    id: String,
-    label: String,
-    value: Retention,
-    on_change: EventHandler<Retention>,
-) -> Element {
-    let (amount, years) = parts(value);
-    rsx! {
-        FormField { label, id: id.clone(),
-            hint: if years { Some("Calendar years: three years back is a date three years earlier, not 1,095 days.".to_string()) } else { None },
-            div { class: "ts-retention-input",
-                input {
-                    id: "{id}",
-                    class: "input",
-                    r#type: "number",
-                    min: "1",
-                    value: "{amount}",
-                    oninput: move |e| {
-                        if let Some(r) = retention(&e.value(), years) {
-                            on_change.call(r);
-                        }
-                    },
-                }
-                select {
-                    class: "select native",
-                    "aria-label": "Unit",
-                    onchange: move |e| {
-                        let is_years = e.value() == "years";
-                        on_change.call(if is_years { Retention::CalendarYears(value.amount()) } else { Retention::Days(value.amount()) });
-                    },
-                    option { value: "days", selected: !years, "days" }
-                    option { value: "years", selected: years, "calendar years" }
-                }
-            }
-        }
-    }
-}
+use crate::views::timeseries::life_retention::RetentionInput;
+use crate::views::timeseries::life_review::ReviewSheet;
 
 #[component]
 pub fn LifeSheets(sheet: LifeSheet, l: Lifecycle, collection: String, pending: usize) -> Element {
@@ -450,101 +390,5 @@ pub fn LifeSheets(sheet: LifeSheet, l: Lifecycle, collection: String, pending: u
         } => rsx! {
             ReviewSheet { review, busy, error, collection, pending }
         },
-    }
-}
-
-#[component]
-fn ReviewSheet(
-    review: Option<ChangeReview>,
-    busy: bool,
-    error: Option<String>,
-    collection: String,
-    pending: usize,
-) -> Element {
-    let backend = use_context::<Rc<dyn Backend>>();
-    let ts = use_context::<TimeseriesUi>();
-    let mut life = ts.life;
-    let blocked = review.as_ref().is_some_and(|r| !r.blocked.is_empty());
-    let nothing = pending == 0;
-    let revision = review.as_ref().map(|r| r.revision);
-    let footer_error = error
-        .clone()
-        .or_else(|| review.as_ref().and_then(|r| r.blocked.first().cloned()));
-
-    rsx! {
-        Sheet {
-            title: "Review changes".to_string(),
-            on_close: move |_| life.write().sheet = None,
-            width: SheetWidth::Medium,
-            footer: rsx! {
-                SheetFooter {
-                    error: footer_error,
-                    hint: if nothing { Some("No change is pending.".to_string()) } else { Some("Applying records an operation you can audit.".to_string()) },
-                    button { class: "btn", onclick: move |_| life.write().sheet = None, "Close" }
-                    button {
-                        class: "btn",
-                        disabled: nothing,
-                        title: "Remove every pending change without applying it",
-                        onclick: move |_| {
-                            let mut w = life.write();
-                            w.pending.clear();
-                            w.sheet = None;
-                        },
-                        "Discard all"
-                    }
-                    button {
-                        class: "btn primary",
-                        disabled: busy || blocked || nothing || revision.is_none(),
-                        onclick: {
-                            let (backend, collection) = (backend.clone(), collection.clone());
-                            move |_| {
-                                if let Some(rev) = revision {
-                                    spawn_forever(life_tasks::apply(life, backend.clone(), collection.clone(), rev));
-                                }
-                            }
-                        },
-                        "Apply changes"
-                    }
-                }
-            },
-            div { class: "sheet-form ts-review",
-                if busy && review.is_none() {
-                    div { class: "ts-state", "Reading the catalog…" }
-                }
-                if nothing {
-                    div { class: "empty-state",
-                        Ico { icon: Icon::FileCode, size: 24 }
-                        h2 { "No pending changes" }
-                        p { "Edit the retention policy, add a rollup, or edit the late-data policy. Each is queued here, read in full, and applied only from this review." }
-                    }
-                }
-                if let Some(r) = review {
-                    p { class: "ts-muted", "Read at lifecycle revision {r.revision}. A newer revision invalidates this review." }
-                    for (i , item) in r.items.iter().enumerate() {
-                        div { key: "{i}", class: "ts-review-item",
-                            h3 { "{item.title}" }
-                            SqlBlock { sql: item.sql.clone(), class: "ts-sql" }
-                            ul { class: "ts-impact",
-                                for line in item.impact.iter() {
-                                    li { key: "{line}", "{line}" }
-                                }
-                            }
-                            if item.irreversible {
-                                div { class: "callout warn",
-                                    Ico { icon: Icon::TriangleAlert, size: 16 }
-                                    span { "This change deletes data and cannot be undone." }
-                                }
-                            }
-                        }
-                    }
-                    for b in r.blocked.iter() {
-                        div { key: "{b}", class: "callout err", role: "alert",
-                            Ico { icon: Icon::CircleAlert, size: 16 }
-                            span { "{b}" }
-                        }
-                    }
-                }
-            }
-        }
     }
 }

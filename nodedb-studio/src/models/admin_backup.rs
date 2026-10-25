@@ -14,7 +14,13 @@ pub enum SnapshotState {
     Completed,
     Running,
     // The server reports it. No fixture holds a failed snapshot.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::admin builds it from a failed server snapshot; that service is a stub today"
+        )
+    )]
     Failed,
 }
 
@@ -98,7 +104,13 @@ pub enum RestoreState {
     Completed,
     Running,
     // The server reports it. No fixture holds a failed restore.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::admin builds it from a failed server restore; that service is a stub today"
+        )
+    )]
     Failed,
 }
 
@@ -233,6 +245,14 @@ pub const RETENTION_CHOICES: [u32; 5] = [7, 14, 30, 60, 90];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_snapshot_or_restore_reads_as_an_error() {
+        assert_eq!(SnapshotState::Failed.label(), "Failed");
+        assert_eq!(SnapshotState::Failed.tone(), Tone::Err);
+        assert_eq!(RestoreState::Failed.label(), "Failed");
+        assert_eq!(RestoreState::Failed.tone(), Tone::Err);
+    }
 
     #[test]
     fn a_restore_target_must_be_new() {

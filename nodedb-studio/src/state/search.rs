@@ -153,6 +153,7 @@ pub struct IndexesUi {
 }
 
 /// What a screenshot scene sets. `None` keeps the current state.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SearchSeed {
     pub results: Option<ResultsUi>,
@@ -178,6 +179,7 @@ impl SearchUi {
     }
 
     /// Replace the state with a scene's seed.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: SearchSeed) {
         self.results.set(seed.results.unwrap_or_default());
         self.analyze.set(seed.analyze.unwrap_or_default());

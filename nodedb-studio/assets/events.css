@@ -8,7 +8,7 @@
  *   Editor    .feed-cols  .start-list  .schema-tree  .review-feed
  *   Topics    .range-bar  .summary-bar  .messages-table  .message-detail  .group-table
  *   Views     .mv-definition  .error-row  .dep-list
- *   Notify    .listener-meta  .notify-table  .send-form  .json-box  .json-state
+ *   Notify    .listener-meta  .send-form  .json-box  .json-state
  *   Jobs      .job-details  .job-form  .next-list  .sql-box  .run-log
  */
 
@@ -161,7 +161,7 @@
 .channel-select { width: 240px; min-width: 0; }
 .listener-meta { display: flex; align-items: center; gap: 8px; padding: 0 12px 10px; color: var(--text-secondary); font-size: var(--fs-sm); flex-wrap: wrap; }
 .dot-sep { color: var(--text-tertiary); margin: 0 4px; }
-.notify-table, .dt .payload-cell { max-width: none; }
+.dt .payload-cell { max-width: none; }
 .listener-footer { gap: 14px; font-size: var(--fs-sm); }
 .live-note { display: inline-flex; align-items: center; gap: 6px; color: var(--text-link); font-weight: 500; }
 .send-form { display: flex; flex-direction: column; gap: 14px; padding: 16px; flex: 1; min-height: 0; }

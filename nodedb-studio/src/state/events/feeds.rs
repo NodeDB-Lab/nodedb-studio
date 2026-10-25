@@ -170,6 +170,7 @@ impl FeedEditor {
     }
 
     /// The same editor on another draft.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn with_draft(mut self, draft: FeedDraft) -> Self {
         self.draft = draft;
         self

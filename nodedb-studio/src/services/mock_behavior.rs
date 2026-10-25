@@ -12,7 +12,21 @@ pub enum MockBehavior {
     #[default]
     Ready,
     Empty,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "only tests build it, through MockConnectionService::erroring"
+        )
+    )]
     Erroring,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "only tests build it, through MockConnectionService::delayed"
+        )
+    )]
     Delayed(Duration),
 }
 

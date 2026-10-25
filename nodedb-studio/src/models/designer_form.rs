@@ -4,7 +4,7 @@ use crate::models::designer::{
     DesignIndex, DesignSchema, IndexChoice, LogicalReference, ObjectState, VectorMetric,
     VectorParams,
 };
-use crate::models::designer_new::is_identifier;
+use crate::models::designer_new_check::is_identifier;
 use crate::models::schema::FieldType;
 
 /// An index definition under edit. `replace` names the staged change it

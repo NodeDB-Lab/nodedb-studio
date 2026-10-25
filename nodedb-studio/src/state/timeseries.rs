@@ -352,6 +352,7 @@ impl BackfillUi {
 }
 
 /// What a screenshot scene sets. `None` keeps a tab's own state.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TimeseriesSeed {
     pub explore: Option<ExploreUi>,
@@ -380,6 +381,7 @@ impl TimeseriesUi {
     }
 
     /// Replace the tabs' state with a seed's.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: TimeseriesSeed) {
         self.explore.set(seed.explore.unwrap_or_default());
         self.dash.set(seed.dash.unwrap_or_default());

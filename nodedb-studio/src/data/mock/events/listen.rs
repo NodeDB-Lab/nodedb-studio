@@ -13,6 +13,7 @@ use crate::models::listen::{ListenSession, NotifyChannel, NotifyMessage};
 use crate::services::error::StudioError;
 
 /// The ten notifications the design shows on `user_events`, newest first.
+#[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]
 const SEEN: [(&str, &str); 10] = [
     (
         "2026-06-13 13:42:18",
@@ -68,6 +69,7 @@ const AMBIENT: [&str; 4] = [
 ];
 
 /// The notifications of the design, newest first.
+#[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]
 pub fn seen_messages() -> Vec<NotifyMessage> {
     SEEN.iter()
         .enumerate()

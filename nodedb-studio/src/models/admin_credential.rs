@@ -32,7 +32,13 @@ pub enum CredentialStatus {
     /// Nobody tested it, so nothing is known about it.
     Unknown,
     // The server reports it. No fixture holds a failed credential.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::admin builds it from a failed server test; that service is a stub today"
+        )
+    )]
     Failed,
 }
 
@@ -190,7 +196,7 @@ impl CredentialDraft {
             CredentialKind::Https if !e.starts_with("https://") && !e.contains('.') => {
                 Some("Enter a host or an https:// URL.".to_string())
             }
-            _ => None,
+            CredentialKind::Https | CredentialKind::ObjectStorage => None,
         }
     }
 
@@ -262,6 +268,12 @@ impl CredentialTest {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_failed_credential_reads_as_an_error() {
+        assert_eq!(CredentialStatus::Failed.label(), "Failed");
+        assert_eq!(CredentialStatus::Failed.tone(), Tone::Err);
+    }
 
     fn draft() -> CredentialDraft {
         CredentialDraft {

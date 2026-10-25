@@ -9,15 +9,17 @@ use crate::models::transfer::{
 };
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;
-use crate::services::mock_behavior::apply_one;
+use crate::services::mock_behavior::{MockBehavior, apply_one};
 use crate::services::transfer_data::TransferData;
 
 #[async_trait(?Send)]
 impl TransferData for MockConnectionService {
     async fn transfer_jobs(&self) -> Result<Vec<TransferJob>, StudioError> {
         let jobs = match self.behavior {
-            crate::services::mock_behavior::MockBehavior::Empty => Vec::new(),
-            _ => self.jobs.borrow().clone(),
+            MockBehavior::Empty => Vec::new(),
+            MockBehavior::Ready | MockBehavior::Erroring | MockBehavior::Delayed(_) => {
+                self.jobs.borrow().clone()
+            }
         };
         apply_one(self.behavior, move || jobs).await
     }

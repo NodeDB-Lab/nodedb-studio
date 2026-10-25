@@ -228,6 +228,7 @@ pub struct ClusterUi {
 }
 
 /// What a screenshot scene sets. `None` resets a tab to its default.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ClusterSeed {
     pub nodes: Option<NodesUi>,
@@ -250,6 +251,7 @@ impl ClusterUi {
     }
 
     /// Replace every tab's state with a scene's seed.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: ClusterSeed) {
         self.nodes.set(seed.nodes.unwrap_or_default());
         self.raft.set(seed.raft.unwrap_or_default());

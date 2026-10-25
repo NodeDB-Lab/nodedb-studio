@@ -8,11 +8,15 @@
 //! tree (tokio-rustls, aws-lc-rs, cmake), so it is deliberately left disabled
 //! until a live consumer exists rather than carried here for a field nothing reads.
 
-// The Phase-2 seam impl: its trait conformance and object-safety are proven by
-// the tests below, but the mock is still the active injected service, so this
-// type is not constructed in non-test code yet. The phase that wires it in as
-// the real service removes this allow.
-#[allow(dead_code)]
+// The tests below prove its trait conformance and object-safety. The mock is
+// still the injected service, so only tests build this type today.
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "app.rs builds it in place of MockConnectionService once the real client is wired"
+    )
+)]
 #[derive(Default)]
 pub struct NodeDbConnectionService;
 

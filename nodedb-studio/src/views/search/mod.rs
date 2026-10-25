@@ -1,6 +1,5 @@
 //! Search: ranked retrieval over a collection's text and vector indexes, the
-//! analyzer test, and the indexes with their build history. It replaces the
-//! FTS Inspector.
+//! analyzer test, and the indexes with their build history.
 
 mod analyze;
 mod analyze_bodies;

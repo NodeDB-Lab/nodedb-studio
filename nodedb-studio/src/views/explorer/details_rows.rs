@@ -198,7 +198,15 @@ pub fn ColumnarDetails(
                 DetailsTab::Json => rsx! {
                     crate::components::json_view::JsonView { text: json }
                 },
-                _ => rsx! {
+                DetailsTab::Fields
+                | DetailsTab::Document
+                | DetailsTab::Raw
+                | DetailsTab::FullText
+                | DetailsTab::Vector
+                | DetailsTab::Indexes
+                | DetailsTab::History
+                | DetailsTab::Properties
+                | DetailsTab::Geometry => rsx! {
                     div { class: "field-form",
                         for f in schema.fields.iter() {
                             div { key: "{f.name}", class: "form-line",

@@ -6,6 +6,7 @@
  *               .icon-btn  .btn-group (split button)  .link-btn
  *   Inputs      .input  .select  .textarea  .search-field (icon + input)
  *               .checkbox  .switch  .radio  .seg (segmented)  .field (label + control)
+ *               .field-error (validation message under a control)
  *               .select.native (a real <select> with the same look)
  *               .choice (radio card)  .choice-group  .choice-grid
  *               .seg.accent (the active segment fills with the accent)
@@ -14,10 +15,10 @@
  *               .count-badge  .kbd-hint  .tag  .unsaved-dot (.blue)
  *   Code        .code-input (gutter + highlighted textarea)  .tok-*
  *   Data        .dt (dense table)  .kv (key/value list)  .code-block
- *               .json (syntax spans)  .list (selectable rows)
+ *               .list (selectable rows)
  *   Layout      .toolbar  .toolbar-spacer  .section-label  .stack
  *               .empty-state  .callout.<tone>  .meta-line
- *   Overlays    .popover  .menu-*  .tooltip
+ *   Overlays    .popover  .menu-*
  */
 
 /* ---------- Buttons ---------- */
@@ -255,6 +256,7 @@ select.select.native {
 .field > label, .field > .field-label { color: var(--text-secondary); font-size: var(--fs-sm); font-weight: 500; }
 .field .hint { color: var(--text-tertiary); font-size: var(--fs-xs); }
 .field .error { color: var(--text-danger); font-size: var(--fs-xs); }
+.field-error { margin-top: 5px; color: var(--text-danger); font-size: var(--fs-xs); }
 .field-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
 .check-row { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 
@@ -457,8 +459,6 @@ select.select.native {
 }
 .kv-row > :first-child { color: var(--text-secondary); white-space: nowrap; }
 .kv-row > :last-child { text-align: right; min-width: 0; overflow-wrap: anywhere; }
-.kv.stacked .kv-row { flex-direction: column; align-items: flex-start; gap: 2px; padding: 6px 0; }
-.kv.stacked .kv-row > :last-child { text-align: left; }
 
 .code-block {
   margin: 0;
@@ -479,12 +479,10 @@ select.select.native {
 
 /* Syntax spans for SQL, Cypher, and JSON. */
 .tok-kw { color: var(--accent-blue); }
-.tok-fn { color: var(--text-primary); }
 .tok-str { color: #1b7f4a; }
 .tok-num { color: #b25e09; }
 .tok-key { color: #b4235a; }
 .tok-com { color: var(--text-tertiary); font-style: italic; }
-.tok-op { color: var(--text-secondary); }
 .tok-func { color: var(--tone-violet-fg); }
 .tok-param { color: var(--tone-orange-fg); }
 :root:has(.studio-root[data-theme="dark"]) .tok-str { color: #7fd8a3; }
@@ -612,7 +610,6 @@ select.select.native {
 }
 .menu-item:hover { background: var(--surface-hover); }
 .menu-item .ico { color: var(--text-secondary); }
-.menu-item .menu-meta { margin-left: auto; color: var(--text-tertiary); font-size: var(--fs-sm); }
 .menu-check {
   display: flex;
   align-items: flex-start;
@@ -626,20 +623,6 @@ select.select.native {
 .menu-check-text { display: flex; flex-direction: column; }
 .menu-check-label { font-weight: 500; }
 .menu-check-hint { color: var(--text-tertiary); font-size: var(--fs-sm); }
-
-.tooltip {
-  position: absolute;
-  z-index: 70;
-  max-width: 320px;
-  padding: 10px 12px;
-  border: 1px solid var(--border-mid);
-  border-radius: var(--radius);
-  background: var(--surface-overlay);
-  box-shadow: var(--shadow-popover);
-  font-size: var(--fs-sm);
-  color: var(--text-secondary);
-}
-.tooltip strong { display: block; color: var(--text-primary); font-weight: 600; margin-bottom: 2px; }
 
 /* A search field that shares a toolbar row: grows, then caps. */
 .search-field.grow { flex: 1 1 180px; max-width: 300px; }

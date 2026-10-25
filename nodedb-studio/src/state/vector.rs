@@ -213,6 +213,7 @@ impl Drafts {
 }
 
 /// What a screenshot scene sets. `None` keeps the current state.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct VectorSeed {
     pub target: Option<String>,
@@ -248,6 +249,7 @@ impl VectorUi {
     }
 
     /// Replace the state with a scene's seed.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: VectorSeed, target: &str) {
         let key = seed.target.unwrap_or_else(|| target.to_string());
         if let Some((collection, field)) = key.split_once('.') {

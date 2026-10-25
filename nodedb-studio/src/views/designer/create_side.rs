@@ -8,9 +8,8 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::models::collection::Attached;
 use crate::models::designer::DesignSchema;
-use crate::models::designer_new::{
-    Constraint, ConstraintKind, Issue, NewCollection, Target as IssueAt,
-};
+use crate::models::designer_new::{Constraint, ConstraintKind, NewCollection};
+use crate::models::designer_new_check::{Issue, Target as IssueAt};
 use crate::models::schema::FieldType;
 use crate::state::designer::DesignerState;
 use crate::views::designer::create::{edit, issue_at};

@@ -9,9 +9,6 @@
  * dark tokens, `light` suppresses them, `system` follows the OS. A selector
  * cannot OR in a media query, so the dark block appears twice. Keep the two
  * copies identical.
- *
- * The legacy names (--bg-primary, --text-secondary, …) stay as aliases while
- * screens move over, so screens not yet rebuilt still follow the palette.
  */
 
 :root {
@@ -89,7 +86,6 @@
   --viz-6: #5c7a99;
   --viz-grid: #e7ecf2;
 
-
   /* Terminal: the Console transcript is dark in both themes. */
   --terminal-bg: #111a27;
   --terminal-fg: #e6edf6;
@@ -124,18 +120,6 @@
   --radius: 6px;
   --radius-lg: 8px;
   --gap: 8px;
-
-  /* Legacy aliases for screens not yet rebuilt. */
-  --bg-primary: var(--surface-panel);
-  --bg-secondary: var(--surface-sunken);
-  --bg-tertiary: var(--surface-page);
-  --bg-rail: var(--surface-sidebar);
-  --bg-hover: var(--surface-hover);
-  --bg-active: var(--surface-selected);
-  --accent: var(--btn-primary-bg);
-  --rail-w: var(--sidebar-w);
-  --topbar-h: var(--header-h);
-  --statusbar-h: var(--footer-h);
 }
 
 :root:has(.studio-root[data-theme="dark"]) {

@@ -51,7 +51,9 @@ fn taken_principals(dir: &AccessDirectory, staged: &[AccessChange]) -> Vec<Strin
     let mut out: Vec<String> = dir.principals.iter().map(|p| p.name.clone()).collect();
     out.extend(staged.iter().filter_map(|c| match c {
         AccessChange::CreatePrincipal { name, .. } => Some(name.clone()),
-        _ => None,
+        AccessChange::CreateRole { .. }
+        | AccessChange::AddMembership { .. }
+        | AccessChange::RemoveMembership { .. } => None,
     }));
     out
 }
@@ -60,7 +62,9 @@ fn taken_roles(dir: &AccessDirectory, staged: &[AccessChange]) -> Vec<String> {
     let mut out: Vec<String> = dir.roles.iter().map(|r| r.name.clone()).collect();
     out.extend(staged.iter().filter_map(|c| match c {
         AccessChange::CreateRole { name, .. } => Some(name.clone()),
-        _ => None,
+        AccessChange::CreatePrincipal { .. }
+        | AccessChange::AddMembership { .. }
+        | AccessChange::RemoveMembership { .. } => None,
     }));
     out
 }

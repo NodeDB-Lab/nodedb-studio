@@ -1,4 +1,4 @@
-//! Shell chrome models: nav-rail badge counts and the statusbar's session
+//! Shell chrome models: sidebar badge counts and the footer's session
 //! summary. Both are single values (not lists), which is why the mock impl
 //! cannot use `services::mock_behavior::apply` and instead uses
 //! `apply_one`, the single-value counterpart `record_detail` also uses.

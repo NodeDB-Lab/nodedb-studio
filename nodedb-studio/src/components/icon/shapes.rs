@@ -1,114 +1,9 @@
-//! Inline SVG icons on a 24px grid, stroked with `currentColor`.
-//!
-//! Shapes follow the Lucide icon set (ISC license). Inline SVG keeps every
-//! icon crisp at any scale and themable through `color`, with no font or
-//! asset loading.
+//! The SVG elements that draw each `Icon`.
 
-use dioxus::prelude::*;
-
-// The set is shared ahead of the screens that use it. The redesign's
-// cleanup pass removes every variant no screen uses, then this allow.
-#[allow(dead_code)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Icon {
-    Activity,
-    ArrowDown,
-    ArrowUp,
-    ArrowUpDown,
-    Ban,
-    Bell,
-    Box,
-    Braces,
-    Calendar,
-    CalendarClock,
-    ChartColumn,
-    Check,
-    ChevronDown,
-    ChevronLeft,
-    ChevronRight,
-    ChevronUp,
-    ChevronsLeft,
-    ChevronsRight,
-    CircleAlert,
-    CircleCheck,
-    Clock,
-    Code,
-    Columns2,
-    Columns3,
-    Copy,
-    CornerDownLeft,
-    Database,
-    Download,
-    Ellipsis,
-    ExternalLink,
-    Eye,
-    EyeOff,
-    FileCode,
-    FileText,
-    FilePlus,
-    Filter,
-    Folder,
-    FolderOpen,
-    FolderPlus,
-    GitFork,
-    Globe,
-    Grid3x3,
-    GripVertical,
-    Hash,
-    Hexagon,
-    History,
-    Image,
-    Info,
-    Key,
-    Keyboard,
-    Laptop,
-    Layers,
-    Link,
-    List,
-    ListX,
-    Lock,
-    LogOut,
-    Map,
-    MapPin,
-    Maximize,
-    Minus,
-    Moon,
-    Monitor,
-    MousePointer2,
-    Move,
-    Network,
-    Pause,
-    Pencil,
-    Palette,
-    Play,
-    Plus,
-    RefreshCw,
-    RotateCcw,
-    Ruler,
-    Save,
-    Search,
-    Send,
-    Server,
-    Settings,
-    Shield,
-    Square,
-    Sun,
-    SquareTerminal,
-    Table,
-    Tablet,
-    Trash,
-    Unplug,
-    TriangleAlert,
-    Upload,
-    User,
-    Users,
-    Workflow,
-    X,
-    Zap,
-}
+use super::view::Icon;
 
 /// One SVG element of an icon.
-enum Shape {
+pub enum Shape {
     Path(&'static str),
     Circle(f32, f32, f32),
     /// x, y, width, height, corner radius.
@@ -125,11 +20,8 @@ const FILE_FOLD: &str = "M14 2v4a2 2 0 0 0 2 2h4";
 const ARC_CCW: &str = "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8";
 const GEAR: &str = "M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z";
 
-fn shapes(icon: Icon) -> &'static [Shape] {
+pub fn shapes(icon: Icon) -> &'static [Shape] {
     match icon {
-        Icon::Activity => &[P(
-            "M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2",
-        )],
         Icon::ArrowDown => &[P("M12 5v14"), P("m19 12-7 7-7-7")],
         Icon::ArrowUp => &[P("m5 12 7-7 7 7"), P("M12 19V5")],
         Icon::ArrowUpDown => &[
@@ -253,11 +145,6 @@ fn shapes(icon: Icon) -> &'static [Shape] {
             P("M18 9v2c0 .6-.4 1-1 1H7c-.6 0-1-.4-1-1V9"),
             P("M12 12v3"),
         ],
-        Icon::Globe => &[
-            C(12.0, 12.0, 10.0),
-            P("M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"),
-            P("M2 12h20"),
-        ],
         Icon::Grid3x3 => &[
             C(5.0, 5.0, 1.5),
             C(12.0, 5.0, 1.5),
@@ -284,11 +171,6 @@ fn shapes(icon: Icon) -> &'static [Shape] {
             P("M16 3l-2 18"),
         ],
         Icon::History => &[P(ARC_CCW), P("M3 3v5h5"), P("M12 7v5l4 2")],
-        Icon::Image => &[
-            R(3.0, 3.0, 18.0, 18.0, 2.0),
-            C(9.0, 9.0, 2.0),
-            P("m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"),
-        ],
         Icon::Info => &[C(12.0, 12.0, 10.0), P("M12 16v-4"), P("M12 8h.01")],
         Icon::Key => &[
             P("m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"),
@@ -336,11 +218,6 @@ fn shapes(icon: Icon) -> &'static [Shape] {
             P("m15 10 4 4"),
         ],
         Icon::Lock => &[R(3.0, 11.0, 18.0, 11.0, 2.0), P("M7 11V7a5 5 0 0 1 10 0v4")],
-        Icon::LogOut => &[
-            P("M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"),
-            P("m16 17 5-5-5-5"),
-            P("M21 12H9"),
-        ],
         Icon::Map => &[
             P(
                 "M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z",
@@ -432,12 +309,6 @@ fn shapes(icon: Icon) -> &'static [Shape] {
             ),
             P("m21.854 2.147-10.94 10.939"),
         ],
-        Icon::Server => &[
-            R(2.0, 2.0, 20.0, 8.0, 2.0),
-            R(2.0, 14.0, 20.0, 8.0, 2.0),
-            P("M6 6h.01"),
-            P("M6 18h.01"),
-        ],
         Icon::Settings => &[P(GEAR), C(12.0, 12.0, 3.0)],
         Icon::Shield => &[P(
             "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
@@ -465,7 +336,6 @@ fn shapes(icon: Icon) -> &'static [Shape] {
             P("M3 9h18"),
             P("M3 15h18"),
         ],
-        Icon::Tablet => &[R(4.0, 2.0, 16.0, 20.0, 2.0), P("M12 18h.01")],
         Icon::Trash => &[
             P("M3 6h18"),
             P("M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"),
@@ -495,52 +365,11 @@ fn shapes(icon: Icon) -> &'static [Shape] {
             P("M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"),
             C(12.0, 7.0, 4.0),
         ],
-        Icon::Users => &[
-            P("M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"),
-            C(9.0, 7.0, 4.0),
-            P("M22 21v-2a4 4 0 0 0-3-3.87"),
-            P("M16 3.13a4 4 0 0 1 0 7.75"),
-        ],
         Icon::Workflow => &[
             R(3.0, 3.0, 8.0, 8.0, 2.0),
             P("M7 11v4a2 2 0 0 0 2 2h4"),
             R(13.0, 13.0, 8.0, 8.0, 2.0),
         ],
         Icon::X => &[P("M18 6 6 18"), P("m6 6 12 12")],
-        Icon::Zap => &[P(
-            "M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z",
-        )],
-    }
-}
-
-/// An icon at `size` CSS pixels (16 by default). Decorative: the control
-/// around it carries the accessible label.
-#[component]
-pub fn Ico(
-    icon: Icon,
-    #[props(default = 16)] size: u32,
-    #[props(default)] class: String,
-) -> Element {
-    rsx! {
-        svg {
-            class: "ico {class}",
-            width: "{size}",
-            height: "{size}",
-            view_box: "0 0 24 24",
-            fill: "none",
-            stroke: "currentColor",
-            stroke_width: "2",
-            stroke_linecap: "round",
-            stroke_linejoin: "round",
-            "aria-hidden": "true",
-            for (i, shape) in shapes(icon).iter().enumerate() {
-                match shape {
-                    Shape::Path(d) => rsx! { path { key: "{i}", d: "{d}" } },
-                    Shape::Circle(cx, cy, r) => rsx! { circle { key: "{i}", cx: "{cx}", cy: "{cy}", r: "{r}" } },
-                    Shape::Rect(x, y, w, h, rx) => rsx! { rect { key: "{i}", x: "{x}", y: "{y}", width: "{w}", height: "{h}", rx: "{rx}" } },
-                    Shape::Ellipse(cx, cy, rx, ry) => rsx! { ellipse { key: "{i}", cx: "{cx}", cy: "{cy}", rx: "{rx}", ry: "{ry}" } },
-                }
-            }
-        }
     }
 }

@@ -7,8 +7,7 @@
 pub mod connections;
 pub mod studio_shell;
 
-// Studio views (routed). One module per rail destination; each renders the
-// faithful per-view content ported from the mockup.
+// Studio views (routed). One module per sidebar destination.
 pub mod admin;
 pub mod cluster;
 pub mod console;

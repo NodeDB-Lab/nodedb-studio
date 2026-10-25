@@ -62,7 +62,9 @@ pub fn project(
     }
     let pca = project_2d(&flat, DIMENSIONS, req.seed, canceled).map_err(|e| match e {
         PcaError::Canceled => rejected("The projection was canceled."),
-        other => rejected(other.to_string()),
+        other @ (PcaError::TooFewVectors { .. } | PcaError::RaggedInput { .. }) => {
+            rejected(other.to_string())
+        }
     })?;
 
     // Legend: each value of the color field, commonest first, Missing last.

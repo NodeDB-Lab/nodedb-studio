@@ -69,7 +69,6 @@ impl Default for MockConnectionService {
     }
 }
 
-// Constructors are public API for demos and tests; not all are used in the app binary.
 impl MockConnectionService {
     fn with(behavior: MockBehavior) -> Self {
         Self {
@@ -99,18 +98,18 @@ impl MockConnectionService {
     pub fn ready() -> Self {
         Self::with(MockBehavior::Ready)
     }
-    /// Every read returns an empty collection.
-    #[allow(dead_code)]
+    /// Test-only: every read returns an empty collection.
+    #[cfg(test)]
     pub fn empty() -> Self {
         Self::with(MockBehavior::Empty)
     }
-    /// Every read fails with a retriable server error.
-    #[allow(dead_code)]
+    /// Test-only: every read fails with a retriable server error.
+    #[cfg(test)]
     pub fn erroring() -> Self {
         Self::with(MockBehavior::Erroring)
     }
-    /// Every read resolves after `d`, so the Loading state is observable.
-    #[allow(dead_code)]
+    /// Test-only: every read resolves after `d`, so the Loading state is observable.
+    #[cfg(test)]
     pub fn delayed(d: std::time::Duration) -> Self {
         Self::with(MockBehavior::Delayed(d))
     }

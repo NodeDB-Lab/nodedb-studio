@@ -30,7 +30,7 @@ fn set_value(q: &mut ExploreQuery, field: &str) {
     } else {
         let aggregate = match q.measure.aggregate {
             Aggregate::Count => Aggregate::Sum,
-            other => other,
+            other @ (Aggregate::Sum | Aggregate::Avg | Aggregate::Min | Aggregate::Max) => other,
         };
         q.measure = Measure::of(aggregate, field);
     }

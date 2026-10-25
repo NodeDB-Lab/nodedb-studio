@@ -29,7 +29,13 @@ impl PrincipalKind {
 pub enum PrincipalStatus {
     Active,
     // The server reports it. No fixture holds a disabled principal.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::admin builds it from a disabled server principal; that service is a stub today"
+        )
+    )]
     Disabled,
 }
 
@@ -53,7 +59,13 @@ impl PrincipalStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mfa {
     // The server reports it. No fixture requires a second factor.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::admin builds it from the server's principal record; that service is a stub today"
+        )
+    )]
     Required,
     NotRequired,
     /// A service account signs in with a key, so a second factor has no meaning.
@@ -102,7 +114,13 @@ pub enum Privilege {
     Insert,
     Update,
     // The server reports it. No fixture grants it.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::admin builds it from a server grant; that service is a stub today"
+        )
+    )]
     Delete,
 }
 
@@ -375,6 +393,14 @@ pub fn sort_effective(rows: &mut [EffectiveGrant]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn server_reported_values_have_labels() {
+        assert_eq!(PrincipalStatus::Disabled.label(), "Disabled");
+        assert_eq!(PrincipalStatus::Disabled.tone(), Tone::Idle);
+        assert_eq!(Mfa::Required.label(), "Required");
+        assert_eq!(Privilege::Delete.label(), "DELETE");
+    }
 
     #[test]
     fn a_new_principal_needs_a_free_name_and_an_expiry() {

@@ -40,7 +40,7 @@
 .vec-row.actions { align-items: center; }
 .vec-source { flex: none; width: 130px; }
 .vec-topk { flex: none; width: 96px; }
-.vec-field-grow, .vec-row .field.grow { flex: 1 1 0; }
+.vec-row .field.grow { flex: 1 1 0; }
 .vec-vector { height: 58px; resize: none; line-height: 1.4; padding-top: 6px; }
 .vec-filters { display: flex; flex-direction: column; gap: 8px; }
 .vec-filter { display: flex; align-items: center; gap: 8px; }

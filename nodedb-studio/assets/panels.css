@@ -6,7 +6,8 @@
  *   .panel            titled frame: .panel-header + .panel-body
  *   .panel.fill       takes the remaining space in its row or column
  *   .resize-handle    divider between panels; .drag-capture during a drag
- *   .page-header      title row for pages without tabs (breadcrumb + badges)
+ *   .page-header      title row for pages without tabs
+ *   .async-*          AsyncView states: .async-loading  .async-empty  .async-error
  */
 
 .page-body {
@@ -38,8 +39,6 @@
   background: var(--surface-header);
   flex: none;
 }
-.page-header .crumb { color: var(--text-secondary); font-size: var(--fs-lg); }
-.page-header .crumb-current { font-size: var(--fs-lg); font-weight: 600; }
 .page-header .ico { color: var(--text-tertiary); }
 
 .panel {
@@ -94,7 +93,6 @@
   min-height: 0;
   overflow: auto;
 }
-.panel-body.padded, .panel-pad { padding: 12px 16px; }
 
 /* A divider between two panels. Its hit area is the gap itself. */
 .resize-handle {
@@ -149,3 +147,18 @@
 .state-icon.warn { color: var(--warn); }
 .state-icon.err { color: var(--err); }
 .state-icon.muted { color: var(--text-tertiary); }
+
+/* AsyncView states: loading, empty, and error in place of a panel's content. */
+.async-loading, .async-empty { text-align: center; color: var(--text-tertiary); font-size: var(--fs-xs); }
+.async-loading { padding: 40px 20px; }
+.async-empty { padding: 24px 16px; }
+.async-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  font-size: var(--fs-xs);
+}
+.async-error-msg { max-width: 280px; color: var(--text-secondary); }

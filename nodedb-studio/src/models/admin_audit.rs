@@ -142,7 +142,13 @@ impl AuditEvent {
                 .split_once(':')
                 .map(|(_, name)| name)
                 .or(Some(self.target.as_str())),
-            _ => None,
+            TargetType::Role
+            | TargetType::Policy
+            | TargetType::Collection
+            | TargetType::Index
+            | TargetType::Snapshot
+            | TargetType::Config
+            | TargetType::Credential => None,
         }
     }
 }

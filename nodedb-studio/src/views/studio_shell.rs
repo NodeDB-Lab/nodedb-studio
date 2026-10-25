@@ -12,7 +12,7 @@ use crate::state::explorer::{RecordView, Selected};
 
 #[component]
 pub fn Studio() -> Element {
-    // The Explorer's selected collection, shared with the topbar breadcrumb.
+    // The Explorer's selected collection, shared with the header breadcrumb.
     // Provided above the router so views inside it can consume it.
     let mut selected = use_context_provider(|| Signal::new(None::<Selected>));
 

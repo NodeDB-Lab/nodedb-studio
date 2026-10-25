@@ -142,7 +142,7 @@ pub fn DeviceDetails(device: Device, origin: OriginBinding) -> Element {
                     Ico { icon: Icon::FileText, size: 16 }
                     "View activity"
                 }
-                div { class: "anchor sy-more",
+                div { class: "anchor",
                     button {
                         class: "btn icon",
                         "aria-label": "{d.name} actions",

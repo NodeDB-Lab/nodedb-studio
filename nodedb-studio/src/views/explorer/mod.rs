@@ -16,7 +16,9 @@ mod page;
 mod schema_tabs;
 mod table;
 mod toolbar;
+mod transfer_form;
 mod transfer_jobs;
+mod transfer_panels;
 mod workspace;
 
 pub mod transfer;

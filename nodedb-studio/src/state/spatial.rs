@@ -340,6 +340,7 @@ impl Default for RasterUi {
 }
 
 /// What a screenshot scene sets. `None` keeps the default of a tab.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SpatialSeed {
     pub source: Option<SourceRef>,
@@ -370,6 +371,7 @@ impl SpatialUi {
     }
 
     /// Replace the state with a scene's seed.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: SpatialSeed) {
         self.source.set(seed.source);
         self.map.set(seed.map.unwrap_or_default());

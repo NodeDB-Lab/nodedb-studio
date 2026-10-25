@@ -84,7 +84,18 @@ impl SyncEventKind {
         match self {
             SyncEventKind::WriteRejected => Tone::Err,
             SyncEventKind::Disconnected | SyncEventKind::DevicePaused => Tone::Warn,
-            _ => Tone::Ok,
+            SyncEventKind::Reconnected
+            | SyncEventKind::SubscriptionStarted
+            | SyncEventKind::SchemaAnnounced
+            | SyncEventKind::SnapshotStarted
+            | SyncEventKind::SnapshotComplete
+            | SyncEventKind::BatchApplied
+            | SyncEventKind::AckReceived
+            | SyncEventKind::WriteAccepted
+            | SyncEventKind::DeviceResumed
+            | SyncEventKind::SubscriptionChanged
+            | SyncEventKind::EnrollmentIssued
+            | SyncEventKind::WriteDiscarded => Tone::Ok,
         }
     }
 

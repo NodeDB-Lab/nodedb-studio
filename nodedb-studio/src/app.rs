@@ -46,9 +46,7 @@ use crate::state::workspace::Workspace;
 use crate::views::connections::ConnectionManager;
 use crate::views::studio_shell::Studio;
 
-// Order matters: later sheets override earlier ones. `styles.css` holds the
-// screens not yet rebuilt and goes once the last one is.
-const LEGACY_STYLES: Asset = asset!("/assets/styles.css");
+// Order matters: later sheets override earlier ones.
 const TOKENS: Asset = asset!("/assets/tokens.css");
 const BASE: Asset = asset!("/assets/base.css");
 const CONTROLS: Asset = asset!("/assets/controls.css");
@@ -131,7 +129,7 @@ pub fn App() -> Element {
     // Modal state is provided here (not in Studio) because Preferences is
     // reachable while disconnected and via Cmd+, in either state.
     let mut modal = use_context_provider(|| Signal::new(None::<ModalKind>));
-    // The open topbar popover and the command palette. Studio-only in use, but
+    // The open header popover and the command palette. Studio-only in use, but
     // provided here so the root key handler below can open and close them.
     let mut popover = use_context_provider(|| Signal::new(None::<Popover>));
     let mut palette = use_context_provider(|| Signal::new(false));
@@ -288,7 +286,7 @@ pub fn App() -> Element {
     // Rendered through the same component every failed read uses, so the markup
     // and styling live in one place. It is fixed-position and above the modal
     // scrim: `html, body` are `100vh; overflow: hidden`, so a banner in normal
-    // flow would push the statusbar off-screen, and a failed "Save & connect"
+    // flow would push the footer off-screen, and a failed "Save & connect"
     // has to be readable without closing the form that caused it.
     // `retriable` is deliberately false: the way
     // to retry a connect is the Connect button the user just pressed, which is
@@ -307,7 +305,6 @@ pub fn App() -> Element {
     let scene_driver = rsx! {};
 
     rsx! {
-        document::Stylesheet { href: LEGACY_STYLES }
         document::Stylesheet { href: TOKENS }
         document::Stylesheet { href: BASE }
         document::Stylesheet { href: CONTROLS }

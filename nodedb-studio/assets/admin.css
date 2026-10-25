@@ -9,7 +9,7 @@
  *   Policies   .ad-editor  .ad-form  .ad-expr  .ad-action-row  .ad-bypass  .ad-test  .ad-result
  *   Audit      .ad-audit  .ad-audit-footer  .ad-event  .ad-diff
  *   Backups    .ad-backup-note  .ad-buttons  .ad-restore  .ad-copyline  .ad-range
- *   Config     .ad-scope  .ad-proposal  .ad-stack  .ad-proposal-select
+ *   Config     .ad-scope  .ad-proposal  .ad-stack
  *   Credentials .ad-secret  .ad-masked  .ad-dim  .ad-cred-actions
  */
 
@@ -153,7 +153,6 @@
 .ad-chips { justify-content: flex-start; }
 .ad-review-empty { padding: 20px 16px; color: var(--text-secondary); }
 .ad-review-empty p { margin: 0 0 6px; }
-.ad-proposal-select { width: 100%; min-width: 0; height: 32px; }
 .ad-proposal-input {
   width: 100%;
   height: 32px;

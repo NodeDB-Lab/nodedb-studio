@@ -121,7 +121,11 @@ impl SubEvent {
     pub fn tone(&self) -> Tone {
         match self.kind {
             SubEventKind::StartingSnapshot | SubEventKind::ApplyingSnapshot => Tone::Idle,
-            _ => Tone::Ok,
+            SubEventKind::Activated
+            | SubEventKind::SnapshotComplete
+            | SubEventKind::CheckpointUpdated
+            | SubEventKind::ReceivedLive
+            | SubEventKind::AppliedLive => Tone::Ok,
         }
     }
 

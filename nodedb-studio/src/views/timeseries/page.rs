@@ -26,7 +26,9 @@ const STRIP: &[TimeseriesTab] = &[
 pub fn strip_tab(tab: TimeseriesTab) -> TimeseriesTab {
     match tab {
         TimeseriesTab::Backfill => TimeseriesTab::Lifecycle,
-        other => other,
+        other @ (TimeseriesTab::Explore | TimeseriesTab::Dashboards | TimeseriesTab::Lifecycle) => {
+            other
+        }
     }
 }
 

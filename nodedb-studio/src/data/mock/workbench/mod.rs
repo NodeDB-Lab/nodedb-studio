@@ -8,9 +8,11 @@ mod results;
 mod schema;
 mod store;
 
-pub use library::query_session;
 #[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]
-pub use library::{CUSTOMER_SPEND_ID, DATABASE, ORDERS_SQL, library};
+pub use library::CUSTOMER_SPEND_ID;
+pub use library::query_session;
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
+pub use library::{DATABASE, ORDERS_SQL, library};
 pub use plans::query_plan;
 pub use results::empty_result_set;
 pub use schema::schema_tree;

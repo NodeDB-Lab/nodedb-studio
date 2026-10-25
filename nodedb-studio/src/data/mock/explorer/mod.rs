@@ -5,6 +5,7 @@
 mod access;
 mod analytics;
 mod array;
+mod articles;
 pub(super) mod build;
 mod catalog;
 mod docs;
@@ -17,17 +18,10 @@ mod shipments;
 
 pub use access::collection_access;
 pub use array::{array_schema, array_slice, sample as array_cell};
+pub use articles::{ARTICLE_COUNT, article_row};
 pub use catalog::collections;
 pub use edges::{GRAPH, edge_page};
 pub use query::{
     Overlay, all_records, observed_at, plain_text, record_page, stored_record, transfer_preview,
 };
 pub use schemas::collection_schema;
-
-/// How many articles the Explorer holds. Vector Space reads the same records.
-pub const ARTICLE_COUNT: usize = docs::ARTICLES_SET.total;
-
-/// Article `i` in the Explorer's natural order, newest first.
-pub fn article_row(i: usize) -> crate::models::records::Record {
-    (docs::ARTICLES_SET.row)(i)
-}

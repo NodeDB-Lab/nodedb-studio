@@ -32,6 +32,7 @@ impl EventsUi {
 }
 
 /// What a screenshot scene sets. `None` keeps a tab's own state.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct EventsSeed {
     pub feeds: Option<FeedsUi>,
@@ -43,6 +44,7 @@ pub struct EventsSeed {
 
 impl EventsUi {
     /// Replace the tabs' state with a seed's.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: EventsSeed) {
         if let Some(s) = seed.feeds {
             self.feeds.set(s);

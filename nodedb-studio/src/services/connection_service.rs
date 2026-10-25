@@ -75,7 +75,7 @@ pub trait ConnectionService {
     /// Mark one notification read.
     async fn mark_read(&self, id: &str) -> Result<(), StudioError>;
 
-    /// Badge counts for the nav rail's Query and Streams entries.
+    /// Badge counts for the sidebar's Query entry.
     async fn nav_badges(&self) -> Result<NavBadges, StudioError>;
 
     /// Server version of the active session, for the footer.

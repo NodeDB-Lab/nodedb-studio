@@ -244,6 +244,7 @@ pub struct SyncUi {
 }
 
 /// What a screenshot scene sets. `None` resets a tab to its default.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct SyncSeed {
     pub devices: Option<DevicesUi>,
@@ -264,6 +265,7 @@ impl SyncUi {
     }
 
     /// Replace every tab's state with a scene's seed.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: SyncSeed) {
         self.devices.set(seed.devices.unwrap_or_default());
         self.subs.set(seed.subs.unwrap_or_default());

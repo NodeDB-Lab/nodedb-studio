@@ -9,7 +9,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::designer::DesignSchema;
-use crate::models::designer_new::{Issue, SchemaMode, Storage, Target as IssueAt};
+use crate::models::designer_new::{SchemaMode, Storage};
+use crate::models::designer_new_check::{Issue, Target as IssueAt};
 use crate::services::backend::Backend;
 use crate::state::designer::{CreateState, DesignerState};
 use crate::views::designer::create_fields::FieldsEditor;

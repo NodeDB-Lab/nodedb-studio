@@ -181,7 +181,7 @@ pub async fn apply(mut state: Signal<DesignerState>, backend: Rc<dyn Backend>) {
                 if n == 1 { "" } else { "s" }
             ));
         }
-        other => {
+        other @ (ApplyResult::Partial { .. } | ApplyResult::Failed(_)) => {
             if let Some(r) = s.review.as_mut() {
                 r.busy = false;
                 r.result = Some(other);

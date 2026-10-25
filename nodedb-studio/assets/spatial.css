@@ -81,7 +81,6 @@
 .sp-tick { fill: var(--text-tertiary); font-size: 12px; font-family: var(--font-sans); }
 .sp-pt { fill: var(--viz-1); stroke: var(--surface-panel); stroke-width: 1.5; }
 .sp-pt.result { fill: var(--viz-2); }
-.sp-pt.sel { fill: var(--viz-1); }
 .sp-ring { fill: none; stroke: var(--text-primary); stroke-width: 2; }
 .sp-cluster circle {
   fill: color-mix(in srgb, var(--viz-1) 24%, var(--surface-panel));

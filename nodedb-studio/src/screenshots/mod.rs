@@ -3,12 +3,14 @@
 //! feature on Linux. `scripts/screenshots.sh` runs it.
 
 pub mod admin_scenes;
+pub mod area_scenes;
 pub mod capture;
 pub mod cluster_scenes;
 pub mod config;
 pub mod designer_scenes;
 pub mod driver;
 pub mod events_scenes;
+pub mod scene;
 pub mod scenes;
 pub mod search_scenes;
 pub mod spatial_scenes;

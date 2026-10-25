@@ -7,4 +7,6 @@ pub mod notify;
 pub mod topics;
 pub mod ui;
 
-pub use ui::{EventsSeed, EventsUi};
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
+pub use ui::EventsSeed;
+pub use ui::EventsUi;

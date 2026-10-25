@@ -3,7 +3,7 @@
  * panels.css; only what is specific to the workbench is added.
  *
  *   Query     .query-editor  .query-tabs  .query-tab  .query-toolbar  .params
- *   Results   .results-tabs  .results-table  .results-footer  .messages
+ *   Results   .results-tabs  .results-footer  .messages
  *   Plan      .plan  .op-card  .op-details
  *   Side      .schema-tree  .schema-row  .library  .query-details
  *   Console   .console-toolbar  .console-terminal  .transcript  .console-prompt
@@ -234,7 +234,6 @@
 .console-terminal .tok-num { color: var(--terminal-num); }
 .console-terminal .tok-param { color: var(--terminal-num); }
 .console-terminal .tok-com { color: var(--terminal-dim); }
-.term-end { height: 1px; }
 
 .console-prompt {
   display: flex;

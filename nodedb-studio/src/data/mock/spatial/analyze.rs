@@ -65,7 +65,13 @@ pub fn spatial_analyze(
         (Query::Area(rings), Operation::Within | Operation::Intersects) => {
             let test = |at: (f64, f64)| match req.op {
                 Operation::Within => point_within(at, rings),
-                _ => point_intersects(at, rings),
+                Operation::Intersects
+                | Operation::Nearby
+                | Operation::Contains
+                | Operation::Covers
+                | Operation::IsValid
+                | Operation::Transform
+                | Operation::H3Bins => point_intersects(at, rings),
             };
             let mut hits: Vec<(&Feature, (f64, f64))> = features
                 .iter()

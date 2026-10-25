@@ -44,7 +44,7 @@ pub struct Capabilities {
 }
 
 impl Capabilities {
-    /// Resolve a single capability flag by enum key. Lets the rail and the
+    /// Resolve a single capability flag by enum key. Lets the sidebar and the
     /// notification filter share one code path instead of matching fields by
     /// hand at every call site.
     pub fn has(&self, cap: Capability) -> bool {

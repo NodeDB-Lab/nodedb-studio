@@ -242,6 +242,7 @@ pub struct RejectedWrites {
 }
 
 impl RejectedWrites {
+    #[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]
     pub fn get(&self, mutation: &str) -> Option<&Rejection> {
         self.rows.iter().find(|r| r.mutation == mutation)
     }

@@ -120,7 +120,14 @@ pub fn SpatialDetails(
                     }
                 },
                 DetailsTab::Indexes => rsx! { IndexList { indexes: schema.indexes.clone() } },
-                _ => rsx! {
+                DetailsTab::Document
+                | DetailsTab::Json
+                | DetailsTab::Raw
+                | DetailsTab::FullText
+                | DetailsTab::Vector
+                | DetailsTab::Fields
+                | DetailsTab::History
+                | DetailsTab::Properties => rsx! {
                     if let Some((lon, lat)) = at {
                         MapPreview { lon, lat }
                     }

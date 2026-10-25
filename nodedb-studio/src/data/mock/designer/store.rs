@@ -11,7 +11,7 @@ use crate::models::designer_change::{
     ApplyReport, ChangeKind, ChangeReview, DryRun, PendingChange,
 };
 use crate::models::designer_ddl;
-use crate::models::designer_new::is_identifier;
+use crate::models::designer_new_check::is_identifier;
 use crate::models::schema::{FieldType, IndexKind};
 use crate::services::error::StudioError;
 
@@ -131,7 +131,20 @@ impl DesignerStore {
                             metric: index.vector.map_or(VectorMetric::Cosine, |v| v.metric),
                         })
                     }
-                    _ => None,
+                    FieldType::String { .. }
+                    | FieldType::Int64
+                    | FieldType::Float64
+                    | FieldType::Decimal { .. }
+                    | FieldType::Bool
+                    | FieldType::Timestamp
+                    | FieldType::Datetime
+                    | FieldType::Uuid
+                    | FieldType::Object
+                    | FieldType::Array
+                    | FieldType::Json
+                    | FieldType::Vector { .. }
+                    | FieldType::Geometry { .. }
+                    | FieldType::Bytes => None,
                 };
                 Ok(ChangeKind::CreateIndex(index))
             }

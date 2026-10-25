@@ -144,7 +144,7 @@ pub fn ResultTable(result: ResultSet, current: usize, on_page: EventHandler<usiz
     rsx! {
         div { class: "results-wrap",
             div { class: "dt-wrap results-scroll",
-                table { class: "dt results-table",
+                table { class: "dt",
                     thead {
                         tr {
                             for (i, col) in result.columns().iter().enumerate() {

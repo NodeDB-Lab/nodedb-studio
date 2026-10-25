@@ -131,7 +131,14 @@ impl WorkbenchStore {
                         }
                     }
                 }
-                _ => {}
+                TokenKind::Str
+                | TokenKind::Keyword
+                | TokenKind::Function
+                | TokenKind::Number
+                | TokenKind::Comment
+                | TokenKind::Param
+                | TokenKind::Type
+                | TokenKind::Ident => {}
             }
         }
         if depth != 0 {

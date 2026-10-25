@@ -257,12 +257,32 @@ impl BackfillPreview {
 /// Where a job stands. The mock finishes a job at once. A server reports
 /// the other states while a job runs or after it is stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // SEAM-UNWIRED
 pub enum RunState {
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::timeseries builds it from a queued server job; that service is a stub today"
+        )
+    )]
     Queued,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::timeseries builds it from a running server job; that service is a stub today"
+        )
+    )]
     Running,
     Completed,
     Interrupted,
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::timeseries builds it from a cancelled server job; that service is a stub today"
+        )
+    )]
     Cancelled,
 }
 
@@ -317,6 +337,22 @@ mod tests {
     use super::*;
     use crate::models::format::epoch;
     use crate::models::ts_lifecycle::RollupFn;
+
+    #[test]
+    fn server_reported_run_states_have_labels_and_tones() {
+        assert_eq!(
+            (RunState::Queued.label(), RunState::Queued.tone()),
+            ("Queued", "info")
+        );
+        assert_eq!(
+            (RunState::Running.label(), RunState::Running.tone()),
+            ("Running", "info")
+        );
+        assert_eq!(
+            (RunState::Cancelled.label(), RunState::Cancelled.tone()),
+            ("Cancelled", "idle")
+        );
+    }
 
     fn spec() -> BackfillSpec {
         BackfillSpec {

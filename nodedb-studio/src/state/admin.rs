@@ -427,6 +427,7 @@ pub struct AdminUi {
 }
 
 /// What a screenshot scene sets. `None` resets a tab to its default.
+#[cfg(all(feature = "screenshots", target_os = "linux"))]
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AdminSeed {
     pub access: Option<AccessUi>,
@@ -451,6 +452,7 @@ impl AdminUi {
     }
 
     /// Replace every tab's state with a scene's seed.
+    #[cfg(all(feature = "screenshots", target_os = "linux"))]
     pub fn apply(mut self, seed: AdminSeed) {
         self.access.set(seed.access.unwrap_or_default());
         self.policies.set(seed.policies.unwrap_or_default());

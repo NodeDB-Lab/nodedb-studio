@@ -74,7 +74,6 @@ kbd {
 .ico { flex: none; display: block; }
 
 .muted { color: var(--text-tertiary); }
-.secondary { color: var(--text-secondary); }
 .num { font-variant-numeric: tabular-nums; }
 .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-only {

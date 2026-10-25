@@ -30,9 +30,21 @@ pub enum IndexState {
     Ready,
     // A server reports these while it builds or after a build fails. The
     // fixtures hold only a ready index.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::search builds it from the server's index state; that service is a stub today"
+        )
+    )]
     Building,
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::search builds it from the server's index state; that service is a stub today"
+        )
+    )]
     Error,
 }
 
@@ -50,7 +62,13 @@ impl IndexState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Observed<T> {
     /// What the server reported. The fixtures report no count.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::search fills it from the server's index statistics; that service is a stub today"
+        )
+    )]
     Value(T),
     NotReported,
 }
@@ -137,7 +155,13 @@ impl IndexOverview {
 pub enum RunState {
     Queued,
     /// A server reports it while a build runs.
-    #[allow(dead_code)]
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "services::nodedb::search builds it from a running server build; that service is a stub today"
+        )
+    )]
     Running,
     Completed,
     Cancelled,
@@ -236,6 +260,14 @@ mod tests {
         assert_eq!(s.text(), "Error · quota exceeded");
         assert_eq!(s.label(), "Error");
         assert_eq!(RunState::Completed.text(), "Completed");
+    }
+
+    #[test]
+    fn server_reported_states_have_labels() {
+        assert_eq!(IndexState::Building.label(), "Building");
+        assert_eq!(IndexState::Error.label(), "Error");
+        assert_eq!(RunState::Running.text(), "Running");
+        assert_eq!(Observed::Value(42u64).text(|n| n.to_string()), "42");
     }
 
     fn index(indexed: Observed<u64>, eligible: Observed<u64>) -> SearchIndex {
