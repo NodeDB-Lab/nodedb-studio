@@ -119,8 +119,15 @@ pub enum StudioError {
 }
 
 impl StudioError {
-    /// Drives the Retry affordance. Delegates to the wrapped NodeDbError;
-    /// `NotConnected` is never retriable (it is studio-originated, not transient).
+    /// Drives the Retry affordance. Studio-originated errors are never
+    /// retriable. A server error is retriable when the client says so, or
+    /// when `studio_retries` names it.
+    ///
+    /// `true` means the condition is transient, not that re-sending is safe.
+    /// The client marks `DeadlineExceeded`, `SyncConnectionFailed`,
+    /// `NotLeader` and `NodeUnreachable` retriable, and each can arrive after
+    /// a write committed. A Retry that re-issues a non-idempotent write must
+    /// not rely on this flag alone.
     pub fn is_retriable(&self) -> bool {
         match self {
             StudioError::NotConnected
@@ -151,151 +158,331 @@ impl StudioError {
             | StudioError::Conflict(e)
             | StudioError::ReadOnly(e)
             | StudioError::Setup(e)
-            | StudioError::Server(e) => e.is_retriable(),
+            | StudioError::Server(e) => e.is_retriable() || studio_retries(e.details()),
         }
     }
 }
 
+/// Transient refusals the client does not mark retriable. Each is refused
+/// before anything runs, so a later Retry click can succeed and cannot apply
+/// a write twice.
+fn studio_retries(details: &ErrorDetails) -> bool {
+    matches!(
+        details,
+        // Dispatch queue full; the same request succeeds once capacity frees.
+        ErrorDetails::ServerOverload
+        // A rate limiter refused; the window refills.
+        | ErrorDetails::RateExceeded { .. }
+    )
+}
+
+/// A category constructor, such as `StudioError::Server`.
+type Category = fn(NodeDbError) -> StudioError;
+
 impl From<NodeDbError> for StudioError {
     fn from(e: NodeDbError) -> Self {
-        // Match on the BORROWED details to pick a category, then move `e` in.
-        // ErrorDetails is foreign and #[non_exhaustive] -> the `_` arm is
-        // REQUIRED by the compiler. This is NOT a violation of the studio's
-        // "no `_ =>` on exhaustive domain enums" rule (that rule governs the
-        // studio's OWN enums, e.g. StudioError above, which has no `_`).
-        use ErrorDetails as D;
-        match e.details() {
-            D::HandshakeFailed { .. }
-            | D::SyncConnectionFailed
-            | D::NodeUnreachable
-            | D::NoLeader
-            | D::NotLeader { .. }
-            | D::MigrationInProgress
-            | D::ServerOverload
-            | D::MemoryExhausted { .. } => StudioError::Connection(e),
-
-            D::AuthorizationDenied { .. } | D::AuthExpired => StudioError::Auth(e),
-
-            D::CollectionNotFound { .. }
-            | D::DocumentNotFound { .. }
-            | D::CollectionDraining { .. }
-            | D::CollectionDeactivated { .. } => StudioError::NotFound(e),
-
-            D::WriteConflict { .. }
-            | D::ConstraintViolation { .. }
-            | D::PrevalidationRejected { .. }
-            | D::BalanceViolation { .. }
-            | D::StateTransitionViolation { .. }
-            | D::TransitionCheckViolation { .. }
-            | D::TypeGuardViolation { .. }
-            | D::InsufficientBalance { .. }
-            | D::Overflow { .. }
-            | D::TypeMismatch { .. } => StudioError::Conflict(e),
-
-            D::MirrorReadOnly { .. }
-            | D::AppendOnlyViolation { .. }
-            | D::PeriodLocked { .. }
-            | D::LegalHoldActive { .. }
-            | D::RetentionViolation { .. }
-            | D::MirrorNotPromoted { .. } => StudioError::ReadOnly(e),
-
-            D::Config | D::BadRequest | D::SqlNotEnabled => StudioError::Setup(e),
-
-            // Foreign #[non_exhaustive] enum: REQUIRED catch-all -> Server.
-            _ => StudioError::Server(e),
-        }
+        // A variant added after nodedb-types 0.6.2 has no arm yet: it shows
+        // as Server until it gets one.
+        category_of(e.details()).unwrap_or(StudioError::Server)(e)
     }
+}
+
+/// The category of each `ErrorDetails` variant nodedb-types 0.6.2 defines,
+/// `None` only for a variant added later. The coverage test asserts `Some`
+/// for every code in `ErrorCode::ALL`, so a new variant that arrives with a
+/// new code fails it. A new variant that reuses an existing code is not
+/// caught: diff `details.rs` on every crate bump.
+fn category_of(details: &ErrorDetails) -> Option<Category> {
+    // ErrorDetails is foreign and #[non_exhaustive] -> the `_` arm is
+    // REQUIRED by the compiler. This is NOT a violation of the studio's
+    // "no `_ =>` on exhaustive domain enums" rule (that rule governs the
+    // studio's OWN enums, e.g. StudioError above, which has no `_`).
+    use ErrorDetails as D;
+    let category: Category = match details {
+        // Unreachable, incompatible, or refusing new work for now.
+        // `QuotaExceeded` is the per-tenant or per-database connection cap,
+        // raised at connect. `Cluster` is a version mismatch.
+        D::HandshakeFailed { .. }
+        | D::Cluster
+        | D::StaleReadNotLeader { .. }
+        | D::SyncConnectionFailed
+        | D::NodeUnreachable
+        | D::NoLeader
+        | D::NotLeader { .. }
+        | D::MigrationInProgress
+        | D::ServerOverload
+        | D::RateExceeded { .. }
+        | D::QuotaExceeded { .. } => StudioError::Connection,
+
+        D::AuthorizationDenied { .. } | D::AuthExpired | D::AuthenticationFailed => {
+            StudioError::Auth
+        }
+
+        D::CollectionNotFound { .. }
+        | D::DocumentNotFound { .. }
+        | D::DatabaseNotFound { .. }
+        | D::UndefinedObject { .. }
+        | D::NotFound { .. }
+        | D::CollectionDraining { .. }
+        | D::CollectionDeactivated { .. } => StudioError::NotFound,
+
+        D::WriteConflict { .. }
+        | D::TransactionRollback { .. }
+        | D::AlreadyExists { .. }
+        | D::DependentObjectsExist { .. }
+        | D::CloneDependency { .. }
+        | D::MoveTenantAlreadyAtTarget { .. }
+        | D::ConstraintViolation { .. }
+        | D::PrevalidationRejected { .. }
+        | D::BalanceViolation { .. }
+        | D::StateTransitionViolation { .. }
+        | D::TransitionCheckViolation { .. }
+        | D::TypeGuardViolation { .. }
+        | D::InsufficientBalance { .. }
+        | D::Overflow { .. }
+        | D::TypeMismatch { .. } => StudioError::Conflict,
+
+        D::MirrorReadOnly { .. }
+        | D::AppendOnlyViolation { .. }
+        | D::PeriodLocked { .. }
+        | D::LegalHoldActive { .. }
+        | D::RetentionViolation { .. }
+        | D::MirrorNotPromoted { .. }
+        | D::CloneWriteRequiresMaterialize { .. } => StudioError::ReadOnly,
+
+        // The request, the session, or the config must change: the same
+        // request fails the same way. `ObjectNotReady` is an object in a state
+        // that refuses the operation (`currval` before `nextval`, a CDC offset
+        // out of range, an expired cursor). `Array` is mostly a bad array
+        // operation, though an engine fault shares the variant.
+        D::Config
+        | D::BadRequest
+        | D::SqlNotEnabled
+        | D::PlanError { .. }
+        | D::UndefinedColumn { .. }
+        | D::AmbiguousColumn { .. }
+        | D::UndefinedFunction { .. }
+        | D::DivisionByZero
+        | D::DataException { .. }
+        | D::InvalidLimitValue { .. }
+        | D::ProgramLimitExceeded { .. }
+        | D::ActiveSqlTransaction { .. }
+        | D::ObjectNotReady { .. }
+        | D::Array { .. }
+        | D::PeriodLockMisconfigured { .. }
+        | D::CannotDropDefaultDatabase
+        | D::QuotaOvercommit { .. }
+        | D::TenantVectorDimExceeded { .. }
+        | D::TenantGraphDepthExceeded { .. }
+        | D::CloneDepthExceeded { .. }
+        | D::CannotCloneMirror { .. }
+        | D::ClonePredatesQueryTime { .. }
+        | D::BackupTenantMismatch { .. }
+        | D::BackupKeyMismatch
+        | D::MoveTenantPreflightFailed { .. } => StudioError::Setup,
+
+        // Server-side faults, a spent statement or memory budget, and the
+        // sync-only errors Studio never triggers. `Dispatch` also covers a
+        // write whose outcome is unknown (its response channel closed), so it
+        // gets no Retry.
+        D::DeadlineExceeded
+        | D::MemoryExhausted { .. }
+        | D::Dispatch { .. }
+        | D::Storage { .. }
+        | D::SegmentCorrupted { .. }
+        | D::ColdStorage { .. }
+        | D::Wal { .. }
+        | D::Serialization { .. }
+        | D::Codec { .. }
+        | D::Encryption { .. }
+        | D::Bridge { .. }
+        | D::Internal { .. }
+        | D::MoveTenantDrainTimeout { .. }
+        | D::MoveTenantSnapshotFailed { .. }
+        | D::MoveTenantCutoverFailed { .. }
+        | D::SyncDeltaRejected { .. }
+        | D::ShapeSubscriptionFailed { .. } => StudioError::Server,
+
+        _ => return None,
+    };
+    Some(category)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nodedb_client::NodeDbError;
+    use nodedb_types::error::ErrorCode;
+    use std::mem::discriminant;
 
+    const RETRY: bool = true;
+    const FINAL: bool = false;
+
+    /// Every code nodedb-types 0.6.2 defines, with the category and Retry flag
+    /// Studio gives it. A crate bump that adds a code fails
+    /// `every_error_code_has_a_deliberate_category_and_retry_flag` until the
+    /// new code gets a row here and an arm in `category_of`.
+    const EXPECTED: &[(ErrorCode, Category, bool)] = {
+        use ErrorCode as C;
+        use StudioError::{Auth, Conflict, Connection, NotFound, ReadOnly, Server, Setup};
+        &[
+            // Write path
+            (C::CONSTRAINT_VIOLATION, Conflict, FINAL),
+            (C::WRITE_CONFLICT, Conflict, RETRY),
+            (C::DEADLINE_EXCEEDED, Server, RETRY),
+            (C::PREVALIDATION_REJECTED, Conflict, FINAL),
+            (C::APPEND_ONLY_VIOLATION, ReadOnly, FINAL),
+            (C::BALANCE_VIOLATION, Conflict, FINAL),
+            (C::PERIOD_LOCKED, ReadOnly, FINAL),
+            (C::STATE_TRANSITION_VIOLATION, Conflict, FINAL),
+            (C::TRANSITION_CHECK_VIOLATION, Conflict, FINAL),
+            (C::RETENTION_VIOLATION, ReadOnly, FINAL),
+            (C::LEGAL_HOLD_ACTIVE, ReadOnly, FINAL),
+            (C::PERIOD_LOCK_MISCONFIGURED, Setup, FINAL),
+            (C::TYPE_MISMATCH, Conflict, FINAL),
+            (C::OVERFLOW, Conflict, FINAL),
+            (C::INSUFFICIENT_BALANCE, Conflict, FINAL),
+            (C::RATE_EXCEEDED, Connection, RETRY),
+            (C::TYPE_GUARD_VIOLATION, Conflict, FINAL),
+            (C::TRANSACTION_ROLLBACK, Conflict, RETRY),
+            (C::ACTIVE_SQL_TRANSACTION, Setup, FINAL),
+            // Read path
+            (C::COLLECTION_NOT_FOUND, NotFound, FINAL),
+            (C::DOCUMENT_NOT_FOUND, NotFound, FINAL),
+            (C::COLLECTION_DRAINING, NotFound, FINAL),
+            (C::COLLECTION_DEACTIVATED, NotFound, FINAL),
+            (C::DATABASE_NOT_FOUND, NotFound, FINAL),
+            (C::UNDEFINED_OBJECT, NotFound, FINAL),
+            (C::ALREADY_EXISTS, Conflict, FINAL),
+            (C::OBJECT_NOT_READY, Setup, FINAL),
+            (C::NOT_FOUND, NotFound, FINAL),
+            (C::DEPENDENT_OBJECTS_EXIST, Conflict, FINAL),
+            // Query
+            (C::PLAN_ERROR, Setup, FINAL),
+            (C::SQL_NOT_ENABLED, Setup, FINAL),
+            (C::UNDEFINED_FUNCTION, Setup, FINAL),
+            (C::DIVISION_BY_ZERO, Setup, FINAL),
+            (C::INVALID_LIMIT_VALUE, Setup, FINAL),
+            (C::UNDEFINED_COLUMN, Setup, FINAL),
+            (C::AMBIGUOUS_COLUMN, Setup, FINAL),
+            (C::DATA_EXCEPTION, Setup, FINAL),
+            (C::PROGRAM_LIMIT_EXCEEDED, Setup, FINAL),
+            // Engine ops
+            (C::ARRAY, Setup, FINAL),
+            // Quota
+            (C::QUOTA_OVERCOMMIT, Setup, FINAL),
+            (C::TENANT_QUOTA_EXCEEDED, Connection, FINAL),
+            (C::DATABASE_QUOTA_EXCEEDED, Connection, FINAL),
+            (C::SERVER_OVERLOAD, Connection, RETRY),
+            // Clone
+            (C::CLONE_DEPTH_EXCEEDED, Setup, FINAL),
+            (C::CANNOT_CLONE_MIRROR, Setup, FINAL),
+            (C::CLONE_DEPENDENCY, Conflict, FINAL),
+            (C::CLONE_PREDATES_QUERY_TIME, Setup, FINAL),
+            (C::CLONE_WRITE_REQUIRES_MATERIALIZE, ReadOnly, FINAL),
+            // Mirror
+            (C::MIRROR_READ_ONLY, ReadOnly, FINAL),
+            (C::STALE_READ_NOT_LEADER, Connection, FINAL),
+            (C::MIRROR_NOT_PROMOTED, ReadOnly, FINAL),
+            (C::CANNOT_DROP_DEFAULT_DATABASE, Setup, FINAL),
+            // Move tenant
+            (C::MOVE_TENANT_DRAIN_TIMEOUT, Server, FINAL),
+            (C::MOVE_TENANT_PREFLIGHT_FAILED, Setup, FINAL),
+            (C::MOVE_TENANT_SNAPSHOT_FAILED, Server, FINAL),
+            (C::MOVE_TENANT_CUTOVER_FAILED, Server, FINAL),
+            (C::MOVE_TENANT_ALREADY_AT_TARGET, Conflict, FINAL),
+            // Backup and restore
+            (C::BACKUP_TENANT_MISMATCH, Setup, FINAL),
+            (C::BACKUP_KEY_MISMATCH, Setup, FINAL),
+            // Auth and tenant limits
+            (C::AUTHORIZATION_DENIED, Auth, FINAL),
+            (C::AUTH_EXPIRED, Auth, FINAL),
+            (C::AUTHENTICATION_FAILED, Auth, FINAL),
+            (C::TENANT_VECTOR_DIM_EXCEEDED, Setup, FINAL),
+            (C::TENANT_GRAPH_DEPTH_EXCEEDED, Setup, FINAL),
+            // Protocol and sync
+            (C::HANDSHAKE_FAILED, Connection, FINAL),
+            (C::SYNC_CONNECTION_FAILED, Connection, RETRY),
+            (C::SYNC_DELTA_REJECTED, Server, FINAL),
+            (C::SHAPE_SUBSCRIPTION_FAILED, Server, FINAL),
+            // Storage, WAL, serialization
+            (C::STORAGE, Server, FINAL),
+            (C::SEGMENT_CORRUPTED, Server, FINAL),
+            (C::COLD_STORAGE, Server, FINAL),
+            (C::WAL, Server, FINAL),
+            (C::SERIALIZATION, Server, FINAL),
+            (C::CODEC, Server, FINAL),
+            // Config
+            (C::CONFIG, Setup, FINAL),
+            (C::BAD_REQUEST, Setup, FINAL),
+            // Cluster and memory
+            (C::NO_LEADER, Connection, RETRY),
+            (C::NOT_LEADER, Connection, RETRY),
+            (C::MIGRATION_IN_PROGRESS, Connection, RETRY),
+            (C::NODE_UNREACHABLE, Connection, RETRY),
+            (C::CLUSTER, Connection, FINAL),
+            (C::MEMORY_EXHAUSTED, Server, RETRY),
+            // Encryption and internal
+            (C::ENCRYPTION, Server, FINAL),
+            (C::INTERNAL, Server, FINAL),
+            (C::BRIDGE, Server, RETRY),
+            (C::DISPATCH, Server, FINAL),
+        ]
+    };
+
+    /// `from_wire` builds each code's variant with placeholder fields, which
+    /// is enough: the mapping reads only the variant. All mismatches are
+    /// reported together, so one run lists everything a crate bump changed.
     #[test]
-    fn maps_collection_not_found_to_not_found() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::collection_not_found("users")),
-            StudioError::NotFound(_)
-        ));
+    fn every_error_code_has_a_deliberate_category_and_retry_flag() {
+        let mut mismatches = Vec::new();
+        for &code in ErrorCode::ALL {
+            let rows: Vec<_> = EXPECTED.iter().filter(|(c, ..)| *c == code).collect();
+            let &[&(_, category, retriable)] = rows.as_slice() else {
+                mismatches.push(format!("{code}: {} rows in EXPECTED, want 1", rows.len()));
+                continue;
+            };
+            let wire = NodeDbError::from_wire(code, "msg");
+            if category_of(wire.details()).is_none() {
+                mismatches.push(format!("{code}: no arm in category_of"));
+                continue;
+            }
+            let got = StudioError::from(wire.clone());
+            let want = category(wire);
+            if discriminant(&got) != discriminant(&want) {
+                mismatches.push(format!("{code}: maps to \"{got}\", want \"{want}\""));
+            }
+            if got.is_retriable() != retriable {
+                mismatches.push(format!(
+                    "{code}: is_retriable() is {}, want {retriable}",
+                    !retriable
+                ));
+            }
+        }
+        for (code, ..) in EXPECTED {
+            if !ErrorCode::ALL.contains(code) {
+                mismatches.push(format!(
+                    "{code}: row for a code nodedb-types no longer defines"
+                ));
+            }
+        }
+        assert!(
+            mismatches.is_empty(),
+            "error mapping out of date:\n{}",
+            mismatches.join("\n")
+        );
     }
 
+    /// An override the client already covers is dead code. This fails when
+    /// an upstream fix makes one redundant, so it can be removed.
     #[test]
-    fn maps_document_not_found_to_not_found() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::document_not_found("c", "id")),
-            StudioError::NotFound(_)
-        ));
-    }
-
-    #[test]
-    fn maps_write_conflict_to_conflict_and_retriable() {
-        let s = StudioError::from(NodeDbError::write_conflict("orders", "id1"));
-        assert!(matches!(s, StudioError::Conflict(_)));
-        assert!(s.is_retriable());
-    }
-
-    #[test]
-    fn maps_authorization_denied_to_auth() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::authorization_denied("res")),
-            StudioError::Auth(_)
-        ));
-    }
-
-    #[test]
-    fn maps_auth_expired_to_auth() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::auth_expired("x")),
-            StudioError::Auth(_)
-        ));
-    }
-
-    #[test]
-    fn maps_mirror_read_only_to_read_only() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::mirror_read_only("db")),
-            StudioError::ReadOnly(_)
-        ));
-    }
-
-    #[test]
-    fn maps_bad_request_to_setup() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::bad_request("x")),
-            StudioError::Setup(_)
-        ));
-    }
-
-    #[test]
-    fn maps_config_to_setup() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::config("x")),
-            StudioError::Setup(_)
-        ));
-    }
-
-    #[test]
-    fn maps_node_unreachable_to_connection_and_retriable() {
-        let s = StudioError::from(NodeDbError::node_unreachable("x"));
-        assert!(matches!(s, StudioError::Connection(_)));
-        assert!(s.is_retriable());
-    }
-
-    #[test]
-    fn maps_internal_to_server() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::internal("x")),
-            StudioError::Server(_)
-        ));
-    }
-
-    #[test]
-    fn maps_storage_to_server() {
-        assert!(matches!(
-            StudioError::from(NodeDbError::storage("x")),
-            StudioError::Server(_)
-        ));
+    fn studio_retries_only_what_the_client_does_not() {
+        for &code in ErrorCode::ALL {
+            let e = NodeDbError::from_wire(code, "msg");
+            assert!(
+                !(studio_retries(e.details()) && e.is_retriable()),
+                "{code}: the client now retries it; remove it from studio_retries"
+            );
+        }
     }
 
     #[test]
@@ -316,7 +503,47 @@ mod tests {
     }
 
     #[test]
-    fn not_connected_is_not_retriable() {
-        assert!(!StudioError::NotConnected.is_retriable());
+    fn studio_originated_errors_are_not_retriable() {
+        for e in [
+            StudioError::NotConnected,
+            StudioError::UnexpectedColumns {
+                expected: "a".into(),
+                got: "b".into(),
+            },
+            StudioError::MalformedRows { reason: "r".into() },
+            StudioError::MissingUsername,
+            StudioError::NameTaken("n".into()),
+            StudioError::UnknownConnection("c".into()),
+            StudioError::UnknownDatabase("d".into()),
+            StudioError::UnknownObject {
+                kind: "feed",
+                id: "f".into(),
+            },
+            StudioError::StaleRevision {
+                object: "o".into(),
+                expected: 1,
+                stored: 2,
+            },
+            StudioError::RecordMissing {
+                collection: "c".into(),
+                id: "i".into(),
+            },
+            StudioError::PermissionDenied {
+                privilege: "update",
+                collection: "c".into(),
+            },
+            StudioError::Rejected { reason: "r".into() },
+            StudioError::QueryNameTaken("q".into()),
+            StudioError::UnknownQuery("q".into()),
+            StudioError::UnknownChange("x".into()),
+            StudioError::EmptyStatement,
+            StudioError::Syntax { reason: "r".into() },
+            StudioError::MissingParameter("p".into()),
+            StudioError::NoTransaction,
+            StudioError::TransactionOpen,
+            StudioError::ReadOnlyTransaction,
+        ] {
+            assert!(!e.is_retriable(), "{e}");
+        }
     }
 }
