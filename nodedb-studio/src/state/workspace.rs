@@ -88,6 +88,11 @@ pub struct Workspace {
     /// Panel sizes in CSS pixels, by panel key.
     #[serde(default)]
     sizes: BTreeMap<String, f64>,
+    /// Where the user dragged a Designer collection card on the canvas, by
+    /// collection name. A layout choice, not a database object: moving a
+    /// card is never a pending change.
+    #[serde(default)]
+    cards: BTreeMap<String, (f64, f64)>,
 }
 
 impl Workspace {
@@ -129,6 +134,20 @@ impl Workspace {
 
     pub fn set_size(&mut self, surface: Surface, id: &str, px: f64) {
         self.sizes.insert(panel_key(surface, id), px);
+    }
+
+    /// The dragged position of a Designer card, if the user moved it.
+    pub fn card_position(&self, collection: &str) -> Option<(f64, f64)> {
+        self.cards.get(collection).copied()
+    }
+
+    pub fn set_card_position(&mut self, collection: &str, x: f64, y: f64) {
+        self.cards.insert(collection.to_string(), (x, y));
+    }
+
+    /// Forget every dragged card, so the canvas lays itself out again.
+    pub fn clear_card_positions(&mut self) {
+        self.cards.clear();
     }
 
     /// Shows every panel of the page at its default size, and the sidebar.
@@ -198,6 +217,17 @@ mod tests {
         ws.set_visible(Surface::DataTransfer, "jobs", false);
         ws.restore_default(Surface::Explorer);
         assert!(!ws.is_visible(Surface::DataTransfer, "jobs"));
+    }
+
+    #[test]
+    fn card_positions_persist_apart_from_panel_state() {
+        let mut ws = Workspace::default();
+        ws.set_card_position("users", 80.0, 120.0);
+        assert_eq!(ws.card_position("users"), Some((80.0, 120.0)));
+        ws.restore_default(Surface::Designer);
+        assert_eq!(ws.card_position("users"), Some((80.0, 120.0)));
+        ws.clear_card_positions();
+        assert_eq!(ws.card_position("users"), None);
     }
 
     #[test]

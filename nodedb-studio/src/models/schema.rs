@@ -23,6 +23,7 @@ pub enum FieldType {
     Bool,
     Timestamp,
     Datetime,
+    Uuid,
     Object,
     Array,
     /// Any JSON value: a key-value entry's value.
@@ -48,6 +49,7 @@ impl FieldType {
             FieldType::Bool => "bool".to_string(),
             FieldType::Timestamp => "timestamp".to_string(),
             FieldType::Datetime => "datetime".to_string(),
+            FieldType::Uuid => "uuid".to_string(),
             FieldType::Object => "object".to_string(),
             FieldType::Array => "array".to_string(),
             FieldType::Json => "json".to_string(),
@@ -65,12 +67,54 @@ impl FieldType {
             | FieldType::Bool
             | FieldType::Timestamp
             | FieldType::Datetime
+            | FieldType::Uuid
             | FieldType::Object
             | FieldType::Array
             | FieldType::Json
             | FieldType::Vector { .. }
             | FieldType::Geometry { .. }
             | FieldType::Bytes => false,
+        }
+    }
+
+    /// The SQL type name a canvas row shows: parameters appear only when
+    /// they change what the column holds, as for a vector's dimension.
+    pub fn keyword(self) -> String {
+        match self {
+            FieldType::String { .. } => "TEXT".to_string(),
+            FieldType::Int64 => "INT".to_string(),
+            FieldType::Float64 => "FLOAT".to_string(),
+            FieldType::Decimal { .. } => "DECIMAL".to_string(),
+            FieldType::Bool => "BOOL".to_string(),
+            FieldType::Timestamp | FieldType::Datetime => "TIMESTAMP".to_string(),
+            FieldType::Uuid => "UUID".to_string(),
+            FieldType::Object => "OBJECT".to_string(),
+            FieldType::Array => "ARRAY".to_string(),
+            FieldType::Json => "JSON".to_string(),
+            FieldType::Vector { dimensions } => format!("VECTOR({dimensions})"),
+            FieldType::Geometry { .. } => "GEOMETRY".to_string(),
+            FieldType::Bytes => "BYTES".to_string(),
+        }
+    }
+
+    /// The type as a `CREATE COLLECTION` column declares it.
+    pub fn ddl(self) -> String {
+        match self {
+            FieldType::String { max: Some(n) } => format!("VARCHAR({n})"),
+            FieldType::Decimal { precision, scale } => format!("DECIMAL({precision},{scale})"),
+            FieldType::String { max: None }
+            | FieldType::Int64
+            | FieldType::Float64
+            | FieldType::Bool
+            | FieldType::Timestamp
+            | FieldType::Datetime
+            | FieldType::Uuid
+            | FieldType::Object
+            | FieldType::Array
+            | FieldType::Json
+            | FieldType::Vector { .. }
+            | FieldType::Geometry { .. }
+            | FieldType::Bytes => self.keyword(),
         }
     }
 }
@@ -239,6 +283,7 @@ impl CollectionSchema {
             | FieldType::Bool
             | FieldType::Timestamp
             | FieldType::Datetime
+            | FieldType::Uuid
             | FieldType::Object
             | FieldType::Array
             | FieldType::Json

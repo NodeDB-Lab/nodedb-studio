@@ -100,6 +100,8 @@ fn type_error(ty: &FieldType, v: &Value) -> Option<String> {
             .filter(|m| s.chars().count() > *m as usize)
             .map(|m| format!("must be at most {m} characters")),
         (FieldType::String { .. }, _) => bad("a string"),
+        (FieldType::Uuid, Value::String(_) | Value::Uuid(_)) => None,
+        (FieldType::Uuid, _) => bad("a UUID"),
         (FieldType::Int64, Value::Integer(_)) => None,
         (FieldType::Int64, _) => bad("an integer"),
         (FieldType::Float64, Value::Float(_) | Value::Integer(_)) => None,
@@ -223,7 +225,7 @@ pub fn set_field(
                 sonic_rs::from_str::<Value>(input)
                     .unwrap_or_else(|_| Value::String(input.to_string()))
             }
-            Some(FieldType::String { .. } | FieldType::Decimal { .. }) | None => {
+            Some(FieldType::String { .. } | FieldType::Decimal { .. } | FieldType::Uuid) | None => {
                 Value::String(input.to_string())
             }
             Some(FieldType::Vector { .. } | FieldType::Geometry { .. } | FieldType::Bytes) => {

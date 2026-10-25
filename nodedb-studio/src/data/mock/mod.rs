@@ -10,6 +10,7 @@ mod admin;
 mod cdc;
 mod cluster;
 mod connections;
+mod designer;
 mod docs;
 mod explorer;
 mod streams;
@@ -26,6 +27,10 @@ pub use connections::{
     connection_activity, connections, nav_badges, notifications, recent_items, saved_from_draft,
     session_info,
 };
+pub use designer::{DesignerStore, explorer_schema};
+// Only the tests name this.
+#[cfg(test)]
+pub use designer::design_schema;
 pub use explorer::{
     GRAPH, Overlay, array_schema, array_slice, collection_access, collection_schema, collections,
     edge_page, observed_at, record_page, stored_record, transfer_preview,

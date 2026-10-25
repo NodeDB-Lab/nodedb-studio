@@ -82,6 +82,9 @@ pub enum StudioError {
     /// A write named a saved query the library does not hold.
     #[error("no saved query `{0}`")]
     UnknownQuery(String),
+    /// A Designer write named a staged change that is not staged.
+    #[error("no staged change `{0}`")]
+    UnknownChange(String),
     /// A run, explain, or console command had no statement text.
     #[error("the statement is empty")]
     EmptyStatement,
@@ -120,6 +123,7 @@ impl StudioError {
             | StudioError::Rejected { .. }
             | StudioError::QueryNameTaken(_)
             | StudioError::UnknownQuery(_)
+            | StudioError::UnknownChange(_)
             | StudioError::EmptyStatement
             | StudioError::Syntax { .. }
             | StudioError::MissingParameter(_)

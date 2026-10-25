@@ -80,6 +80,19 @@ impl Profile {
         }
     }
 
+    /// The one-letter square before a collection name on the Designer canvas.
+    pub fn letter(self) -> &'static str {
+        match self {
+            Profile::Document => "D",
+            Profile::DocumentStrict => "S",
+            Profile::KeyValue => "K",
+            Profile::Columnar => "C",
+            Profile::Timeseries => "T",
+            Profile::Spatial => "P",
+            Profile::Array => "A",
+        }
+    }
+
     /// What the records are called in a count badge: `1,284 docs`.
     pub fn short_noun(self) -> &'static str {
         match self {

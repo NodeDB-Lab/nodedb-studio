@@ -6,6 +6,8 @@
 
 use crate::models::array_data::{ArraySchema, SliceResult};
 use crate::models::cluster::ClusterMembers;
+use crate::models::designer::DesignSchema;
+use crate::models::designer_change::ChangeReview;
 use crate::models::graph_records::EdgePage;
 use crate::models::query_plan::QueryPlan;
 use crate::models::records::{CollectionAccess, Record, RecordPage};
@@ -130,6 +132,20 @@ impl IsEmpty for ResultSet {
 /// A run with no rows still ran: the Results panel states that, with the
 /// columns, rather than the generic empty message.
 impl IsEmpty for QueryRun {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+/// A schema with no collections has nothing to draw. Its references and
+/// off-canvas names alone carry nothing to show.
+impl IsEmpty for DesignSchema {
+    fn is_empty(&self) -> bool {
+        self.collections.is_empty()
+    }
+}
+
+impl IsEmpty for ChangeReview {
     fn is_empty(&self) -> bool {
         false
     }

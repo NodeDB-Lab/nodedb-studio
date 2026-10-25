@@ -11,6 +11,7 @@ use crate::models::records::Filter;
 use crate::models::workbench::TxAccess;
 use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab};
 use crate::routes::{Destination, Route};
+use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::workbench_scenes;
 use crate::state::connection_form::{ConnectionForm, TestState};
 use crate::state::console::ConsoleState;
@@ -132,6 +133,8 @@ pub struct Scene {
     pub console: Option<Box<ConsoleState>>,
     /// A transaction to open before the scene. `None` leaves the session idle.
     pub transaction: Option<TxAccess>,
+    /// The Designer's staged changes and open drawers. `None` keeps them.
+    pub designer: Option<Box<DesignerSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -145,6 +148,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         query: None,
         console: None,
         transaction: None,
+        designer: None,
     }
 }
 
@@ -293,8 +297,8 @@ pub fn scenes() -> Vec<Scene> {
             },
             O::None,
         ),
-        scene("designer", at(Route::Designer {}), O::None),
     ]);
+    all.extend(designer());
     all.extend(workbench());
     all.extend([
         scene("graph-explorer", at(Destination::Graph.route()), O::None),
@@ -406,6 +410,19 @@ fn workbench() -> Vec<Scene> {
             console: Some(Box::new(workbench_scenes::console())),
             ..scene("console-session", at(Route::Console {}), Overlay::None)
         },
+    ]
+}
+
+/// Designer: the workbench, the Create collection drawer, and the review.
+fn designer() -> Vec<Scene> {
+    let at_designer = |name, seed: DesignerSeed| Scene {
+        designer: Some(Box::new(seed)),
+        ..scene(name, at(Route::Designer {}), Overlay::None)
+    };
+    vec![
+        at_designer("designer", designer_scenes::workbench()),
+        at_designer("designer-create", designer_scenes::create()),
+        at_designer("designer-review", designer_scenes::review()),
     ]
 }
 
@@ -571,6 +588,14 @@ mod tests {
                     assert!(ids.contains(h), "scene `{}` hides unknown `{h}`", s.name);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn every_designer_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in ["designer", "designer-create", "designer-review"] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
         }
     }
 

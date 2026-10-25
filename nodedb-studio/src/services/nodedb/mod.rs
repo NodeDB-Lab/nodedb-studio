@@ -3,6 +3,7 @@
 pub mod admin;
 pub mod cluster;
 pub mod connection;
+pub mod designer;
 pub mod explorer;
 pub mod service;
 pub mod streams;

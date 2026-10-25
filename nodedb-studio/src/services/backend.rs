@@ -8,6 +8,7 @@
 use crate::services::admin_data::AdminData;
 use crate::services::cluster_data::ClusterData;
 use crate::services::connection_service::ConnectionService;
+use crate::services::designer_data::DesignerData;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::streams_data::StreamsData;
 use crate::services::transfer_data::TransferData;
@@ -23,6 +24,7 @@ pub trait Backend:
     + WorkbenchData
     + ViewersData
     + TransferData
+    + DesignerData
 {
 }
 
@@ -35,5 +37,6 @@ impl<T> Backend for T where
         + WorkbenchData
         + ViewersData
         + TransferData
+        + DesignerData
 {
 }

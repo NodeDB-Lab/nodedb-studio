@@ -56,6 +56,12 @@ const CLUSTER_NODES: &[PanelSpec] = &[
     panel("details", "Node details", "Show the selected node"),
 ];
 
+const DESIGNER: &[PanelSpec] = &[panel(
+    "properties",
+    "Properties",
+    "Show the selected object's definition",
+)];
+
 impl Surface {
     pub fn panels(self) -> &'static [PanelSpec] {
         match self {
@@ -64,9 +70,9 @@ impl Surface {
             Surface::DataTransfer => DATA_TRANSFER,
             Surface::Query => QUERY,
             Surface::Console => CONSOLE,
+            Surface::Designer => DESIGNER,
             Surface::Cluster(ClusterTab::Nodes) => CLUSTER_NODES,
-            Surface::Designer
-            | Surface::Events(
+            Surface::Events(
                 EventsTab::ChangeFeeds
                 | EventsTab::MaterializedViews
                 | EventsTab::Topics

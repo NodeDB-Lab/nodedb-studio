@@ -78,6 +78,7 @@ impl From<&StudioError> for EditorError {
             | StudioError::UnknownDatabase(_)
             | StudioError::QueryNameTaken(_)
             | StudioError::UnknownQuery(_)
+            | StudioError::UnknownChange(_)
             | StudioError::EmptyStatement
             | StudioError::Syntax { .. }
             | StudioError::MissingParameter(_)
@@ -128,7 +129,9 @@ fn split_vectors(value: &Value, schema: &CollectionSchema) -> (Value, Vec<(Strin
 /// The empty value of a type, for an Insert template.
 fn blank(ty: FieldType) -> Value {
     match ty {
-        FieldType::String { .. } | FieldType::Decimal { .. } => Value::String(String::new()),
+        FieldType::String { .. } | FieldType::Decimal { .. } | FieldType::Uuid => {
+            Value::String(String::new())
+        }
         FieldType::Int64 => Value::Integer(0),
         FieldType::Float64 => Value::Float(0.0),
         FieldType::Bool => Value::Bool(false),

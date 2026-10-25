@@ -14,7 +14,6 @@ use crate::routes::tabs::{
 use crate::views::admin::audit::AuditView;
 use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
-use crate::views::designer::Designer;
 use crate::views::fts_inspector::FtsInspector;
 use crate::views::graph_explorer::GraphExplorer;
 use crate::views::spatial_view::SpatialView;
@@ -38,11 +37,6 @@ fn Unbuilt(title: &'static str) -> Element {
             }
         }
     }
-}
-
-#[component]
-pub fn DesignerPage() -> Element {
-    rsx! { div { class: "legacy-page", Designer {} } }
 }
 
 #[component]

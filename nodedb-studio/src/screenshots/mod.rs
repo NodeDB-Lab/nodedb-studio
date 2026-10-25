@@ -4,6 +4,7 @@
 
 pub mod capture;
 pub mod config;
+pub mod designer_scenes;
 pub mod driver;
 pub mod scenes;
 pub mod sync;

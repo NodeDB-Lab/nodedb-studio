@@ -10,7 +10,7 @@ use crate::models::array_data::{ArraySchema, SliceRequest, SliceResult};
 use crate::models::collection::{Collection, Profile};
 use crate::models::graph_records::{EdgePage, EdgeQuery};
 use crate::models::record_check::violations;
-use crate::models::records::{CollectionAccess, Record, RecordPage, RecordQuery};
+use crate::models::records::{CollectionAccess, Denial, Grant, Record, RecordPage, RecordQuery};
 use crate::models::schema::CollectionSchema;
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
@@ -31,7 +31,7 @@ fn missing(collection: &str, id: &str) -> StudioError {
 impl MockConnectionService {
     /// The user name and read-only flag of the session the last `connect`
     /// opened. Before any connect, an administrator.
-    fn identity(&self) -> (String, bool) {
+    pub(super) fn identity(&self) -> (String, bool) {
         let name = self.session.borrow().clone();
         let saved = self.saved.borrow();
         name.and_then(|n| saved.iter().find(|c| c.name == n))
@@ -40,14 +40,38 @@ impl MockConnectionService {
             .unwrap_or_else(|| ("admin".to_string(), false))
     }
 
+    /// The collections the Designer created and applied this session.
+    fn created(&self) -> Vec<Collection> {
+        self.designer.borrow().created()
+    }
+
     fn access(&self, collection: &str) -> Result<CollectionAccess, StudioError> {
         let (user, read_only) = self.identity();
-        mock::collection_access(collection, &user, read_only).ok_or_else(|| not_found(collection))
+        if let Some(access) = mock::collection_access(collection, &user, read_only) {
+            return Ok(access);
+        }
+        // A collection the Designer created has no fixture. It takes every
+        // write its profile allows.
+        let made = self.created().into_iter().find(|c| c.name == collection);
+        let write = if read_only {
+            Grant::Denied(Denial::Privilege)
+        } else {
+            Grant::Allowed
+        };
+        made.map(|_| CollectionAccess {
+            role: user,
+            create: write.clone(),
+            read: Grant::Allowed,
+            update: write.clone(),
+            delete: write,
+        })
+        .ok_or_else(|| not_found(collection))
     }
 
     fn profile(&self, collection: &str) -> Result<Profile, StudioError> {
         mock::collections()
             .into_iter()
+            .chain(self.created())
             .find(|c| c.name == collection)
             .map(|c| c.profile)
             .ok_or_else(|| not_found(collection))
@@ -79,13 +103,29 @@ fn derive_kv(mut record: Record) -> Record {
 #[async_trait(?Send)]
 impl ExplorerData for MockConnectionService {
     async fn catalog(&self) -> Result<Vec<Collection>, StudioError> {
-        apply(self.behavior, mock::collections).await
+        let made = self.created();
+        apply(self.behavior, move || {
+            let mut all = mock::collections();
+            all.extend(made);
+            all
+        })
+        .await
     }
 
     async fn collection_schema(&self, collection: &str) -> Result<CollectionSchema, StudioError> {
         let c = collection.to_string();
+        let made = self.designer.borrow().schema();
+        let created = self.created();
         apply_one(self.behavior, move || {
-            mock::collection_schema(&c).ok_or_else(|| not_found(&c))
+            mock::collection_schema(&c)
+                .or_else(|| {
+                    created
+                        .iter()
+                        .any(|m| m.name == c)
+                        .then(|| made.collection(&c).map(mock::explorer_schema))
+                        .flatten()
+                })
+                .ok_or_else(|| not_found(&c))
         })
         .await?
     }
@@ -102,11 +142,26 @@ impl ExplorerData for MockConnectionService {
     ) -> Result<RecordPage, StudioError> {
         let overlay = self.records.borrow().clone();
         let (c, q) = (collection.to_string(), query.clone());
-        let page = move || mock::record_page(&c, &q, &overlay).ok_or_else(|| not_found(&c));
+        let made: Vec<String> = self.created().into_iter().map(|m| m.name).collect();
+        let page = {
+            let (c, made) = (c.clone(), made.clone());
+            move || {
+                let empty = || RecordPage {
+                    rows: Vec::new(),
+                    total: 0,
+                    observed_at: mock::observed_at(),
+                };
+                match mock::record_page(&c, &q, &overlay) {
+                    Some(page) => Ok(page),
+                    None if made.contains(&c) => Ok(empty()),
+                    None => Err(not_found(&c)),
+                }
+            }
+        };
         let empty = {
             let c = collection.to_string();
             move || {
-                if mock::collection_schema(&c).is_some() {
+                if mock::collection_schema(&c).is_some() || made.contains(&c) {
                     Ok(RecordPage {
                         rows: Vec::new(),
                         total: 0,

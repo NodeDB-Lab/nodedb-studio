@@ -342,21 +342,6 @@
   .ph-section { margin-top: 22px; }
   .ph-section h2 { font-size: 13px; font-weight: 600; margin: 0 0 10px; }
 
-  /* Designer canvas */
-  .designer-canvas {
-    height: 100%;
-    background:
-      radial-gradient(circle, var(--border-soft) 1px, transparent 1px) 0 0 / 24px 24px,
-      var(--bg-primary);
-    position: relative;
-  }
-  .designer-canvas svg { width: 100%; height: 100%; }
-  .designer-table {
-    fill: var(--bg-secondary);
-    stroke: var(--border-strong);
-    stroke-width: 0.5;
-  }
-
   /* Sub-nav tabs (for Admin etc.) */
   .subnav {
     display: flex; gap: 2px;

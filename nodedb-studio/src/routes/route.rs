@@ -15,11 +15,11 @@ use crate::routes::tabs::{
 use crate::state::workspace::Surface;
 use crate::views::cluster::ClusterPage;
 use crate::views::console::ConsolePage;
+use crate::views::designer::DesignerPage;
 use crate::views::explorer::{DataTransferPage, ExplorerPage};
 use crate::views::query::QueryPage;
 use crate::views::transitional::{
-    AdminPage, DesignerPage, EventsPage, GraphPage, SearchPage, SpatialPage, SyncPage,
-    TimeseriesPage, VectorPage,
+    AdminPage, EventsPage, GraphPage, SearchPage, SpatialPage, SyncPage, TimeseriesPage, VectorPage,
 };
 
 #[derive(Routable, Clone, PartialEq, Debug)]

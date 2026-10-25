@@ -11,6 +11,7 @@ use dioxus::prelude::*;
 
 use crate::screenshots::capture::{CaptureError, capture};
 use crate::screenshots::config::RunConfig;
+use crate::screenshots::designer_scenes::DesignerSeed;
 use crate::screenshots::scenes::{Overlay, STUDIO_CONNECTION, Scene, Screen, scenes};
 use crate::screenshots::sync::SceneTarget;
 use crate::services::backend::Backend;
@@ -50,6 +51,8 @@ pub enum DriverError {
     },
     #[error("connection `{0}` is not in the saved list after {REGISTRY_WAIT:?}")]
     UnknownConnection(&'static str),
+    #[error("a scene could not stage its Designer changes: {0}")]
+    Seed(Box<StudioError>),
     #[error("cannot create {}: {source}", path.display())]
     CreateDir {
         path: PathBuf,
@@ -216,6 +219,11 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
             if let Some(access) = scene.transaction {
                 let _ = h.service.begin_transaction(access).await;
             }
+            // The Designer's staged changes live behind the seam: set them
+            // before the page reads.
+            if let Some(seed) = &scene.designer {
+                stage_designer(h, seed).await?;
+            }
             let mut epoch = h.tx_epoch.0;
             let next = *epoch.peek() + 1;
             epoch.set(next);
@@ -224,6 +232,7 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
                 explorer: explorer.as_ref().map(|seed| seed.target()),
                 query: scene.query.as_deref().cloned(),
                 console: scene.console.as_deref().cloned(),
+                designer: scene.designer.as_deref().map(|d| d.state.clone()),
             }));
         }
     }
@@ -244,6 +253,19 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
             palette_query.set((*text).to_string());
             palette.set(true);
         }
+    }
+    Ok(())
+}
+
+/// Replace the staged Designer changes with the seed's.
+async fn stage_designer(h: &Handles, seed: &DesignerSeed) -> Result<(), DriverError> {
+    let fail = |e| DriverError::Seed(Box::new(e));
+    h.service.discard_all_changes().await.map_err(fail)?;
+    for kind in &seed.pending {
+        h.service
+            .stage_change(None, kind.clone())
+            .await
+            .map_err(fail)?;
     }
     Ok(())
 }

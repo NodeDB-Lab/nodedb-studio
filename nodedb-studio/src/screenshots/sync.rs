@@ -9,6 +9,7 @@ use dioxus::prelude::*;
 
 use crate::routes::Route;
 use crate::state::console::ConsoleState;
+use crate::state::designer::DesignerState;
 use crate::state::explorer::{RecordView, Selected};
 use crate::state::query::QueryWorkspace;
 
@@ -22,6 +23,8 @@ pub struct SceneTarget {
     pub query: Option<QueryWorkspace>,
     /// The Console session. `None` keeps the current one.
     pub console: Option<ConsoleState>,
+    /// The Designer's selection and drawers. `None` keeps the current ones.
+    pub designer: Option<DesignerState>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -40,6 +43,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let mut view = use_context::<Signal<RecordView>>();
     let mut query = use_context::<Signal<QueryWorkspace>>();
     let mut console = use_context::<Signal<ConsoleState>>();
+    let mut designer = use_context::<Signal<DesignerState>>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -53,6 +57,12 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         }
         if let Some(c) = t.console {
             console.set(c);
+        }
+        if let Some(d) = t.designer {
+            // The scene staged its changes before this runs. A new epoch
+            // makes the page read them.
+            let epoch = designer.peek().epoch + 1;
+            designer.set(DesignerState { epoch, ..d });
         }
         nav.replace(t.route);
     });

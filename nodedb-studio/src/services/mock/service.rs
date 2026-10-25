@@ -41,6 +41,9 @@ pub struct MockConnectionService {
     /// The transaction, saved queries, and console history. Writes change
     /// them and every later read sees the change.
     pub(super) workbench: Rc<RefCell<mock::WorkbenchStore>>,
+    /// Staged schema changes and the schema changes applied. An applied
+    /// collection joins the catalog the Explorer reads.
+    pub(super) designer: Rc<RefCell<mock::DesignerStore>>,
 }
 
 impl Default for MockConnectionService {
@@ -63,6 +66,7 @@ impl MockConnectionService {
             records: Rc::default(),
             jobs: Rc::new(RefCell::new(mock::transfer_jobs())),
             workbench: Rc::new(RefCell::new(mock::WorkbenchStore::seeded())),
+            designer: Rc::new(RefCell::new(mock::DesignerStore::seeded())),
         }
     }
 

@@ -78,6 +78,7 @@ fn FieldControl(
             }
         }
         FieldType::String { .. }
+        | FieldType::Uuid
         | FieldType::Int64
         | FieldType::Float64
         | FieldType::Decimal { .. }
