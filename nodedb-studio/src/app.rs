@@ -34,6 +34,7 @@ use crate::state::record_editor::{DeleteRequest, RecordEditor};
 use crate::state::ui::{
     ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover, PrefsPane,
 };
+use crate::state::vector::VectorUi;
 use crate::state::workspace::Workspace;
 use crate::views::connections::ConnectionManager;
 use crate::views::studio_shell::Studio;
@@ -53,6 +54,7 @@ const WORKBENCH: Asset = asset!("/assets/workbench.css");
 const DESIGNER: Asset = asset!("/assets/designer.css");
 const EVENTS: Asset = asset!("/assets/events.css");
 const GRAPH: Asset = asset!("/assets/graph.css");
+const VECTOR: Asset = asset!("/assets/vector.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -146,6 +148,8 @@ pub fn App() -> Element {
     EventsUi::provide();
     // Graph Explorer keeps each mode's query, form, selection, and canvas.
     GraphUi::provide();
+    // Vector Space keeps each tab's drafts, results, and the selected record.
+    VectorUi::provide();
     use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
     // highlights.
@@ -287,6 +291,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: DESIGNER }
         document::Stylesheet { href: EVENTS }
         document::Stylesheet { href: GRAPH }
+        document::Stylesheet { href: VECTOR }
         {scene_driver}
         div {
             class: "studio-root",

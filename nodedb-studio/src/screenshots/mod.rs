@@ -9,6 +9,7 @@ pub mod driver;
 pub mod events_scenes;
 pub mod scenes;
 pub mod sync;
+pub mod vector_scenes;
 pub mod workbench_scenes;
 
 pub use config::RunConfig;

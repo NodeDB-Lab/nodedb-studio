@@ -19,4 +19,5 @@ pub mod preferences;
 pub mod query;
 pub mod record_editor;
 pub mod ui;
+pub mod vector;
 pub mod workspace;

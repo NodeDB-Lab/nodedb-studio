@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 
 use crate::data::mock;
-use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer, VectorPoint};
+use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer};
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;
 use crate::services::mock_behavior::apply;
@@ -11,11 +11,6 @@ use crate::services::viewers_data::ViewersData;
 
 #[async_trait(?Send)]
 impl ViewersData for MockConnectionService {
-    async fn vector_points(&self, collection: &str) -> Result<Vec<VectorPoint>, StudioError> {
-        let c = collection.to_string();
-        apply(self.behavior, move || mock::vector_points(&c)).await
-    }
-
     async fn series(&self, metric: &str) -> Result<Vec<SeriesPoint>, StudioError> {
         let m = metric.to_string();
         apply(self.behavior, move || mock::series(&m)).await

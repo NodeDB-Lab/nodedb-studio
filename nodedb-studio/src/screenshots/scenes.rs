@@ -9,10 +9,11 @@ use crate::models::collection::Profile;
 use crate::models::connections::ConnectionTest;
 use crate::models::records::Filter;
 use crate::models::workbench::TxAccess;
-use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab, GraphTab};
+use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab, GraphTab, VectorTab};
 use crate::routes::{Destination, Route};
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
+use crate::screenshots::vector_scenes;
 use crate::screenshots::workbench_scenes;
 use crate::state::connection_form::{ConnectionForm, TestState};
 use crate::state::console::ConsoleState;
@@ -23,6 +24,7 @@ use crate::state::explorer::{
 use crate::state::query::QueryWorkspace;
 use crate::state::record_editor::RecordEditor;
 use crate::state::ui::{ModalKind, Popover, PrefsPane};
+use crate::state::vector::VectorSeed;
 
 /// The saved connection every studio scene opens. It holds every capability,
 /// so every destination renders.
@@ -139,6 +141,8 @@ pub struct Scene {
     pub designer: Option<Box<DesignerSeed>>,
     /// The Events & Jobs tabs' state. `None` keeps the current state.
     pub events: Option<Box<EventsSeed>>,
+    /// The Vector Space drafts and selection. `None` keeps the current ones.
+    pub vector: Option<Box<VectorSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -154,6 +158,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         transaction: None,
         designer: None,
         events: None,
+        vector: None,
     }
 }
 
@@ -327,11 +332,11 @@ pub fn scenes() -> Vec<Scene> {
             }),
             O::None,
         ),
-        scene("vector-space", at(Destination::Vector.route()), O::None),
         scene("timeseries", at(Destination::Timeseries.route()), O::None),
         scene("spatial", at(Destination::Spatial.route()), O::None),
         scene("search", at(Destination::Search.route()), O::None),
     ]);
+    all.extend(vector());
     all.extend(events());
     for tab in ClusterTab::ALL {
         all.push(scene(
@@ -442,6 +447,23 @@ fn designer() -> Vec<Scene> {
         at_designer("designer", designer_scenes::workbench()),
         at_designer("designer-create", designer_scenes::create()),
         at_designer("designer-review", designer_scenes::review()),
+    ]
+}
+
+/// Vector Space: Search, Projection, and Index.
+fn vector() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: VectorSeed| Scene {
+        vector: Some(Box::new(seed)),
+        ..scene(name, at(Route::Vector { tab }), Overlay::None)
+    };
+    vec![
+        at_tab("vector-search", VectorTab::Search, vector_scenes::search()),
+        at_tab(
+            "vector-projection",
+            VectorTab::Projection,
+            vector_scenes::projection(),
+        ),
+        at_tab("vector-index", VectorTab::Index, vector_scenes::index()),
     ]
 }
 
@@ -634,6 +656,16 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The three Vector Space views the design names, each once.
+    #[test]
+    fn every_vector_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in ["vector-search", "vector-projection", "vector-index"] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
+        }
+        assert!(!names.contains(&"vector-space"));
     }
 
     #[test]

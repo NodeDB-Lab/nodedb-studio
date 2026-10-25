@@ -20,6 +20,7 @@ pub mod mock_behavior;
 pub mod nodedb;
 pub mod topic_data;
 pub mod transfer_data;
+pub mod vector_data;
 pub mod viewers_data;
 pub mod workbench_data;
 

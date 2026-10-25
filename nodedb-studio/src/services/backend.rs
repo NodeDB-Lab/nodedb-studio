@@ -17,6 +17,7 @@ use crate::services::listen_data::ListenData;
 use crate::services::matview_data::MatViewData;
 use crate::services::topic_data::TopicData;
 use crate::services::transfer_data::TransferData;
+use crate::services::vector_data::VectorData;
 use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
 
@@ -32,6 +33,7 @@ pub trait Backend:
     + ClusterData
     + WorkbenchData
     + ViewersData
+    + VectorData
     + GraphData
     + TransferData
     + DesignerData
@@ -50,7 +52,7 @@ impl<T> Backend for T where
         + ClusterData
         + WorkbenchData
         + ViewersData
-        + GraphData
+        + VectorData
         + GraphData
         + TransferData
         + DesignerData

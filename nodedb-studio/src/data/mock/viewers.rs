@@ -1,25 +1,10 @@
-//! Specialized-viewer fixtures: vector, timeseries, spatial, FTS, sync.
+//! Specialized-viewer fixtures: timeseries, spatial, FTS, sync.
 //!
 //! The client decodes `SearchResult.metadata` as empty, which is why `models::viewers` defines its own display-carrying
 //! types instead of reusing client types here. These fixtures are deterministic
 //! stand-ins for what the real implementation will decode from raw SQL rows.
 
-use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer, VectorPoint};
-
-/// A 2D projection of embeddings for `collection`, grouped into a couple of
-/// clusters. Ids are keyed off `collection` so a caller that passes the
-/// wrong collection produces visibly different data.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn vector_points(collection: &str) -> Vec<VectorPoint> {
-    (0..6)
-        .map(|i| VectorPoint {
-            id: format!("{collection}-vec-{i}"),
-            x: i as f32 * 0.3,
-            y: (i % 3) as f32 * 0.7,
-            cluster: if i % 2 == 0 { "a" } else { "b" }.into(),
-        })
-        .collect()
-}
+use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer};
 
 /// Samples for one timeseries metric.
 #[allow(dead_code)] // SEAM-UNWIRED

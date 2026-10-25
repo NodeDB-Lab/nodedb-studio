@@ -13,6 +13,7 @@ pub mod matviews;
 pub mod service;
 pub mod topics;
 pub mod transfer;
+pub mod vector;
 pub mod viewers;
 pub mod workbench;
 

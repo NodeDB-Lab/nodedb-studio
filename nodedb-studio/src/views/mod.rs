@@ -22,4 +22,4 @@ pub mod spatial_view;
 pub mod sync;
 pub mod timeseries_dashboard;
 pub mod transitional;
-pub mod vector_space;
+pub mod vector;

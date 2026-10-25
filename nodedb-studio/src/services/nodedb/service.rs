@@ -29,6 +29,7 @@ mod tests {
     use crate::services::listen_data::ListenData;
     use crate::services::matview_data::MatViewData;
     use crate::services::topic_data::TopicData;
+    use crate::services::vector_data::VectorData;
     use crate::services::viewers_data::ViewersData;
     use crate::services::workbench_data::WorkbenchData;
     use crate::state::connections_registry::Credentials;
@@ -174,7 +175,11 @@ mod tests {
     async fn stub_viewer_reads_are_not_connected() {
         let svc = NodeDbConnectionService;
         assert!(matches!(
-            svc.vector_points("embeddings").await,
+            svc.vector_setup().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.vector_index_status("articles", "embedding").await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(

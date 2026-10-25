@@ -72,6 +72,8 @@ pub enum Icon {
     Minus,
     Moon,
     Monitor,
+    MousePointer2,
+    Move,
     Network,
     Pause,
     Pencil,
@@ -348,6 +350,17 @@ fn shapes(icon: Icon) -> &'static [Shape] {
         Icon::Minus => &[P("M5 12h14")],
         Icon::Monitor => &[R(2.0, 3.0, 20.0, 14.0, 2.0), P("M8 21h8"), P("M12 17v4")],
         Icon::Moon => &[P("M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z")],
+        Icon::MousePointer2 => &[P(
+            "M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z",
+        )],
+        Icon::Move => &[
+            P("M12 2v20"),
+            P("m15 19-3 3-3-3"),
+            P("m19 9 3 3-3 3"),
+            P("M2 12h20"),
+            P("m5 9-3 3 3 3"),
+            P("m9 5 3-3 3 3"),
+        ],
         Icon::Network => &[
             R(16.0, 16.0, 6.0, 6.0, 1.0),
             R(2.0, 16.0, 6.0, 6.0, 1.0),

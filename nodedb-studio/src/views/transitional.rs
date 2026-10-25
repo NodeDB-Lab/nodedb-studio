@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::tabs::{RouteTabs, tab_items};
 use crate::routes::Route;
-use crate::routes::tabs::{AdminTab, SearchTab, SpatialTab, SyncTab, TimeseriesTab, VectorTab};
+use crate::routes::tabs::{AdminTab, SearchTab, SpatialTab, SyncTab, TimeseriesTab};
 use crate::views::admin::audit::AuditView;
 use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
@@ -16,7 +16,6 @@ use crate::views::fts_inspector::FtsInspector;
 use crate::views::spatial_view::SpatialView;
 use crate::views::sync::Sync;
 use crate::views::timeseries_dashboard::TimeseriesDashboard;
-use crate::views::vector_space::VectorSpace;
 
 /// A page that has not been rebuilt yet.
 #[component]
@@ -28,17 +27,6 @@ fn Unbuilt(title: &'static str) -> Element {
                 p { "This page is being rebuilt for the new workspace." }
             }
         }
-    }
-}
-
-#[component]
-pub fn VectorPage(tab: VectorTab) -> Element {
-    rsx! {
-        RouteTabs {
-            items: tab_items(VectorTab::ALL, |t| t.label(), |tab| Route::Vector { tab }),
-            current: Route::Vector { tab },
-        }
-        div { class: "legacy-page", VectorSpace {} }
     }
 }
 

@@ -13,6 +13,7 @@ use crate::state::designer::DesignerState;
 use crate::state::events::{EventsSeed, EventsUi};
 use crate::state::explorer::{RecordView, Selected};
 use crate::state::query::QueryWorkspace;
+use crate::state::vector::{VectorSeed, VectorUi};
 
 /// Where the current studio scene points.
 #[derive(Clone, PartialEq)]
@@ -28,6 +29,8 @@ pub struct SceneTarget {
     pub designer: Option<DesignerState>,
     /// The Events & Jobs tabs' state. `None` keeps the current state.
     pub events: Option<EventsSeed>,
+    /// The Vector Space drafts and selection. `None` keeps the current ones.
+    pub vector: Option<VectorSeed>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -48,6 +51,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let mut console = use_context::<Signal<ConsoleState>>();
     let mut designer = use_context::<Signal<DesignerState>>();
     let events = use_context::<EventsUi>();
+    let vector = use_context::<VectorUi>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -70,6 +74,9 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         }
         if let Some(seed) = t.events {
             events.apply(seed);
+        }
+        if let Some(seed) = t.vector {
+            vector.apply(seed, crate::screenshots::vector_scenes::TARGET);
         }
         nav.replace(t.route);
     });

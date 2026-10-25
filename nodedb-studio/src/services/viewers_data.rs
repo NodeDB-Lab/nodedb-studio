@@ -1,7 +1,7 @@
-//! Specialized-viewer reads at the backend seam: vector, timeseries, spatial,
-//! FTS, and sync.
+//! Specialized-viewer reads at the backend seam: timeseries, spatial, FTS, and
+//! sync. Vector Space has its own trait, `vector_data`.
 //!
-//! `vector_points`, `spatial_features` and `fts_hits` take a `collection`: the
+//! `spatial_features` and `fts_hits` take a `collection`: the
 //! Explorer already scopes its selection to one collection per storage mode,
 //! so each viewer's read is parameterised the same way `records(collection)`
 //! is. `sync_peers` is deliberately left unparameterised: it is
@@ -9,16 +9,11 @@
 
 use async_trait::async_trait;
 
-use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer, VectorPoint};
+use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
 pub trait ViewersData {
-    /// A 2D projection of vector embeddings in `collection` for the vector
-    /// viewer.
-    #[allow(dead_code)] // SEAM-UNWIRED
-    async fn vector_points(&self, collection: &str) -> Result<Vec<VectorPoint>, StudioError>;
-
     /// Samples for one timeseries metric.
     #[allow(dead_code)] // SEAM-UNWIRED
     async fn series(&self, metric: &str) -> Result<Vec<SeriesPoint>, StudioError>;
@@ -45,13 +40,6 @@ mod tests {
     #[tokio::test]
     async fn every_viewer_read_is_keyed_and_non_empty() {
         let svc = MockConnectionService::ready();
-
-        let vector = svc.vector_points("embeddings").await.expect("vec");
-        assert!(!vector.is_empty());
-        assert!(
-            vector.iter().all(|p| !p.id.is_empty()),
-            "every vector point needs a stable key"
-        );
 
         let series = svc.series("qps").await.expect("series");
         assert!(!series.is_empty());
@@ -86,45 +74,6 @@ mod tests {
     // `apply(self.behavior, mock::x)` and a mis-wired `Ok(mock::x())` both
     // satisfy a single shared assertion, so every method needs its own proof
     // that it actually reads `self.behavior` (see admin_data.rs).
-
-    #[tokio::test]
-    async fn vector_points_ready_has_two_clusters() {
-        // Expectation authored independently of the fixture body: the fixture
-        // alternates clusters "a"/"b", so both must be present.
-        let svc = MockConnectionService::ready();
-        let pts = svc
-            .vector_points("embeddings")
-            .await
-            .expect("ready yields points");
-        assert!(pts.iter().any(|p| p.cluster == "a"));
-        assert!(pts.iter().any(|p| p.cluster == "b"));
-    }
-
-    #[tokio::test]
-    async fn vector_points_ids_vary_by_collection() {
-        let svc = MockConnectionService::ready();
-        let a = svc.vector_points("embeddings").await.expect("vec");
-        let b = svc.vector_points("orders").await.expect("vec");
-        assert_ne!(
-            a.first().map(|p| p.id.as_str()),
-            b.first().map(|p| p.id.as_str()),
-            "vector point ids must key off the requested collection"
-        );
-    }
-
-    #[tokio::test]
-    async fn vector_points_empty_is_empty() {
-        let svc = MockConnectionService::empty();
-        let s = AsyncState::from_value(Some(svc.vector_points("embeddings").await));
-        assert!(s.is_empty());
-    }
-
-    #[tokio::test]
-    async fn vector_points_erroring_is_err() {
-        let svc = MockConnectionService::erroring();
-        let s = AsyncState::from_value(Some(svc.vector_points("embeddings").await));
-        assert!(s.error_message().is_some());
-    }
 
     #[tokio::test]
     async fn series_ready_ids_are_prefixed_with_the_requested_metric() {

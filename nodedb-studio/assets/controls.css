@@ -9,7 +9,7 @@
  *               .select.native (a real <select> with the same look)
  *               .choice (radio card)  .choice-group  .choice-grid
  *               .seg.accent (the active segment fills with the accent)
- *   Tabs        .page-tabs  .tab-bar  .tab-bar.sub (compact)
+ *   Tabs        .page-tabs (+ .page-tabs-actions)  .tab-bar  .tab-bar.sub (compact)
  *   Labels      .badge.<tone>  .chip  .status (.status-dot + text)
  *               .count-badge  .kbd-hint  .tag  .unsaved-dot (.blue)
  *   Code        .code-input (gutter + highlighted textarea)  .tok-*
@@ -701,3 +701,6 @@ select.select.native {
 .code-textarea::selection { background: color-mix(in srgb, var(--accent-blue) 30%, transparent); }
 .code-textarea::placeholder { color: var(--text-tertiary); }
 .code-input:focus-within { box-shadow: inset 0 0 0 1px var(--focus-ring); }
+
+/* Actions at the right end of the page tab strip. */
+.page-tabs-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 6px 0; }

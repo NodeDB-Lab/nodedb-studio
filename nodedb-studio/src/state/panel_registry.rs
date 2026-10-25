@@ -126,6 +126,22 @@ const GRAPH_RAG: &[PanelSpec] = &[
     ),
 ];
 
+const VECTOR_SEARCH: &[PanelSpec] = &[
+    panel("query", "Query", "Show the search form"),
+    panel("neighbors", "Neighbors", "Show the ranked neighbors"),
+    panel("record", "Record", "Show the selected record"),
+];
+
+const VECTOR_PROJECTION: &[PanelSpec] = &[
+    panel("projection", "Projection", "Show the sampled map"),
+    panel("record", "Record", "Show the selected record"),
+];
+
+const VECTOR_INDEX: &[PanelSpec] = &[
+    panel("status", "Index status", "Show counts and builds"),
+    panel("definition", "Definition", "Show the index definition"),
+];
+
 const DESIGNER: &[PanelSpec] = &[panel(
     "properties",
     "Properties",
@@ -150,8 +166,10 @@ impl Surface {
             Surface::Graph(GraphTab::Cypher) => GRAPH_CYPHER,
             Surface::Graph(GraphTab::Builder) => GRAPH_BUILDER,
             Surface::Graph(GraphTab::GraphRag) => GRAPH_RAG,
-            Surface::Vector(VectorTab::Search | VectorTab::Projection | VectorTab::Index)
-            | Surface::Timeseries(
+            Surface::Vector(VectorTab::Search) => VECTOR_SEARCH,
+            Surface::Vector(VectorTab::Projection) => VECTOR_PROJECTION,
+            Surface::Vector(VectorTab::Index) => VECTOR_INDEX,
+            Surface::Timeseries(
                 TimeseriesTab::Explore | TimeseriesTab::Dashboards | TimeseriesTab::Lifecycle,
             )
             | Surface::Spatial(SpatialTab::Map | SpatialTab::Analyze | SpatialTab::Raster)

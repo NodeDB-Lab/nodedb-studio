@@ -1,4 +1,4 @@
-//! Specialized-viewer models: vector, timeseries, spatial, FTS, sync.
+//! Specialized-viewer models: timeseries, spatial, FTS, sync.
 //!
 //! The client decodes `SearchResult.metadata` as empty, so Studio cannot get
 //! display fields (coordinates, excerpts) by calling those typed client
@@ -7,17 +7,6 @@
 //! than the client's typed search types.
 
 use serde::{Deserialize, Serialize};
-
-/// One point in a vector viewer's projection. `x`/`y` are a 2D projection of
-/// the embedding, not the raw vector.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct VectorPoint {
-    pub id: String,
-    pub x: f32,
-    pub y: f32,
-    pub cluster: String,
-}
 
 /// One sample in a timeseries metric.
 #[allow(dead_code)] // SEAM-UNWIRED
