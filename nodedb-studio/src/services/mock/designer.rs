@@ -62,9 +62,11 @@ impl DesignerData for MockConnectionService {
         apply_one(self.behavior, move || review).await
     }
 
-    async fn apply_changes(&self) -> Result<ApplyReport, StudioError> {
+    async fn apply_changes(&self, revision: u64) -> Result<ApplyReport, StudioError> {
         self.designer_gate().await?;
         let (_, read_only) = self.identity();
-        self.designer.borrow_mut().apply(read_only)
+        self.designer
+            .borrow_mut()
+            .apply_reviewed(revision, read_only)
     }
 }

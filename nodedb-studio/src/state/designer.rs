@@ -120,6 +120,9 @@ pub enum ApplyResult {
         reason: String,
     },
     Failed(String),
+    /// The staged set or the catalog changed after the review. Nothing was
+    /// applied, and the review is read again on request.
+    Stale(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

@@ -36,13 +36,16 @@ pub trait DesignerData {
     /// Remove every staged change.
     async fn discard_all_changes(&self) -> Result<(), StudioError>;
 
-    /// The DDL of the staged changes and what a dry run of it reports.
+    /// The DDL of the staged changes and what a dry run of it reports. The
+    /// review carries the revision of the catalog and the staged set.
     async fn review_changes(&self) -> Result<ChangeReview, StudioError>;
 
-    /// Apply the staged changes. `StudioError::PermissionDenied` when the
-    /// session cannot create. A change that fails to apply is in the report,
-    /// not an error.
-    async fn apply_changes(&self) -> Result<ApplyReport, StudioError>;
+    /// Apply the staged changes the review of `revision` read.
+    /// `StudioError::StaleRevision` when the catalog or the staged set has
+    /// changed since: nothing is applied. `StudioError::PermissionDenied`
+    /// when the session cannot create. A change that fails to apply is in the
+    /// report, not an error.
+    async fn apply_changes(&self, revision: u64) -> Result<ApplyReport, StudioError>;
 }
 
 #[cfg(test)]
@@ -159,7 +162,8 @@ mod tests {
             svc.stage_change(None, c).await.expect("stages");
         }
         let before = svc.catalog().await.expect("reads").len();
-        let report = svc.apply_changes().await.expect("applies");
+        let revision = svc.review_changes().await.expect("reviews").revision;
+        let report = svc.apply_changes(revision).await.expect("applies");
         assert!(report.failed.is_none());
         let catalog = svc.catalog().await.expect("reads");
         assert_eq!(catalog.len(), before + 1);
@@ -179,6 +183,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn apply_with_the_reviewed_revision_succeeds() {
+        let svc = MockConnectionService::ready();
+        let review = svc.review_changes().await.expect("reviews");
+        let report = svc.apply_changes(review.revision).await.expect("applies");
+        assert_eq!(report.applied, vec!["chg-1".to_string()]);
+        assert!(report.failed.is_none());
+        assert!(svc.pending_changes().await.expect("reads").is_empty());
+    }
+
+    #[tokio::test]
+    async fn staging_after_a_review_makes_its_revision_stale() {
+        let svc = MockConnectionService::ready();
+        let reviewed = svc.review_changes().await.expect("reviews").revision;
+        svc.stage_change(None, index("idx_late"))
+            .await
+            .expect("stages");
+        let err = svc.apply_changes(reviewed).await.expect_err("refused");
+        assert!(matches!(err, StudioError::StaleRevision { .. }), "{err}");
+        assert_eq!(
+            svc.pending_changes().await.expect("reads").len(),
+            2,
+            "nothing was applied"
+        );
+        let again = svc.review_changes().await.expect("reviews").revision;
+        assert_ne!(again, reviewed);
+        svc.apply_changes(again).await.expect("applies");
+    }
+
+    #[tokio::test]
+    async fn a_second_apply_of_the_same_revision_is_refused() {
+        let svc = MockConnectionService::ready();
+        let revision = svc.review_changes().await.expect("reviews").revision;
+        svc.apply_changes(revision).await.expect("applies");
+        let err = svc.apply_changes(revision).await.expect_err("refused");
+        assert!(matches!(err, StudioError::StaleRevision { .. }), "{err}");
+    }
+
+    #[tokio::test]
     async fn the_empty_catalog_has_nothing_to_draw() {
         let svc = MockConnectionService::empty();
         let s = svc.design_schema().await.expect("reads");
@@ -194,6 +236,6 @@ mod tests {
         assert!(svc.stage_change(None, index("idx_a")).await.is_err());
         assert!(svc.discard_change("chg-1").await.is_err());
         assert!(svc.review_changes().await.is_err());
-        assert!(svc.apply_changes().await.is_err());
+        assert!(svc.apply_changes(1).await.is_err());
     }
 }

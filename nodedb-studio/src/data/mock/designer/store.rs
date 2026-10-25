@@ -28,6 +28,8 @@ pub struct DesignerStore {
     references: Vec<LogicalReference>,
     pending: Vec<PendingChange>,
     seq: u32,
+    /// Moves when the catalog or the staged set does.
+    revision: u64,
 }
 
 impl DesignerStore {
@@ -39,6 +41,7 @@ impl DesignerStore {
             references: seed_references(),
             pending: Vec::new(),
             seq: 0,
+            revision: 1,
         };
         let draft = DesignIndex {
             name: "idx_articles_body".to_string(),
@@ -197,8 +200,11 @@ impl DesignerStore {
                 .find(|p| p.id == id)
                 .ok_or_else(|| StudioError::UnknownChange(id.to_string()))?;
             slot.kind = kind;
-            return Ok(slot.clone());
+            let replaced = slot.clone();
+            self.revision += 1;
+            return Ok(replaced);
         }
+        self.revision += 1;
         self.seq += 1;
         let change = PendingChange {
             id: format!("chg-{}", self.seq),
@@ -216,6 +222,7 @@ impl DesignerStore {
         if self.pending.len() == before {
             return Err(StudioError::UnknownChange(id.to_string()));
         }
+        self.revision += 1;
         if let Some(ChangeKind::CreateCollection(c)) = gone.map(|g| g.kind) {
             self.pending.retain(|p| match &p.kind {
                 ChangeKind::CreateIndex(i) => i.collection != c.name,
@@ -230,6 +237,7 @@ impl DesignerStore {
 
     pub fn clear(&mut self) {
         self.pending.clear();
+        self.revision += 1;
     }
 
     /// Re-check every staged change against the applied schema, as a dry
@@ -272,6 +280,7 @@ impl DesignerStore {
     pub fn review(&self, role: &str, read_only: bool) -> ChangeReview {
         let (blocks, unsupported) = designer_ddl::blocks(&self.pending);
         ChangeReview {
+            revision: self.revision,
             blocks,
             unsupported,
             dependents: Vec::new(),
@@ -283,6 +292,23 @@ impl DesignerStore {
             blocked: read_only
                 .then(|| format!("{role} has read-only access. Applying needs CREATE permission.")),
         }
+    }
+
+    /// Apply the staged changes the review of `revision` read. A revision
+    /// that is not the current one is refused and nothing is applied.
+    pub fn apply_reviewed(
+        &mut self,
+        revision: u64,
+        read_only: bool,
+    ) -> Result<ApplyReport, StudioError> {
+        if revision != self.revision {
+            return Err(StudioError::StaleRevision {
+                object: "The staged design".to_string(),
+                expected: revision,
+                stored: self.revision,
+            });
+        }
+        self.apply(read_only)
     }
 
     /// Apply the staged changes one after another. The first change that
@@ -326,6 +352,7 @@ impl DesignerStore {
             applied.push(change.id.clone());
             self.pending.remove(0);
         }
+        self.revision += 1;
         Ok(ApplyReport { applied, failed })
     }
 }
@@ -545,6 +572,36 @@ mod tests {
         let ids: std::collections::BTreeSet<_> =
             schema.references.iter().map(|r| r.id.clone()).collect();
         assert_eq!(ids.len(), 2, "reference ids are unique");
+    }
+
+    #[test]
+    fn every_catalog_or_staged_change_moves_the_revision() {
+        let mut s = empty();
+        let mut last = s.review("admin", false).revision;
+        let mut moved = |s: &DesignerStore| {
+            let now = s.review("admin", false).revision;
+            assert_ne!(now, last);
+            last = now;
+        };
+        let a = s
+            .stage(
+                None,
+                index("idx_one", "orders", "customer_id", IndexKind::Secondary),
+            )
+            .expect("stages");
+        moved(&s);
+        s.stage(
+            Some(&a.id),
+            index("idx_one", "orders", "total", IndexKind::Secondary),
+        )
+        .expect("restages");
+        moved(&s);
+        s.discard(&a.id).expect("discards");
+        moved(&s);
+        s.clear();
+        moved(&s);
+        s.apply(false).expect("applies");
+        moved(&s);
     }
 
     #[test]

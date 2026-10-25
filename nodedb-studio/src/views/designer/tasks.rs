@@ -154,12 +154,13 @@ pub async fn discard_all(mut state: Signal<DesignerState>, backend: Rc<dyn Backe
 }
 
 /// Apply every staged change and report how it ended.
-pub async fn apply(mut state: Signal<DesignerState>, backend: Rc<dyn Backend>) {
+/// Apply the staged changes the review of `reviewed` read.
+pub async fn apply(mut state: Signal<DesignerState>, backend: Rc<dyn Backend>, reviewed: u64) {
     if let Some(r) = state.write().review.as_mut() {
         r.busy = true;
         r.result = None;
     }
-    let result = match backend.apply_changes().await {
+    let result = match backend.apply_changes(reviewed).await {
         Ok(report) => match report.failed {
             None => ApplyResult::Applied(report.applied.len()),
             Some((failed, reason)) => ApplyResult::Partial {
@@ -168,10 +169,14 @@ pub async fn apply(mut state: Signal<DesignerState>, backend: Rc<dyn Backend>) {
                 reason,
             },
         },
+        Err(e @ StudioError::StaleRevision { .. }) => ApplyResult::Stale(e.to_string()),
         Err(e) => ApplyResult::Failed(e.to_string()),
     };
     let mut s = state.write();
-    s.bump();
+    // A stale review stays on screen with its error until "Review again".
+    if !matches!(result, ApplyResult::Stale(_)) {
+        s.bump();
+    }
     match result {
         ApplyResult::Applied(n) => {
             s.review = None;
@@ -181,7 +186,7 @@ pub async fn apply(mut state: Signal<DesignerState>, backend: Rc<dyn Backend>) {
                 if n == 1 { "" } else { "s" }
             ));
         }
-        other @ (ApplyResult::Partial { .. } | ApplyResult::Failed(_)) => {
+        other @ (ApplyResult::Partial { .. } | ApplyResult::Failed(_) | ApplyResult::Stale(_)) => {
             if let Some(r) = s.review.as_mut() {
                 r.busy = false;
                 r.result = Some(other);

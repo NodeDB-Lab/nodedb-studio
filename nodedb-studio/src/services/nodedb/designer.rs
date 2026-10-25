@@ -32,7 +32,7 @@ impl DesignerData for NodeDbConnectionService {
     async fn review_changes(&self) -> Result<ChangeReview, StudioError> {
         Err(StudioError::NotConnected)
     }
-    async fn apply_changes(&self) -> Result<ApplyReport, StudioError> {
+    async fn apply_changes(&self, _revision: u64) -> Result<ApplyReport, StudioError> {
         Err(StudioError::NotConnected)
     }
 }

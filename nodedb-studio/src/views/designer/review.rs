@@ -40,8 +40,11 @@ pub fn ReviewPanel(
     let copier = use_copier();
     let loaded = review.loaded().cloned();
     let n = pending.len();
-    let can_apply = loaded.as_ref().is_some_and(ChangeReview::can_apply) && n > 0 && !state_of.busy;
+    let stale = matches!(state_of.result, Some(ApplyResult::Stale(_)));
+    let can_apply =
+        loaded.as_ref().is_some_and(ChangeReview::can_apply) && n > 0 && !state_of.busy && !stale;
     let apply_title = match (&loaded, n) {
+        _ if stale => "The staged changes moved. Review again first".to_string(),
         (_, 0) => "No staged changes".to_string(),
         (Some(r), _) => r
             .blocked
@@ -56,11 +59,14 @@ pub fn ReviewPanel(
             .unwrap_or_else(|| "Apply the staged changes to the database".to_string()),
         (None, _) => "Waiting for the review".to_string(),
     };
+    let reviewed = loaded.as_ref().map(|r| r.revision);
     let apply = {
         let backend = backend.clone();
         move |_| {
-            let backend = backend.clone();
-            spawn_forever(async move { tasks::apply(state, backend).await });
+            let (backend, Some(reviewed)) = (backend.clone(), reviewed) else {
+                return;
+            };
+            spawn_forever(async move { tasks::apply(state, backend, reviewed).await });
         }
     };
     rsx! {
@@ -290,6 +296,23 @@ pub fn ReviewPanel(
                                 Ico { icon: Icon::CircleAlert, size: 16 }
                                 span {
                                     "{applied} applied, then {failed} failed: {reason} The earlier changes stay applied. The rest stay staged."
+                                }
+                            }
+                        },
+                        ApplyResult::Stale(reason) => rsx! {
+                            div { class: "callout err", role: "alert",
+                                Ico { icon: Icon::CircleAlert, size: 16 }
+                                span { "Nothing was applied: {reason}" }
+                                button {
+                                    class: "link-btn",
+                                    onclick: move |_| {
+                                        let mut s = state.write();
+                                        if let Some(r) = s.review.as_mut() {
+                                            r.result = None;
+                                        }
+                                        s.bump();
+                                    },
+                                    "Review again"
                                 }
                             }
                         },

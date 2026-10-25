@@ -92,6 +92,9 @@ pub enum DryRun {
 /// What a review reports about staged changes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeReview {
+    /// The catalog revision plus the staged set this review read. Apply
+    /// names it, and the server refuses it once either has changed.
+    pub revision: u64,
     pub blocks: Vec<DdlBlock>,
     pub unsupported: Vec<Unsupported>,
     /// Objects that depend on something a change touches. Empty when none.
@@ -169,6 +172,7 @@ mod tests {
 
     fn review(dry_run: DryRun, blocked: Option<&str>) -> ChangeReview {
         ChangeReview {
+            revision: 1,
             blocks: vec![],
             unsupported: vec![],
             dependents: vec![],
