@@ -15,8 +15,10 @@ NodeDB Studio is a **desktop GUI client for NodeDB**, built in Rust with
 - **Rust**: edition 2024, MSRV pinned in `Cargo.toml` (`rust-version`, currently 1.96).
 - **UI**: Dioxus **0.7** with the `desktop` + `router` features.
 - **Backend seam**: `nodedb-client` / `nodedb-types` (the typed Rust client).
-  Today the app runs on hardcoded mock data behind a `ConnectionService` trait;
-  the real client-backed impl plugs in at that seam.
+  Views reach the backend only through `Rc<dyn Backend>` (`services/backend.rs`),
+  composed of per-domain async traits (`services/*_data.rs`). Today
+  `services/mock/` serves hardcoded data; `services/nodedb/` is the client-backed
+  stub that returns `StudioError::NotConnected` until wired.
 - **Serialization**: `sonic_rs` for any runtime JSON (display), `serde` derive on
   models. The wire format to the server is the client's concern (MessagePack).
 
@@ -71,7 +73,8 @@ cargo nextest run
 For UI changes, also check the screen renders: `cargo run -p nodedb-studio`, or
 `scripts/screenshots.sh` and read the PNGs. A new screen or overlay needs a scene in
 `src/screenshots/scenes.rs`. Launch through `cargo run`: a bare debug or release
-binary counts as a `dx` bundle and loads no stylesheet.
+binary counts as a `dx` bundle and loads no stylesheet. Scenes live in
+`src/screenshots/scenes.rs` and the per-area `*_scenes.rs` files.
 
 ## Project structure
 
@@ -79,16 +82,16 @@ binary counts as a `dx` bundle and loads no stylesheet.
 nodedb-studio/src/
   main.rs        desktop launch + window config (Config / WindowBuilder)
   app.rs         root App: context providers + connected/disconnected state machine
-  routes.rs      Route enum + StudioLayout (persistent chrome + Outlet)
-  components/    reusable chrome (rail, topbar, statusbar, modal, popovers, …)
-  views/         one module per routed screen (explorer, admin, streams, …)
+  routes/        Route enum, typed tab segments (tabs.rs), sidebar destinations, StudioLayout
+  components/    reusable chrome (sidebar, header, footer, panel, tabs, view menu, popovers, …)
+  views/         one module per routed screen (explorer, query, events, cluster, admin, …)
   modals/        modal bodies + the ModalHost
-  state/         live UI state as Dioxus signals (connection, prefs, ui, …)
-  models/        typed domain data (collection, notification, …)
-  services/      ConnectionService trait — the backend seam (mock impl today)
+  state/         live UI state as Dioxus signals; workspace panel layout + persistence
+  models/        typed domain data
+  services/      Backend seam: per-domain traits, mock/ impl, nodedb/ stub
   data/mock/     ALL hardcoded mock data, in one place
   screenshots/   scene runner + WebKitGTK capture (`screenshots` feature, Linux only)
-assets/styles.css   CSS ported from the design (loaded via asset!)
+assets/             tokens.css (design tokens, light + dark), shared sheets, one sheet per area
 scripts/            screenshot capture + PR diff report (CI: .github/workflows/screenshots.yml)
 ```
 
@@ -120,7 +123,11 @@ scripts/            screenshot capture + PR diff report (CI: .github/workflows/s
   closures over existing handlers.
 - **Forms submit by default in 0.7** — call `e.prevent_default()` in `onsubmit`.
 - **Never block the main thread.** CPU work → `std::thread::spawn`; async IO →
-  `spawn` / `use_resource` / `use_action`; long-lived tasks → `spawn_forever`.
+  `use_resource` / `use_action`; event-handler tasks → `spawn_forever` (never
+  scope-bound `spawn(` in views, components, or modals).
+- Views, components, and modals read data only through the `Backend` seam, never
+  `data::mock` or `services::mock`; connect through `apply_connect`.
+  `tests/seam_discipline.rs` enforces both.
   Write results back into a signal.
 - Keep business/state logic in plain Rust (`state/`, `services/`, `data/`) so it
   is testable without a renderer.
@@ -148,7 +155,7 @@ scripts/            screenshot capture + PR diff report (CI: .github/workflows/s
 
 **Ask first**
 - Adding a new dependency, or bumping the Dioxus / Rust version.
-- Adding a new top-level module or changing the `ConnectionService` seam.
+- Adding a new top-level module or changing the `Backend` seam's shape.
 
 **Never**
 - Commit secrets, credentials, or `.cargo/config.toml`.

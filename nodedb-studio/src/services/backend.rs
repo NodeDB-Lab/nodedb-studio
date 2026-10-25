@@ -59,7 +59,6 @@ impl<T> Backend for T where
         + WorkbenchData
         + SyncData
         + TimeseriesData
-        + TimeseriesData
         + VectorData
         + SearchData
         + SpatialData
