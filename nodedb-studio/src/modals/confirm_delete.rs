@@ -1,46 +1,118 @@
-//! Confirm-delete modal body, shared by every engine viewer.
+//! The delete confirmation for a record or an edge.
 //!
-//! The destructive button stays disabled until the typed confirmation passes
-//! `delete_confirmed`. SEAM-UNWIRED: Delete only closes the modal; no seam
-//! method deletes a record yet.
+//! The destructive button stays disabled until the word is typed. A record
+//! delete names the revision it read: a record changed since is a conflict,
+//! shown here, and nothing is removed.
 
+use std::rc::Rc;
+
+use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
+use crate::components::modal::Modal;
+use crate::services::backend::Backend;
+use crate::state::explorer::RecordsEpoch;
+use crate::state::record_editor::{DeleteRequest, DeleteTarget, EditorError};
 use crate::state::ui::ModalKind;
 
-/// Whether `typed` confirms the delete. Surrounding whitespace is forgiven
-/// (autocomplete, paste); case and spelling are not, so the friction before
-/// an irreversible act stays.
-fn delete_confirmed(typed: &str) -> bool {
-    typed.trim() == "delete"
+fn error_text(error: &EditorError) -> String {
+    match error {
+        EditorError::Conflict { expected, stored } => format!(
+            "The record changed after you opened it: you read revision {expected}, the server holds revision {stored}. Nothing was removed. Close this dialog and review the record."
+        ),
+        EditorError::Gone => "The record no longer exists.".to_string(),
+        EditorError::Denied(t) | EditorError::Rejected(t) | EditorError::Failed(t) => t.clone(),
+    }
 }
 
 #[component]
 pub fn ConfirmDelete() -> Element {
+    let mut request = use_context::<Signal<Option<DeleteRequest>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
-    let mut typed = use_signal(String::new);
-    let confirmed = delete_confirmed(&typed.read());
-    rsx! {
-        div { class: "modal-body",
-            p { class: "confirm-lead", "Delete this record? This cannot be undone." }
-            p { class: "confirm-detail",
-                "The record will be removed from storage. If foreign keys reference it, the operation will fail unless cascade is configured."
+    let backend = use_context::<Rc<dyn Backend>>();
+    let epoch = use_context::<RecordsEpoch>();
+    use_drop(move || request.set(None));
+
+    let Some(r) = request.read().clone() else {
+        return rsx! {};
+    };
+    let label = r.target.label();
+    let remove = {
+        let backend = backend.clone();
+        move |_| {
+            let Some(current) = request.peek().clone() else {
+                return;
+            };
+            if !current.confirmed() || current.busy {
+                return;
             }
-            div { class: "danger-zone", "Type " strong { "delete" } " to confirm." }
-            input {
-                class: "confirm-input",
-                placeholder: "delete",
-                value: "{typed}",
-                oninput: move |e| typed.set(e.value()),
+            if let Some(open) = request.write().as_mut() {
+                open.busy = true;
+                open.error = None;
             }
+            let backend = backend.clone();
+            let (mut epoch, mut request, mut modal) = (epoch.0, request, modal);
+            spawn_forever(async move {
+                let result = match &current.target {
+                    DeleteTarget::Record {
+                        collection,
+                        id,
+                        revision,
+                    } => backend.delete_record(collection, id, *revision).await,
+                    DeleteTarget::Edge { graph, id } => backend.delete_edge(graph, id).await,
+                };
+                match result {
+                    Ok(()) => {
+                        let next = *epoch.peek() + 1;
+                        epoch.set(next);
+                        modal.set(None);
+                    }
+                    Err(e) => {
+                        if let Some(open) = request.write().as_mut() {
+                            open.busy = false;
+                            open.error = Some(EditorError::from(&e));
+                        }
+                    }
+                }
+            });
         }
-        div { class: "modal-footer",
-            button { class: "btn ghost", onclick: move |_| modal.set(None), "Cancel" }
-            button {
-                class: "btn danger",
-                disabled: !confirmed,
-                onclick: move |_| modal.set(None),
-                "Delete permanently"
+    };
+
+    rsx! {
+        Modal { title: "Delete {label}", width: 460, dismiss_on_scrim: false,
+            div { class: "dialog-body",
+                p { class: "confirm-lead", "Delete {label}? This cannot be undone." }
+                p { class: "confirm-detail",
+                    match &r.target {
+                        DeleteTarget::Record { .. } => "The record is removed from storage. A reference to it from another collection is not checked and can dangle.",
+                        DeleteTarget::Edge { .. } => "The edge is removed from the graph. The records it joined stay.",
+                    }
+                }
+                if let Some(e) = &r.error {
+                    div { class: "callout err", role: "alert", "{error_text(e)}" }
+                }
+                div { class: "danger-zone", "Type " strong { "delete" } " to confirm." }
+                input {
+                    class: "input",
+                    placeholder: "delete",
+                    "aria-label": "Type delete to confirm",
+                    autofocus: true,
+                    value: "{r.typed}",
+                    oninput: move |e| {
+                        if let Some(open) = request.write().as_mut() {
+                            open.typed = e.value();
+                        }
+                    },
+                }
+            }
+            footer { class: "dialog-footer",
+                button { class: "btn", onclick: move |_| modal.set(None), "Cancel" }
+                button {
+                    class: "btn danger",
+                    disabled: !r.confirmed() || r.busy,
+                    onclick: remove,
+                    if r.busy { "Deleting…" } else { "Delete permanently" }
+                }
             }
         }
     }
@@ -51,22 +123,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn exact_word_confirms() {
-        assert!(delete_confirmed("delete"));
-    }
-
-    #[test]
-    fn surrounding_whitespace_is_forgiven_but_case_is_not() {
-        assert!(delete_confirmed(" delete "));
-        assert!(delete_confirmed("delete\n"));
-        assert!(!delete_confirmed("Delete"));
-        assert!(!delete_confirmed("de lete"));
-    }
-
-    #[test]
-    fn blank_and_partial_input_do_not_confirm() {
-        assert!(!delete_confirmed(""));
-        assert!(!delete_confirmed("del"));
-        assert!(!delete_confirmed("deleted"));
+    fn a_conflict_says_nothing_was_removed() {
+        let text = error_text(&EditorError::Conflict {
+            expected: 18,
+            stored: 19,
+        });
+        assert!(
+            text.contains("revision 18") && text.contains("revision 19"),
+            "{text}"
+        );
+        assert!(text.contains("Nothing was removed"), "{text}");
     }
 }

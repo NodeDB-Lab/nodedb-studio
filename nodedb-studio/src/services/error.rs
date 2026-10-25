@@ -43,6 +43,79 @@ pub enum StudioError {
     /// Connect was attempted without an explicit username.
     #[error("a username is required to connect")]
     MissingUsername,
+    /// A save would give two saved connections one name.
+    #[error("a connection named `{0}` already exists: choose another name")]
+    NameTaken(String),
+    /// A write named a saved connection that is not in the registry.
+    #[error("no saved connection named `{0}`")]
+    UnknownConnection(String),
+    /// A database switch named a database the connection does not list.
+    #[error("the connection has no database named `{0}`")]
+    UnknownDatabase(String),
+    /// A record write named a revision the server no longer holds: someone
+    /// else wrote the record first. The editor keeps the edit and offers the
+    /// stored record.
+    #[error(
+        "revision conflict on {collection}/{id}: you edited revision {expected}, the server holds revision {stored}"
+    )]
+    RevisionConflict {
+        collection: String,
+        id: String,
+        expected: u64,
+        stored: u64,
+    },
+    /// A write named an event or job object the database does not hold.
+    #[error("no {kind} `{id}`")]
+    UnknownObject { kind: &'static str, id: String },
+    /// An edit named a revision of an object that has changed since. Nothing
+    /// is overwritten: the editor keeps the edit and offers a reload.
+    #[error(
+        "{object} changed: you edited revision {expected}, the server holds revision {stored}. Reload it and make the edit again."
+    )]
+    StaleRevision {
+        object: String,
+        expected: u64,
+        stored: u64,
+    },
+    /// A write or read named a record the collection does not hold.
+    #[error("{collection}/{id} does not exist")]
+    RecordMissing { collection: String, id: String },
+    /// The session lacks the privilege a write needs.
+    #[error("{privilege} permission required on {collection}")]
+    PermissionDenied {
+        privilege: &'static str,
+        collection: String,
+    },
+    /// The server's own validation refused a write.
+    #[error("the server rejected the write: {reason}")]
+    Rejected { reason: String },
+    /// A save would give two saved queries one name.
+    #[error("a saved query named `{0}` already exists: choose another name")]
+    QueryNameTaken(String),
+    /// A write named a saved query the library does not hold.
+    #[error("no saved query `{0}`")]
+    UnknownQuery(String),
+    /// A Designer write named a staged change that is not staged.
+    #[error("no staged change `{0}`")]
+    UnknownChange(String),
+    /// A run, explain, or console command had no statement text.
+    #[error("the statement is empty")]
+    EmptyStatement,
+    /// The statement text did not parse.
+    #[error("syntax error: {reason}")]
+    Syntax { reason: String },
+    /// The statement uses a parameter the request did not bind.
+    #[error("parameter :{0} has no value")]
+    MissingParameter(String),
+    /// Commit or rollback with no transaction open.
+    #[error("no transaction is open")]
+    NoTransaction,
+    /// Begin while a transaction is open.
+    #[error("a transaction is already open: commit it or roll it back first")]
+    TransactionOpen,
+    /// A write inside a read-only transaction.
+    #[error("the transaction is read-only: roll it back and begin a read-write one to write")]
+    ReadOnlyTransaction,
 }
 
 impl StudioError {
@@ -60,7 +133,25 @@ impl StudioError {
             StudioError::NotConnected
             | StudioError::UnexpectedColumns { .. }
             | StudioError::MalformedRows { .. }
-            | StudioError::MissingUsername => false,
+            | StudioError::MissingUsername
+            | StudioError::NameTaken(_)
+            | StudioError::UnknownConnection(_)
+            | StudioError::UnknownDatabase(_)
+            | StudioError::RevisionConflict { .. }
+            | StudioError::UnknownObject { .. }
+            | StudioError::StaleRevision { .. }
+            | StudioError::RecordMissing { .. }
+            | StudioError::PermissionDenied { .. }
+            | StudioError::Rejected { .. }
+            | StudioError::QueryNameTaken(_)
+            | StudioError::UnknownQuery(_)
+            | StudioError::UnknownChange(_)
+            | StudioError::EmptyStatement
+            | StudioError::Syntax { .. }
+            | StudioError::MissingParameter(_)
+            | StudioError::NoTransaction
+            | StudioError::TransactionOpen
+            | StudioError::ReadOnlyTransaction => false,
             StudioError::Connection(e)
             | StudioError::Auth(e)
             | StudioError::NotFound(e)
@@ -395,6 +486,23 @@ mod tests {
     }
 
     #[test]
+    fn a_revision_conflict_names_both_revisions_and_is_not_retriable() {
+        let e = StudioError::RevisionConflict {
+            collection: "users".into(),
+            id: "u44182".into(),
+            expected: 18,
+            stored: 19,
+        };
+        let text = e.to_string();
+        assert!(text.contains("users/u44182"), "{text}");
+        assert!(
+            text.contains("revision 18") && text.contains("revision 19"),
+            "{text}"
+        );
+        assert!(!e.is_retriable());
+    }
+
+    #[test]
     fn studio_originated_errors_are_not_retriable() {
         for e in [
             StudioError::NotConnected,
@@ -404,6 +512,36 @@ mod tests {
             },
             StudioError::MalformedRows { reason: "r".into() },
             StudioError::MissingUsername,
+            StudioError::NameTaken("n".into()),
+            StudioError::UnknownConnection("c".into()),
+            StudioError::UnknownDatabase("d".into()),
+            StudioError::UnknownObject {
+                kind: "feed",
+                id: "f".into(),
+            },
+            StudioError::StaleRevision {
+                object: "o".into(),
+                expected: 1,
+                stored: 2,
+            },
+            StudioError::RecordMissing {
+                collection: "c".into(),
+                id: "i".into(),
+            },
+            StudioError::PermissionDenied {
+                privilege: "update",
+                collection: "c".into(),
+            },
+            StudioError::Rejected { reason: "r".into() },
+            StudioError::QueryNameTaken("q".into()),
+            StudioError::UnknownQuery("q".into()),
+            StudioError::UnknownChange("x".into()),
+            StudioError::EmptyStatement,
+            StudioError::Syntax { reason: "r".into() },
+            StudioError::MissingParameter("p".into()),
+            StudioError::NoTransaction,
+            StudioError::TransactionOpen,
+            StudioError::ReadOnlyTransaction,
         ] {
             assert!(!e.is_retriable(), "{e}");
         }

@@ -1,15 +1,19 @@
 //! Ephemeral shell UI state shared across the studio chrome.
 //!
-//! These are not "local" to one component: the four popovers are mutually
+//! These are not "local" to one component: the header popovers are mutually
 //! exclusive and the Escape handler closes whichever is open, so a single
-//! shared signal models "which overlay is open" better than four booleans.
+//! shared signal models "which overlay is open" better than several booleans.
 
-/// Which topbar popover is currently open (at most one at a time).
+use dioxus::prelude::Signal;
+
+/// Which header popover or drawer is currently open (at most one at a time).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Popover {
     Connection,
     Database,
     Notifications,
+    /// The panel visibility checklist beside the avatar.
+    View,
     Avatar,
 }
 
@@ -42,7 +46,7 @@ impl PrefsPane {
         match self {
             PrefsPane::Appearance => "Appearance",
             PrefsPane::Editor => "Editor",
-            PrefsPane::Keyboard => "Keyboard",
+            PrefsPane::Keyboard => "Keyboard shortcuts",
             PrefsPane::Security => "Security",
             PrefsPane::Telemetry => "Telemetry",
             PrefsPane::About => "About",
@@ -50,21 +54,29 @@ impl PrefsPane {
     }
 }
 
-/// Which modal is currently open. Preferences is reachable in either app state;
-/// New connection only while disconnected/connected via the relevant trigger.
-/// The entity-form and confirm-delete variants carry no record yet: nothing
-/// selects one until the Explorer's master-detail lands.
+/// Which modal is currently open. Preferences and the connection dialog are
+/// reachable in either app state. The connection dialog reads its fields from
+/// the shared `ConnectionForm`, which its opener fills. The record editor and
+/// the delete confirmation read theirs from `RecordEditor` and
+/// `DeleteRequest`, filled the same way.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
     NewConnection,
     Preferences(PrefsPane),
-    DocForm,
-    StrictForm,
-    VectorForm,
-    GraphNodeForm,
-    GraphEdgeForm,
-    KvForm,
-    SpatialForm,
-    #[allow(dead_code)] // SEAM-UNWIRED: opened from the detail-panel footer (Phase 4)
+    RecordEditor,
     ConfirmDelete,
 }
+
+/// Whether the Connection Manager shows while a session is open. The studio
+/// stays mounted underneath, so its tabs and selections survive a visit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct ManagerOpen(pub bool);
+
+/// The connection the manager highlights. `None` highlights the first entry.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ManagerSelection(pub Option<String>);
+
+/// The command palette's search text. It lives above the palette so a
+/// screenshot scene can open the palette with a query typed.
+#[derive(Clone, Copy)]
+pub struct PaletteQuery(pub Signal<String>);

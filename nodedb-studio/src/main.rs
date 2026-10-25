@@ -28,10 +28,12 @@ fn main() {
     let builder = LaunchBuilder::desktop().with_cfg(Config::new().with_window(window));
 
     // `--screenshots <dir>` runs the scene runner instead of an interactive
-    // session.
+    // session. It never reads or writes the user's saved layout.
     #[cfg(all(feature = "screenshots", target_os = "linux"))]
     let builder = match screenshots::RunConfig::from_args(std::env::args().skip(1)) {
-        Ok(Some(run)) => builder.with_context(run),
+        Ok(Some(run)) => builder
+            .with_context(run)
+            .with_context(state::persist::PersistMode::Off),
         Ok(None) => builder,
         Err(e) => {
             eprintln!("nodedb-studio: {e}");

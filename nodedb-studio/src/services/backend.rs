@@ -6,18 +6,64 @@
 //! trait on the mock + stub — additive, never a reshape of existing methods.
 
 use crate::services::admin_data::AdminData;
+use crate::services::cluster_data::ClusterData;
 use crate::services::connection_service::ConnectionService;
+use crate::services::designer_data::DesignerData;
 use crate::services::explorer_data::ExplorerData;
-use crate::services::streams_data::StreamsData;
-use crate::services::viewers_data::ViewersData;
+use crate::services::feed_data::FeedData;
+use crate::services::graph_data::GraphData;
+use crate::services::job_data::JobData;
+use crate::services::listen_data::ListenData;
+use crate::services::matview_data::MatViewData;
+use crate::services::search_data::SearchData;
+use crate::services::spatial_data::SpatialData;
+use crate::services::sync_data::SyncData;
+use crate::services::timeseries_data::TimeseriesData;
+use crate::services::topic_data::TopicData;
+use crate::services::transfer_data::TransferData;
+use crate::services::vector_data::VectorData;
 use crate::services::workbench_data::WorkbenchData;
 
 pub trait Backend:
-    ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData + ViewersData
+    ConnectionService
+    + FeedData
+    + TopicData
+    + MatViewData
+    + ListenData
+    + JobData
+    + ExplorerData
+    + AdminData
+    + ClusterData
+    + WorkbenchData
+    + SyncData
+    + TimeseriesData
+    + VectorData
+    + SearchData
+    + SpatialData
+    + GraphData
+    + TransferData
+    + DesignerData
 {
 }
 
-impl<T: ConnectionService + StreamsData + ExplorerData + AdminData + WorkbenchData + ViewersData>
-    Backend for T
+impl<T> Backend for T where
+    T: ConnectionService
+        + FeedData
+        + TopicData
+        + MatViewData
+        + ListenData
+        + JobData
+        + ExplorerData
+        + AdminData
+        + ClusterData
+        + WorkbenchData
+        + SyncData
+        + TimeseriesData
+        + VectorData
+        + SearchData
+        + SpatialData
+        + GraphData
+        + TransferData
+        + DesignerData
 {
 }

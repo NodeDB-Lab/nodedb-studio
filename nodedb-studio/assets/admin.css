@@ -1,0 +1,199 @@
+/*
+ * Administration: Access, Row policies, Audit, Backups, Config, and
+ * Credentials. Built on controls.css, panels.css, events.css (sheets,
+ * reviews), and cluster.css (filter bars, tables). Only what is specific to
+ * Administration is here.
+ *
+ *   Tables     .ad-table (fixed layout, cut cells)  .ad-name  .ad-staged  .ad-gone  .ad-x
+ *   Access     .ad-lower  .ad-side  .ad-details  .ad-group-head  .ad-staged-list
+ *   Policies   .ad-editor  .ad-form  .ad-expr  .ad-action-row  .ad-bypass  .ad-test  .ad-result
+ *   Audit      .ad-audit  .ad-audit-footer  .ad-event  .ad-diff
+ *   Backups    .ad-backup-note  .ad-buttons  .ad-restore  .ad-copyline  .ad-range
+ *   Config     .ad-scope  .ad-proposal  .ad-stack
+ *   Credentials .ad-secret  .ad-masked  .ad-dim  .ad-cred-actions
+ */
+
+/* ---------- Tables ---------- */
+
+/* A fixed layout lets a long cell shrink and cut with an ellipsis. Every
+   cut cell carries its full text as a tooltip. */
+.ad-table { table-layout: fixed; }
+.ad-table td, .ad-table th { overflow: hidden; text-overflow: ellipsis; }
+.ad-cut { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kv-row > .ad-cut { text-align: right; }
+.ad-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ad-name > .ico { flex: none; color: var(--text-secondary); }
+.ad-name > .badge { flex: none; }
+.dt tbody tr.ad-staged td { color: var(--text-secondary); background: var(--warn-soft); }
+.dt tbody tr.ad-staged td.key { color: var(--text-primary); }
+.dt tbody tr.ad-gone td { text-decoration: line-through; }
+.dt tbody tr.ad-gone td:last-child, .dt tbody tr.ad-gone td .badge { text-decoration: none; }
+.ad-table th.ad-x, .ad-table td.ad-x { width: 40px; padding-left: 0; padding-right: 8px; text-align: right; }
+
+.ad-principals th:nth-child(1) { width: 19%; }
+.ad-principals th:nth-child(2) { width: 18%; }
+.ad-principals th:nth-child(3) { width: 14%; }
+.ad-principals th:nth-child(4) { width: 20%; }
+.ad-roles th:nth-child(1) { width: 26%; }
+.ad-roles th:nth-child(2) { width: 24%; }
+.ad-grants th:nth-child(1) { width: 24%; }
+.ad-grants th:nth-child(2) { width: 24%; }
+.ad-grants th:nth-child(3) { width: 18%; }
+.ad-grants th:nth-child(4) { width: 17%; }
+.ad-effective th:nth-child(1) { width: 28%; }
+.ad-effective th:nth-child(2) { width: 22%; }
+.ad-effective th:nth-child(3) { width: 28%; }
+.ad-audit th:nth-child(1) { width: 192px; }
+.ad-audit th:nth-child(2) { width: 9%; }
+.ad-audit th:nth-child(3) { width: 20%; }
+.ad-audit th:nth-child(5) { width: 100px; }
+.ad-audit th:nth-child(6) { width: 112px; }
+.ad-config th:nth-child(1) { width: 24%; }
+.ad-config th:nth-child(2) { width: 17%; }
+.ad-config th:nth-child(3) { width: 22%; }
+.ad-config th:nth-child(4) { width: 19%; }
+
+.ad-review-table th:nth-child(1) { width: 38%; }
+.ad-review-table td { white-space: normal; max-height: none; }
+.ad-review-table td, .ad-review-table th { overflow: visible; }
+.ad-review-table td { height: auto; padding-top: 8px; padding-bottom: 8px; overflow-wrap: anywhere; }
+
+/* ---------- Access ---------- */
+
+.ad-lower { min-height: 0; }
+.ad-side { min-height: 0; }
+.ad-details { gap: 2px; }
+.panel-body .ad-details, .panel-body .ad-event, .panel-body .ad-proposal { padding: 16px; }
+.ad-form .field-row.two { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+/* These tables fit their content. A narrow panel scrolls them sideways. */
+.ad-grants, .ad-snapshots, .ad-jobs, .ad-creds, .ad-policies, .ad-members { table-layout: auto; }
+.ad-grants td, .ad-grants th, .ad-snapshots td, .ad-snapshots th, .ad-jobs td, .ad-jobs th, .ad-creds td, .ad-creds th, .ad-policies td, .ad-policies th, .ad-members td, .ad-members th, .ad-config th { white-space: nowrap; overflow: visible; max-width: none; }
+.ad-members td:first-child, .ad-members th:first-child { width: 55%; }
+.ad-details .kv-row { min-height: 25px; }
+.ad-restore .kv-row { min-height: 28px; }
+.ad-details .inspector-head { margin-bottom: 2px; }
+.ad-group-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--accent-blue-soft);
+  border-bottom: 1px solid var(--border-soft);
+}
+.ad-group-head .ico { color: var(--text-secondary); }
+.ad-staged-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.ad-staged-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 4px 0 10px;
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+}
+.ad-staged-list li > .ad-cut { flex: 1; }
+.ad-review-action { justify-content: flex-end; margin-top: auto; }
+.ad-review-action > .btn { flex: none; }
+
+/* ---------- Forms and editors ---------- */
+
+.ad-editor, .ad-test, .ad-restore { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px; min-width: 0; }
+.ad-form { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ad-form .field > .input, .ad-form .field > .select, .ad-form .field > .textarea { width: 100%; }
+.ad-form .field > select.select.native { width: 100%; min-width: 0; }
+.ad-form input.input[readonly] { background: var(--surface-sunken); color: var(--text-secondary); }
+.ad-expr { position: relative; display: flex; }
+.ad-expr .textarea { width: 100%; padding-right: 40px; resize: vertical; }
+.ad-expr .textarea:disabled { background: var(--surface-sunken); color: var(--text-tertiary); }
+.ad-copy { position: absolute; top: 6px; right: 6px; }
+.ad-action-row { flex-wrap: wrap; display: flex; align-items: center; gap: 10px; padding-top: 4px; }
+.ad-bypass { padding: 4px 12px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface-sunken); }
+.ad-bypass .kv-row:last-child { border-bottom: 0; }
+.ad-bypass-value { display: inline-flex; align-items: center; gap: 8px; }
+.ad-session { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: center; }
+.ad-run { align-self: flex-start; }
+.ad-result { display: flex; flex-direction: column; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface-sunken); }
+.ad-result-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 12px; align-items: start; }
+.ad-result-row + .ad-result-row { border-top: 1px solid var(--border-soft); }
+.ad-result-label { color: var(--text-secondary); }
+.ad-result-num { font-size: var(--fs-xl); font-weight: 600; }
+.ad-hidden { display: inline-flex; align-items: center; gap: 8px; }
+.ad-hidden .ico { color: var(--text-secondary); }
+.ad-test .inspector-section { margin: 0; }
+
+/* ---------- Audit ---------- */
+
+.ad-audit-footer { height: auto; min-height: 48px; flex-wrap: wrap; padding-top: 6px; padding-bottom: 6px; }
+.ad-span { color: var(--text-secondary); white-space: nowrap; }
+.ad-retention { color: var(--text-secondary); white-space: nowrap; }
+.ad-event { padding-bottom: 16px; }
+.ad-event .kv-row { min-height: 30px; }
+.ad-diff-title { margin: 12px 0 4px; }
+.ad-diff { flex: none; overflow: auto; max-height: 150px; min-height: 40px; }
+.ad-event .inspector-section.sub { margin-left: 0; margin-right: 0; }
+
+/* ---------- Backups ---------- */
+
+.ad-backup-note { margin: 12px; align-items: flex-start; }
+.ad-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; padding-top: 12px; }
+.ad-copyline { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
+.ad-range { display: inline-flex; align-items: center; gap: 4px; }
+.ad-restore { padding-top: 12px; }
+
+/* ---------- Config ---------- */
+
+.ad-scope { padding: 0 2px; }
+.ad-scope .cl-observed { margin-left: auto; }
+.ad-proposal { gap: 10px; }
+.ad-proposal .kv-row { min-height: 32px; align-items: flex-start; padding: 6px 0; }
+.ad-proposal .kv-row.ad-tall { align-items: flex-start; }
+.ad-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; text-align: right; }
+.ad-proposal .inspector-actions { margin-top: auto; }
+.ad-proposal .inspector-actions > .btn { flex: none; }
+.ad-chips { justify-content: flex-start; }
+.ad-review-empty { padding: 20px 16px; color: var(--text-secondary); }
+.ad-review-empty p { margin: 0 0 6px; }
+.ad-proposal-input {
+  width: 100%;
+  height: 32px;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a8899' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+.ad-proposal-input::-webkit-calendar-picker-indicator { opacity: 0; }
+
+/* ---------- Credentials ---------- */
+
+.ad-section { margin: 6px 0 -2px; }
+.ad-secret { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 0.8fr); gap: 8px; align-items: center; }
+.ad-masked { color: var(--text-secondary); }
+.ad-dim { max-width: 160px; }
+.ad-cred-actions { margin-top: 0; padding-top: 0; }
+.ad-cred-note { padding-top: 2px; }
+
+.ad-grants th, .ad-grants td { padding: 0 6px; }
+.ad-copyline { max-width: 100%; }
+.ad-cred-actions { flex-wrap: wrap; gap: 6px; }
+.ad-cred-actions .btn { padding: 0 9px; gap: 5px; }
+
+/* Short fields sit beside their label, as the design draws them. A text
+   area keeps its label above. */
+.ad-form .field.ad-inline { display: grid; grid-template-columns: 120px minmax(0, 1fr); column-gap: 12px; row-gap: 4px; align-items: center; }
+.ad-form .field.ad-inline > .hint, .ad-form .field.ad-inline > .error { grid-column: 2; }
+.ad-form .field.ad-inline > label { color: var(--text-primary); font-size: var(--fs-md); font-weight: 400; }
+.ad-restore .ad-form { gap: 6px; }
+.ad-range { white-space: nowrap; }
+.ad-restore-note { align-items: center; }
+.ad-details .ad-buttons { padding-top: 8px; }
+
+.ad-snapshots th, .ad-snapshots td { padding: 0 6px; }
+.ad-restore .field.ad-inline { grid-template-columns: 150px minmax(0, 1fr); }
+.panel-body .ad-details { padding: 10px 14px; }
+.ad-details .inspector-title { font-size: var(--fs-lg); }
+.ad-buttons .btn { padding: 0 9px; }
+.ad-details .kv-row { min-height: 23px; }
+.ad-details .ad-buttons { flex-wrap: nowrap; }
+.ad-restore { padding: 8px 16px; gap: 6px; }
+.ad-jobs th, .ad-jobs td { padding: 0 6px; }
+.ad-diff { white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -1,0 +1,257 @@
+/*
+ * Design tokens: the Calm Workbench palette, type scale, and shell metrics.
+ *
+ * Light: white panels on a pale cool-silver ground, ink text, thin cool
+ * borders, modest steel-blue selection, neutral charcoal primary buttons.
+ * Dark: the same roles on deep slate.
+ *
+ * `.studio-root[data-theme]` carries the Preferences theme: `dark` forces the
+ * dark tokens, `light` suppresses them, `system` follows the OS. A selector
+ * cannot OR in a media query, so the dark block appears twice. Keep the two
+ * copies identical.
+ */
+
+:root {
+  /* Surfaces */
+  --surface-page: #f4f7fa;
+  --surface-panel: #ffffff;
+  --surface-sunken: #f6f8fb;
+  --surface-sidebar: #eef3f8;
+  --surface-header: #ffffff;
+  --surface-footer: #f3f7fb;
+  --surface-hover: #edf2f7;
+  --surface-selected: #dcebfb;
+  --surface-selected-strong: #cfe3fa;
+  --surface-overlay: #ffffff;
+  --scrim: rgba(15, 27, 45, 0.28);
+
+  /* Text */
+  --text-primary: #0f1b2d;
+  --text-secondary: #46576b;
+  --text-tertiary: #66768a;
+  --text-on-primary: #ffffff;
+  --text-link: #1d5fbf;
+
+  /* Lines */
+  --border-soft: #e7ecf2;
+  --border-mid: #d8e0e9;
+  --border-strong: #c2ccd8;
+
+  /* Accent and actions */
+  --accent-blue: #2563c9;
+  --accent-blue-soft: #e5effc;
+  --btn-primary-bg: #23344c;
+  --btn-primary-bg-hover: #1a2739;
+  --btn-primary-border: #23344c;
+  --btn-primary-fg: #ffffff;
+  --focus-ring: #3b82f6;
+
+  /* Status */
+  --ok: #1f9d55;
+  --warn: #e39b0b;
+  --err: #d43c3c;
+  --idle: #98a2b3;
+  --text-success: #17713d;
+  --text-warning: #8a5300;
+  --text-danger: #b42318;
+  --text-info: #1d5fbf;
+  --danger-soft: #fdecec;
+  --warn-soft: #fdf3dc;
+  --ok-soft: #e6f6ec;
+
+  /* Tone pairs for type and capability badges: background, foreground. */
+  --tone-blue-bg: #e5effc;
+  --tone-blue-fg: #1d5fbf;
+  --tone-gray-bg: #eef1f5;
+  --tone-gray-fg: #475467;
+  --tone-green-bg: #e3f5ea;
+  --tone-green-fg: #17713d;
+  --tone-violet-bg: #eeeafc;
+  --tone-violet-fg: #5a45ae;
+  --tone-amber-bg: #fdf1d8;
+  --tone-amber-fg: #8a5300;
+  --tone-red-bg: #fde9e7;
+  --tone-red-fg: #b42318;
+  --tone-teal-bg: #ddf3f2;
+  --tone-teal-fg: #0d6e69;
+  --tone-orange-bg: #fdebde;
+  --tone-orange-fg: #a1460c;
+
+  /* Data visualization, ordered for adjacent contrast. */
+  --viz-1: #2f6fd6;
+  --viz-2: #1f9d8a;
+  --viz-3: #e08a1e;
+  --viz-4: #8a63d2;
+  --viz-5: #d1495b;
+  --viz-6: #5c7a99;
+  --viz-grid: #e7ecf2;
+
+  /* Terminal: the Console transcript is dark in both themes. */
+  --terminal-bg: #111a27;
+  --terminal-fg: #e6edf6;
+  --terminal-dim: #8c9db3;
+  --terminal-kw: #7cb1ff;
+  --terminal-fn: #c4b2fa;
+  --terminal-str: #86dba6;
+  --terminal-num: #f6b07a;
+  --terminal-err: #f59a9a;
+
+  /* Elevation */
+  --shadow-popover: 0 10px 28px rgba(15, 27, 45, 0.12), 0 1px 4px rgba(15, 27, 45, 0.06);
+  --shadow-overlay: 0 20px 56px rgba(15, 27, 45, 0.18), 0 2px 8px rgba(15, 27, 45, 0.08);
+
+  /* Type */
+  --font-sans: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 20px;
+
+  /* Metrics */
+  --sidebar-w: 272px;
+  --sidebar-collapsed-w: 64px;
+  --header-h: 56px;
+  --footer-h: 36px;
+  --row-h: 36px;
+  --control-h: 32px;
+  --radius-sm: 4px;
+  --radius: 6px;
+  --radius-lg: 8px;
+  --gap: 8px;
+}
+
+:root:has(.studio-root[data-theme="dark"]) {
+  --surface-page: #11171d;
+  --surface-panel: #171f27;
+  --surface-sunken: #1b242d;
+  --surface-sidebar: #182029;
+  --surface-header: #141a20;
+  --surface-footer: #131920;
+  --surface-hover: #212b35;
+  --surface-selected: #183755;
+  --surface-selected-strong: #1d4268;
+  --surface-overlay: #1b232c;
+  --scrim: rgba(3, 7, 12, 0.6);
+  --text-primary: #e6ebf1;
+  --text-secondary: #b3bfcc;
+  --text-tertiary: #8e9bab;
+  --text-on-primary: #eaf2ff;
+  --text-link: #7cb1ff;
+  --border-soft: #232d38;
+  --border-mid: #2c3844;
+  --border-strong: #3c4a58;
+  --accent-blue: #6aa6ff;
+  --accent-blue-soft: #16324f;
+  --btn-primary-bg: #163a63;
+  --btn-primary-bg-hover: #1b4675;
+  --btn-primary-border: #2f6fb5;
+  --btn-primary-fg: #eaf2ff;
+  --focus-ring: #6aa6ff;
+  --ok: #3cc47a;
+  --warn: #f2b23a;
+  --err: #f06a6a;
+  --idle: #6b7787;
+  --text-success: #72d69c;
+  --text-warning: #f4c46b;
+  --text-danger: #f39191;
+  --text-info: #7cb1ff;
+  --danger-soft: #3a1d20;
+  --warn-soft: #3a2c12;
+  --ok-soft: #15332a;
+  --tone-blue-bg: #16324f;
+  --tone-blue-fg: #8fc0ff;
+  --tone-gray-bg: #26303b;
+  --tone-gray-fg: #c2ccd8;
+  --tone-green-bg: #163627;
+  --tone-green-fg: #7fd8a3;
+  --tone-violet-bg: #2b2550;
+  --tone-violet-fg: #b9a9f5;
+  --tone-amber-bg: #3a2d10;
+  --tone-amber-fg: #f4c46b;
+  --tone-red-bg: #3c1e21;
+  --tone-red-fg: #f5a3a3;
+  --tone-teal-bg: #11363a;
+  --tone-teal-fg: #79d6cf;
+  --tone-orange-bg: #3d2614;
+  --tone-orange-fg: #f6b07a;
+  --viz-1: #6aa6ff;
+  --viz-2: #4cc9b0;
+  --viz-3: #f2a54a;
+  --viz-4: #b08ef0;
+  --viz-5: #f07a8a;
+  --viz-6: #8fa6bf;
+  --viz-grid: #26313c;
+  --terminal-bg: #0d141c;
+  --shadow-popover: 0 10px 28px rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0, 0, 0, 0.3);
+  --shadow-overlay: 0 20px 56px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(:has(.studio-root[data-theme="light"])) {
+    --surface-page: #11171d;
+    --surface-panel: #171f27;
+    --surface-sunken: #1b242d;
+    --surface-sidebar: #182029;
+    --surface-header: #141a20;
+    --surface-footer: #131920;
+    --surface-hover: #212b35;
+    --surface-selected: #183755;
+    --surface-selected-strong: #1d4268;
+    --surface-overlay: #1b232c;
+    --scrim: rgba(3, 7, 12, 0.6);
+    --text-primary: #e6ebf1;
+    --text-secondary: #b3bfcc;
+    --text-tertiary: #8e9bab;
+    --text-on-primary: #eaf2ff;
+    --text-link: #7cb1ff;
+    --border-soft: #232d38;
+    --border-mid: #2c3844;
+    --border-strong: #3c4a58;
+    --accent-blue: #6aa6ff;
+    --accent-blue-soft: #16324f;
+    --btn-primary-bg: #163a63;
+    --btn-primary-bg-hover: #1b4675;
+    --btn-primary-border: #2f6fb5;
+    --btn-primary-fg: #eaf2ff;
+    --focus-ring: #6aa6ff;
+    --ok: #3cc47a;
+    --warn: #f2b23a;
+    --err: #f06a6a;
+    --idle: #6b7787;
+    --text-success: #72d69c;
+    --text-warning: #f4c46b;
+    --text-danger: #f39191;
+    --text-info: #7cb1ff;
+    --danger-soft: #3a1d20;
+    --warn-soft: #3a2c12;
+    --ok-soft: #15332a;
+    --tone-blue-bg: #16324f;
+    --tone-blue-fg: #8fc0ff;
+    --tone-gray-bg: #26303b;
+    --tone-gray-fg: #c2ccd8;
+    --tone-green-bg: #163627;
+    --tone-green-fg: #7fd8a3;
+    --tone-violet-bg: #2b2550;
+    --tone-violet-fg: #b9a9f5;
+    --tone-amber-bg: #3a2d10;
+    --tone-amber-fg: #f4c46b;
+    --tone-red-bg: #3c1e21;
+    --tone-red-fg: #f5a3a3;
+    --tone-teal-bg: #11363a;
+    --tone-teal-fg: #79d6cf;
+    --tone-orange-bg: #3d2614;
+    --tone-orange-fg: #f6b07a;
+    --viz-1: #6aa6ff;
+    --viz-2: #4cc9b0;
+    --viz-3: #f2a54a;
+    --viz-4: #b08ef0;
+    --viz-5: #f07a8a;
+    --viz-6: #8fa6bf;
+    --viz-grid: #26313c;
+    --terminal-bg: #0d141c;
+    --shadow-popover: 0 10px 28px rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0, 0, 0, 0.3);
+    --shadow-overlay: 0 20px 56px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+  }
+}

@@ -1,0 +1,164 @@
+/*
+ * Workspace panels and page layouts.
+ *
+ *   .page-body        the scroll-free area under the page tabs
+ *   .workbench        a row of panels with gaps (.workbench.col for a column)
+ *   .panel            titled frame: .panel-header + .panel-body
+ *   .panel.fill       takes the remaining space in its row or column
+ *   .resize-handle    divider between panels; .drag-capture during a drag
+ *   .page-header      title row for pages without tabs
+ *   .async-*          AsyncView states: .async-loading  .async-empty  .async-error
+ */
+
+.page-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  padding: var(--gap);
+  gap: var(--gap);
+}
+
+.workbench {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+.workbench.col { flex-direction: column; }
+.workbench > .panel:not([style]), .workbench > .workbench { flex: 1 1 0; }
+
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 20px;
+  border-bottom: 1px solid var(--border-soft);
+  background: var(--surface-header);
+  flex: none;
+}
+.page-header .ico { color: var(--text-tertiary); }
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-lg);
+  background: var(--surface-panel);
+  overflow: hidden;
+}
+.panel.fill { flex: 1 1 0; }
+.panel-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 8px 0 6px;
+  border-bottom: 1px solid var(--border-soft);
+  flex: none;
+}
+.panel-grip {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 32px;
+  color: var(--text-tertiary);
+  cursor: grab;
+}
+.panel-title {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+.panel-close { color: var(--text-tertiary); }
+.panel-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* A divider between two panels. Its hit area is the gap itself. */
+.resize-handle {
+  position: relative;
+  flex: none;
+  z-index: 2;
+}
+.resize-handle.horizontal { width: var(--gap); cursor: col-resize; }
+.resize-handle.vertical { height: var(--gap); cursor: row-resize; }
+.resize-handle::after {
+  content: "";
+  position: absolute;
+  border-radius: 2px;
+  background: transparent;
+}
+.resize-handle.horizontal::after { top: 50%; left: 50%; width: 3px; height: 32px; transform: translate(-50%, -50%); }
+.resize-handle.vertical::after { top: 50%; left: 50%; width: 32px; height: 3px; transform: translate(-50%, -50%); }
+.resize-handle:hover::after, .resize-handle:focus-visible::after { background: var(--border-strong); }
+.resize-handle:focus-visible { outline: none; }
+
+.drag-capture { position: fixed; inset: 0; z-index: 1000; }
+.drag-capture.horizontal { cursor: col-resize; }
+.drag-capture.vertical { cursor: row-resize; }
+
+/* One line of context under a panel header, e.g. "Groups hosted on node-2". */
+.panel-subtitle {
+  padding: 10px 16px 6px;
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  flex: none;
+}
+.panel-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-top: 1px solid var(--border-soft);
+  flex: none;
+}
+
+/* Inspector: the selected object's facts, in a right-hand panel. */
+.inspector { display: flex; flex-direction: column; gap: 4px; padding: 16px; min-height: 100%; }
+.inspector-head { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
+.inspector-title { font-size: var(--fs-xl); font-weight: 600; }
+.inspector-section { margin-top: 20px; margin-bottom: 4px; font-size: var(--fs-lg); font-weight: 600; }
+.inspector-note { margin-top: 12px; color: var(--text-tertiary); font-size: var(--fs-sm); }
+.inspector-actions { display: flex; gap: 8px; margin-top: auto; padding-top: 16px; }
+.inspector-actions > .btn { flex: 1; }
+
+.state-icon { display: inline-grid; place-items: center; }
+.state-icon.warn { color: var(--warn); }
+.state-icon.err { color: var(--err); }
+.state-icon.muted { color: var(--text-tertiary); }
+
+/* AsyncView states: loading, empty, and error in place of a panel's content. */
+.async-loading, .async-empty { text-align: center; color: var(--text-tertiary); font-size: var(--fs-xs); }
+.async-loading { padding: 40px 20px; }
+.async-empty { padding: 24px 16px; }
+.async-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 32px 20px;
+  text-align: center;
+  font-size: var(--fs-xs);
+}
+.async-error-msg { max-width: 280px; color: var(--text-secondary); }

@@ -1,0 +1,83 @@
+/*
+ * The Connection Manager: a full window with its own thin header and footer,
+ * no studio sidebar. Panels, tables, and the inspector come from panels.css
+ * and controls.css; this file adds only what is specific to the manager.
+ */
+
+.manager {
+  display: grid;
+  grid-template-rows: var(--header-h) minmax(0, 1fr) var(--footer-h);
+  width: 100vw;
+  height: 100vh;
+  background: var(--surface-page);
+}
+
+.manager-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 16px 0 18px;
+  border-bottom: 1px solid var(--border-mid);
+  background: var(--surface-header);
+}
+.manager-brand { display: flex; align-items: center; gap: 10px; }
+.manager-brand .brand-mark { display: grid; place-items: center; color: var(--accent-blue); }
+.manager-brand .brand-name { font-size: calc(var(--fs-md) + 2px); font-weight: 600; letter-spacing: -0.01em; }
+
+.manager-main { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+.page-title {
+  padding: 14px 20px 6px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  flex: none;
+}
+
+.manager-footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 18px;
+  border-top: 1px solid var(--border-mid);
+  background: var(--surface-footer);
+  color: var(--text-secondary);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+}
+
+/* ---------- Saved connections table ---------- */
+
+.cell-icon { display: inline-flex; align-items: center; gap: 10px; }
+.cell-icon .ico { color: var(--text-secondary); }
+.dt tbody tr.selected .cell-icon .ico { color: var(--text-link); }
+.th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+}
+.th-sort:hover { color: var(--text-primary); }
+.badge.inline { margin-left: 8px; }
+.table-empty { height: 72px; text-align: center; color: var(--text-tertiary); }
+.connections-table tbody tr:focus-visible { outline-offset: -2px; }
+.dt .status { color: var(--text-primary); }
+
+/* ---------- Connection details ---------- */
+
+.connection-details .inspector-head { flex-wrap: nowrap; gap: 12px; }
+.connection-details .inspector-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inspector-icon { display: grid; place-items: center; color: var(--text-secondary); flex: none; }
+.inspector-actions.top {
+  margin-top: 0;
+  padding: 4px 0 14px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.with-info { display: inline-flex; align-items: center; gap: 8px; }
+.info-tip { display: inline-grid; place-items: center; color: var(--text-tertiary); }
+.kv.cert { margin-top: 14px; padding-top: 6px; border-top: 1px solid var(--border-soft); }
+.cert-link { margin-top: 10px; align-self: flex-start; }
+.cert-link:disabled { color: var(--text-tertiary); cursor: not-allowed; text-decoration: none; }

@@ -4,73 +4,8 @@
 //! testable. Every later wiring phase maps a `use_resource` result into an
 //! `AsyncState<T>` via `from_value` and hands it to the `AsyncView` component.
 
-use crate::models::explorer::RecordDetail;
-use crate::models::shell::{NavBadges, SessionInfo};
-use crate::models::viewers::SubGraph;
-use crate::models::workbench::{QueryPlan, ResultSet};
 use crate::services::error::StudioError;
-
-/// Anything that can report emptiness, so `from_value` can distinguish a
-/// loaded-but-empty result (-> Empty) from a loaded-with-data result.
-pub trait IsEmpty {
-    fn is_empty(&self) -> bool;
-}
-
-impl<T> IsEmpty for Vec<T> {
-    fn is_empty(&self) -> bool {
-        Vec::is_empty(self)
-    }
-}
-
-// Single-value seam reads have no "empty" shape: a fetched value is never
-// "empty", it either arrived or it errored (`MockBehavior::Empty` folds into
-// `Ready` for these — see `record_detail`'s precedent). Each impl is listed
-// explicitly, deliberately not a blanket `impl<T> IsEmpty for T`, so a future
-// single-value model must opt in here rather than silently inheriting a
-// meaning that may not fit it.
-impl IsEmpty for SessionInfo {
-    fn is_empty(&self) -> bool {
-        false
-    }
-}
-
-impl IsEmpty for NavBadges {
-    fn is_empty(&self) -> bool {
-        false
-    }
-}
-
-impl IsEmpty for RecordDetail {
-    fn is_empty(&self) -> bool {
-        false
-    }
-}
-
-impl IsEmpty for QueryPlan {
-    fn is_empty(&self) -> bool {
-        false
-    }
-}
-
-// `ResultSet` and `SubGraph` are also single fetched values, but unlike the
-// four above they wrap a list (rows / nodes) whose emptiness IS a real,
-// common outcome — "your query returned no rows" for a workbench, or "this
-// collection has no nodes" for a graph viewer. Folding `MockBehavior::Empty`
-// into `Ready` for these would make `AsyncState::Empty` unreachable for the
-// query and graph panes, so they report their own emptiness instead of the
-// blanket `false` above (see `apply_one_or_empty` in `mock_behavior`, which
-// gives the mock seam methods a way to actually deliver an empty payload).
-impl IsEmpty for ResultSet {
-    fn is_empty(&self) -> bool {
-        self.rows().is_empty()
-    }
-}
-
-impl IsEmpty for SubGraph {
-    fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
-    }
-}
+pub use crate::services::is_empty::IsEmpty;
 
 /// The canonical, unit-tested mapping from a `use_resource` read to the four UI
 /// states. Wired views call `from_value` directly (cloning the resource value
@@ -137,7 +72,7 @@ impl<T> AsyncState<T> {
     pub fn error_message(&self) -> Option<String> {
         match self {
             AsyncState::Error(e) => Some(e.to_string()),
-            _ => None,
+            AsyncState::Loading | AsyncState::Empty | AsyncState::Loaded(_) => None,
         }
     }
 
@@ -151,7 +86,7 @@ impl<T> AsyncState<T> {
     pub fn loaded(&self) -> Option<&T> {
         match self {
             AsyncState::Loaded(t) => Some(t),
-            _ => None,
+            AsyncState::Loading | AsyncState::Empty | AsyncState::Error(_) => None,
         }
     }
 
@@ -160,7 +95,7 @@ impl<T> AsyncState<T> {
     pub fn loaded_mut(&mut self) -> Option<&mut T> {
         match self {
             AsyncState::Loaded(t) => Some(t),
-            _ => None,
+            AsyncState::Loading | AsyncState::Empty | AsyncState::Error(_) => None,
         }
     }
 
@@ -182,8 +117,6 @@ impl<T> AsyncState<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::explorer::RecordRow;
-    use crate::models::viewers::GraphNode;
 
     #[test]
     fn async_state_none_is_loading() {
@@ -271,96 +204,6 @@ mod tests {
                 .error_message()
                 .is_some()
         );
-    }
-
-    #[test]
-    fn single_value_seam_models_are_loaded_not_empty() {
-        // Before their `IsEmpty` impls existed, these four single-value seam
-        // models could not satisfy `AsyncState<T>::from_value`'s `T: IsEmpty`
-        // bound at all, so they could never be rendered through `AsyncView`.
-        // Each must map a fetched value straight to `Loaded`, never `Empty`:
-        // none of the four has a meaningful "empty" shape.
-        let session_info = AsyncState::from_value(Some(Ok(SessionInfo {
-            server_version: String::new(),
-            timezone: String::new(),
-        })));
-        assert!(matches!(session_info, AsyncState::Loaded(_)));
-
-        let nav_badges = AsyncState::from_value(Some(Ok(NavBadges {
-            query: 0,
-            streams: 0,
-        })));
-        assert!(matches!(nav_badges, AsyncState::Loaded(_)));
-
-        let record_detail = AsyncState::from_value(Some(Ok(RecordDetail {
-            id: String::new(),
-            title: String::new(),
-            body_json: String::new(),
-            footer: String::new(),
-        })));
-        assert!(matches!(record_detail, AsyncState::Loaded(_)));
-
-        let query_plan = AsyncState::from_value(Some(Ok(QueryPlan {
-            text: String::new(),
-        })));
-        assert!(matches!(query_plan, AsyncState::Loaded(_)));
-    }
-
-    #[test]
-    fn zero_row_result_set_is_empty() {
-        // Unlike the four single-value models above, `ResultSet` wraps a
-        // list: a query that returns zero rows is the most common
-        // non-error workbench outcome and must reach `AsyncState::Empty`,
-        // not `Loaded` with an empty table.
-        let result_set = AsyncState::from_value(Some(Ok(ResultSet::new(
-            vec!["id".to_string()],
-            Vec::new(),
-            3,
-            "0 rows".to_string(),
-        )
-        .expect("rectangular"))));
-        assert!(matches!(result_set, AsyncState::Empty));
-    }
-
-    #[test]
-    fn non_empty_result_set_is_loaded() {
-        let result_set = AsyncState::from_value(Some(Ok(ResultSet::new(
-            vec!["id".to_string()],
-            vec![RecordRow {
-                id: "1".to_string(),
-                cells: vec!["1".to_string()],
-            }],
-            3,
-            "1 row".to_string(),
-        )
-        .expect("rectangular"))));
-        assert!(matches!(result_set, AsyncState::Loaded(_)));
-    }
-
-    #[test]
-    fn zero_node_sub_graph_is_empty() {
-        // A collection with no nodes is a real outcome for the graph viewer
-        // and must reach `AsyncState::Empty`, not `Loaded` with an empty
-        // graph.
-        let sub_graph = AsyncState::from_value(Some(Ok(SubGraph {
-            nodes: Vec::new(),
-            edges: Vec::new(),
-        })));
-        assert!(matches!(sub_graph, AsyncState::Empty));
-    }
-
-    #[test]
-    fn non_empty_sub_graph_is_loaded() {
-        let sub_graph = AsyncState::from_value(Some(Ok(SubGraph {
-            nodes: vec![GraphNode {
-                id: "n1".to_string(),
-                label: "alice".to_string(),
-                x: 0.0,
-                y: 0.0,
-            }],
-            edges: Vec::new(),
-        })));
-        assert!(matches!(sub_graph, AsyncState::Loaded(_)));
     }
 
     #[test]

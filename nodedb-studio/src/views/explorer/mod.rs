@@ -1,7 +1,27 @@
-//! Explorer: the engine-aware collection browser.
+//! Explorer: browse collections and their records, edit them, and move data
+//! in and out.
 
-pub mod sidebar;
-mod view;
-pub mod viewers;
+mod actions;
+mod array;
+mod array_workspace;
+mod catalog;
+mod cells;
+mod details;
+mod details_geo;
+mod details_rows;
+mod details_vector;
+mod graph;
+mod links;
+mod page;
+mod schema_tabs;
+mod table;
+mod toolbar;
+mod transfer_form;
+mod transfer_jobs;
+mod transfer_panels;
+mod workspace;
 
-pub use view::{Explorer, default_selection, selection_still_present};
+pub mod transfer;
+
+pub use page::ExplorerPage;
+pub use transfer::DataTransferPage;
