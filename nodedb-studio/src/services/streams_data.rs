@@ -95,7 +95,7 @@ pub(crate) fn cdc_rows_from_mock() -> Vec<CdcRow> {
 mod tests {
     use super::*;
     use crate::services::async_state::AsyncState;
-    use crate::services::connection_service::MockConnectionService;
+    use crate::services::mock::MockConnectionService;
 
     #[test]
     fn mock_rows_have_unique_stable_ids() {
@@ -227,7 +227,7 @@ mod tests {
 #[cfg(test)]
 mod lifecycle_tests {
     use super::*;
-    use crate::services::connection_service::MockConnectionService;
+    use crate::services::mock::MockConnectionService;
     use crate::services::mock_behavior::MockBehavior;
 
     #[tokio::test]

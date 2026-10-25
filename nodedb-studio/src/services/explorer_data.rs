@@ -29,7 +29,7 @@ mod tests {
     use super::*;
     use crate::models::collection::StorageMode;
     use crate::services::async_state::AsyncState;
-    use crate::services::connection_service::MockConnectionService;
+    use crate::services::mock::MockConnectionService;
 
     #[tokio::test]
     async fn groups_are_ordered_and_non_empty() {

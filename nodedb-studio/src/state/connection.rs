@@ -1,8 +1,8 @@
 //! The active connection and its capabilities.
 //!
 //! Identity in NodeDB-Studio is per-connection, NOT global. There is no
-//! "Studio account": switching connections swaps the NodeDB user, role, avatar
-//! letter, and the capability flags that reshape the entire shell.
+//! "Studio account": switching connections swaps the person, NodeDB user,
+//! role, avatar letter, and the capability flags that reshape the shell.
 
 use serde::{Deserialize, Serialize};
 
@@ -14,26 +14,28 @@ use crate::services::error::StudioError;
 pub enum Capability {
     Graph,
     Vector,
-    Streams,
+    Events,
     Timeseries,
     Spatial,
-    Fts,
+    Search,
     Sync,
     Cluster,
     Readonly,
 }
 
-/// What the active connection's credentials can see and do. Rail items and
-/// Admin sub-tabs render conditionally on these flags.
+/// What the active connection's credentials can see and do. Sidebar entries
+/// render conditionally on these flags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Capabilities {
     pub graph: bool,
     pub vector: bool,
-    pub streams: bool,
+    /// Change feeds, topics, notifications, and scheduled jobs.
+    pub events: bool,
     pub timeseries: bool,
     pub spatial: bool,
-    pub fts: bool,
-    /// Peer replication exists.
+    /// Full-text and hybrid search.
+    pub search: bool,
+    /// Lite devices synchronize with this Origin.
     pub sync: bool,
     /// Multi-node deployment.
     pub cluster: bool,
@@ -49,10 +51,10 @@ impl Capabilities {
         match cap {
             Capability::Graph => self.graph,
             Capability::Vector => self.vector,
-            Capability::Streams => self.streams,
+            Capability::Events => self.events,
             Capability::Timeseries => self.timeseries,
             Capability::Spatial => self.spatial,
-            Capability::Fts => self.fts,
+            Capability::Search => self.search,
             Capability::Sync => self.sync,
             Capability::Cluster => self.cluster,
             Capability::Readonly => self.readonly,
@@ -65,11 +67,13 @@ impl Capabilities {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActiveConnection {
     pub name: String,
-    /// Secondary line shown under the connection chip (e.g. "nodedb · 8.4ms · 3 dbs").
+    /// Secondary line shown under the connection chip (e.g. "nodedb · 22ms · 12 dbs").
     pub sub: String,
-    /// NodeDB user from this connection's credentials.
+    /// The person behind the account, e.g. "Hana Idris".
+    pub display_name: String,
+    /// NodeDB user from this connection's credentials, e.g. "admin".
     pub user: String,
-    /// Role string, e.g. "admin" or "analyst (read-only)".
+    /// Role this user holds, e.g. "Database administrator".
     pub role: String,
     pub capabilities: Capabilities,
     /// The database the chrome shows as selected. The list to pick from is
@@ -78,14 +82,19 @@ pub struct ActiveConnection {
 }
 
 impl ActiveConnection {
-    /// Avatar letter derived from the NodeDB user. Uppercased first character,
-    /// `?` if the username is somehow empty.
+    /// Avatar letter: the first letter of the display name, else of the user
+    /// name. Uppercased, `?` when both are empty.
     pub fn avatar_letter(&self) -> char {
-        self.user
-            .chars()
-            .next()
-            .map(|c| c.to_ascii_uppercase())
+        [&self.display_name, &self.user]
+            .iter()
+            .find_map(|s| s.trim().chars().next())
+            .map(|c| c.to_uppercase().next().unwrap_or(c))
             .unwrap_or('?')
+    }
+
+    /// `admin@staging-cluster`: the user on this connection.
+    pub fn account(&self) -> String {
+        format!("{}@{}", self.user, self.name)
     }
 }
 
@@ -121,6 +130,27 @@ pub fn apply_connect(
     }
 }
 
+/// Reconcile the active session with the result of a database switch.
+///
+/// On `Ok` the chosen database becomes current. On `Err` the session keeps
+/// the database it had: the server did not move, so the header must not say
+/// it did. The error returns for the caller to show.
+pub fn apply_database_switch(
+    active: &mut Option<ActiveConnection>,
+    database: &str,
+    result: Result<(), StudioError>,
+) -> Option<StudioError> {
+    match result {
+        Ok(()) => {
+            if let Some(c) = active.as_mut() {
+                c.current_database = database.to_string();
+            }
+            None
+        }
+        Err(e) => Some(e),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -129,10 +159,10 @@ mod tests {
         Capabilities {
             graph: false,
             vector: false,
-            streams: false,
+            events: false,
             timeseries: false,
             spatial: false,
-            fts: false,
+            search: false,
             sync: false,
             cluster: false,
             readonly: false,
@@ -143,6 +173,7 @@ mod tests {
         ActiveConnection {
             name: name.into(),
             sub: "nodedb".into(),
+            display_name: "Alice Ng".into(),
             user: "alice".into(),
             role: "admin".into(),
             capabilities: caps(),
@@ -183,5 +214,46 @@ mod tests {
                 .name,
             "local-dev"
         );
+    }
+
+    #[test]
+    fn avatar_letter_comes_from_the_display_name() {
+        let mut c = session("local-dev");
+        assert_eq!(c.avatar_letter(), 'A');
+        c.display_name = "hana idris".into();
+        assert_eq!(c.avatar_letter(), 'H');
+        c.display_name.clear();
+        c.user = "root".into();
+        assert_eq!(c.avatar_letter(), 'R');
+        c.user.clear();
+        assert_eq!(c.avatar_letter(), '?');
+    }
+
+    #[test]
+    fn account_names_the_user_on_the_connection() {
+        let mut c = session("staging-cluster");
+        c.user = "admin".into();
+        assert_eq!(c.account(), "admin@staging-cluster");
+    }
+
+    #[test]
+    fn database_switch_ok_moves_the_session() {
+        let mut active = Some(session("local-dev"));
+        let err = apply_database_switch(&mut active, "commerce", Ok(()));
+        assert!(err.is_none());
+        assert_eq!(
+            active.map(|c| c.current_database).as_deref(),
+            Some("commerce")
+        );
+    }
+
+    /// A rejected switch must leave the header on the database it named
+    /// before, because the server session did not move.
+    #[test]
+    fn database_switch_err_keeps_the_current_database() {
+        let mut active = Some(session("local-dev"));
+        let err = apply_database_switch(&mut active, "commerce", Err(StudioError::NotConnected));
+        assert!(err.is_some());
+        assert_eq!(active.map(|c| c.current_database).as_deref(), Some("main"));
     }
 }

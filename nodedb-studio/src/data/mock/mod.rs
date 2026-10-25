@@ -8,6 +8,7 @@
 
 mod admin;
 mod cdc;
+mod cluster;
 mod connections;
 mod docs;
 mod explorer;
@@ -19,7 +20,11 @@ mod workbench;
 
 pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_ranges, users};
 pub use cdc::{ChangeOp, cdc_events};
-pub use connections::{connections, databases_for, nav_badges, notifications, session_info};
+pub use cluster::{cluster_members, hosted_groups};
+pub use connections::{
+    connection_activity, connections, nav_badges, notifications, recent_items, saved_from_draft,
+    session_info,
+};
 pub use explorer::{collection_groups, record_detail, records};
 pub use streams::{
     materialized_views, notify_channel_rows, notify_message_rows, scheduled_jobs, topics,

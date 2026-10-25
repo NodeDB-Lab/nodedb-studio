@@ -4,12 +4,13 @@
 //! disconnected and `Studio` when connected. Inside `Studio`, the router mounts
 //! exactly one of the studio views below into the content `Outlet`.
 
-pub mod connection_manager;
+pub mod connections;
 pub mod studio_shell;
 
 // Studio views (routed). One module per rail destination; each renders the
 // faithful per-view content ported from the mockup.
 pub mod admin;
+pub mod cluster;
 pub mod console;
 pub mod designer;
 pub mod explorer;
@@ -20,4 +21,5 @@ pub mod spatial_view;
 pub mod streams;
 pub mod sync;
 pub mod timeseries_dashboard;
+pub mod transitional;
 pub mod vector_space;

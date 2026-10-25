@@ -1,257 +1,475 @@
-use crate::models::notification::{Notification, NotificationTarget, Severity};
-use crate::models::shell::{NavBadges, SessionInfo};
+use crate::models::connections::{
+    AuthMethod, CertInfo, ConnStatus, ConnectionDraft, ConnectionEvent, ConnectionKind,
+    ConnectionTarget, EventOutcome, Observation, TlsConfig, TlsStatus,
+};
+use crate::models::format::epoch;
+use crate::models::notification::{
+    Notification, NotificationKind, NotificationTarget, ScopeKind, Severity,
+};
+use crate::models::shell::{NavBadges, RecentItem, RecentKind, SessionInfo};
 use crate::state::connection::{Capabilities, Capability};
-use crate::state::connections_registry::{ConnStatus, ConnectionProfile, SavedConnection};
+use crate::state::connections_registry::{ConnectionProfile, SavedConnection};
 
-/// The four saved connections shown on the Connection Manager. Three are
-/// reachable; `test-nodedb` is offline (no profile), matching the mockup.
+fn all_capabilities(readonly: bool) -> Capabilities {
+    Capabilities {
+        graph: true,
+        vector: true,
+        events: true,
+        timeseries: true,
+        spatial: true,
+        search: true,
+        sync: true,
+        cluster: true,
+        readonly,
+    }
+}
+
+fn names(list: &[&str]) -> Vec<String> {
+    list.iter().map(|n| n.to_string()).collect()
+}
+
+/// The four saved connections shown on the Connection Manager. Three can be
+/// connected through a profile; `test-cluster` has none and is offline.
 pub fn connections() -> Vec<SavedConnection> {
     vec![
         SavedConnection {
-            name: "local-nodedb-dev".into(),
-            meta: "nodedb · localhost:2480".into(),
-            sub: "nodedb · 8.4ms · 3 dbs".into(),
-            status: ConnStatus::Online,
-            db_count: Some(3),
-            ping: Some("8.4ms".into()),
-            server: "dev".into(),
+            name: "Local development".into(),
+            description: "Local Lite file".into(),
+            target: ConnectionTarget::Lite {
+                path: "/home/hana/nodedb/dev.nodedb".into(),
+            },
+            database: String::new(),
+            auth: AuthMethod::SystemCredentials,
+            username: String::new(),
+            keychain: false,
+            tls: TlsConfig::default(),
+            status: ConnStatus::Available,
+            last_used: epoch(2026, 6, 10, 14, 20, 0),
+            created: epoch(2026, 3, 2, 9, 40, 0),
+            observation: Some(Observation {
+                at: epoch(2026, 6, 10, 14, 20, 33),
+                ping_ms: 8,
+                db_count: 3,
+                version: "1.4.2".into(),
+                tls: TlsStatus::NotUsed,
+            }),
             profile: Some(ConnectionProfile {
-                user: "root".into(),
-                role: "admin".into(),
+                display_name: "Hana Idris".into(),
+                user: "hana".into(),
+                role: "Local owner".into(),
                 capabilities: Capabilities {
-                    graph: true,
-                    vector: true,
-                    streams: true,
-                    timeseries: true,
-                    spatial: true,
-                    fts: true,
                     sync: false,
                     cluster: false,
-                    readonly: false,
+                    ..all_capabilities(false)
                 },
-                databases: vec![
-                    "analytics".into(),
-                    "events_log".into(),
-                    "social_graph".into(),
-                ],
+                databases: names(&["analytics", "events_log", "social_graph"]),
                 default_database: "analytics".into(),
             }),
         },
         SavedConnection {
             name: "staging-cluster".into(),
-            meta: "nodedb · 3-node cluster · vpn".into(),
-            sub: "nodedb · 22ms · 12 dbs".into(),
-            status: ConnStatus::Online,
-            db_count: Some(12),
-            ping: Some("22ms".into()),
-            server: "dev".into(),
+            description: "Staging environment".into(),
+            target: ConnectionTarget::Origin {
+                host: "db.staging.example".into(),
+                port: 7432,
+            },
+            database: "analytics".into(),
+            auth: AuthMethod::UserPassword,
+            username: "admin".into(),
+            keychain: true,
+            tls: TlsConfig {
+                required: true,
+                server_name: "db.staging.example".into(),
+                ca_file: "/etc/ssl/certs/staging-ca.pem".into(),
+                ..TlsConfig::default()
+            },
+            status: ConnStatus::Available,
+            last_used: epoch(2026, 6, 13, 13, 21, 0),
+            created: epoch(2026, 5, 1, 10, 12, 0),
+            observation: Some(Observation {
+                at: epoch(2026, 6, 13, 13, 21, 0),
+                ping_ms: 22,
+                db_count: 12,
+                version: "1.4.2".into(),
+                tls: TlsStatus::Verified(CertInfo {
+                    issuer: "R3".into(),
+                    subject: "CN=db.staging.example".into(),
+                    expires_at: epoch(2026, 12, 10, 13, 21, 0),
+                }),
+            }),
             profile: Some(ConnectionProfile {
-                user: "hatta_admin".into(),
-                role: "admin".into(),
-                capabilities: Capabilities {
-                    graph: true,
-                    vector: true,
-                    streams: true,
-                    timeseries: true,
-                    spatial: true,
-                    fts: true,
-                    sync: true,
-                    cluster: true,
-                    readonly: false,
-                },
-                databases: vec![
-                    "analytics".into(),
-                    "events_log".into(),
-                    "social_graph".into(),
-                    "iot_telemetry".into(),
-                    "docs_corpus".into(),
-                    "cache_layer".into(),
-                    "staging_a".into(),
-                    "staging_b".into(),
-                    "audit_trail".into(),
-                    "temp_workspace".into(),
-                    "sandbox".into(),
-                    "archive_2025".into(),
-                ],
+                display_name: "Hana Idris".into(),
+                user: "admin".into(),
+                role: "Database administrator".into(),
+                capabilities: all_capabilities(false),
+                databases: staging_databases(),
                 default_database: "analytics".into(),
             }),
         },
         SavedConnection {
-            name: "prod-replica-eu".into(),
-            meta: "nodedb · eu-fra-1 · tls".into(),
-            sub: "nodedb · 98ms · 28 dbs".into(),
-            status: ConnStatus::ReadOnly,
-            db_count: Some(28),
-            ping: Some("98ms".into()),
-            server: "dev".into(),
+            name: "Production".into(),
+            description: "Production cluster, read-only access".into(),
+            target: ConnectionTarget::Origin {
+                host: "db.example.com".into(),
+                port: 7432,
+            },
+            database: String::new(),
+            auth: AuthMethod::UserPassword,
+            username: "analyst".into(),
+            keychain: true,
+            tls: TlsConfig {
+                required: true,
+                ..TlsConfig::default()
+            },
+            status: ConnStatus::NotConnected,
+            last_used: epoch(2026, 6, 10, 9, 15, 0),
+            created: epoch(2026, 4, 18, 9, 2, 0),
+            observation: None,
             profile: Some(ConnectionProfile {
-                user: "hatta_ro".into(),
-                role: "analyst (read-only)".into(),
-                capabilities: Capabilities {
-                    graph: true,
-                    vector: true,
-                    streams: true,
-                    timeseries: true,
-                    spatial: true,
-                    fts: true,
-                    sync: true,
-                    cluster: true,
-                    readonly: true,
-                },
-                databases: vec![
-                    "analytics_prod".into(),
-                    "events_prod".into(),
-                    "social_prod".into(),
-                    "orders_prod".into(),
-                    "iot_prod".into(),
-                    "docs_prod".into(),
-                    "audit_prod".into(),
-                    "cache_prod".into(),
-                ],
+                display_name: "Hana Idris".into(),
+                user: "analyst".into(),
+                role: "Read-only analyst".into(),
+                capabilities: all_capabilities(true),
+                databases: names(&[
+                    "analytics_prod",
+                    "events_prod",
+                    "social_prod",
+                    "orders_prod",
+                    "iot_prod",
+                    "docs_prod",
+                    "audit_prod",
+                    "cache_prod",
+                ]),
                 default_database: "analytics_prod".into(),
             }),
         },
         SavedConnection {
-            name: "test-nodedb".into(),
-            meta: "nodedb · localhost:2480".into(),
-            sub: String::new(),
+            name: "test-cluster".into(),
+            description: "Throwaway test cluster".into(),
+            target: ConnectionTarget::Origin {
+                host: "test-db.example.com".into(),
+                port: 7432,
+            },
+            database: String::new(),
+            auth: AuthMethod::UserPassword,
+            username: "admin".into(),
+            keychain: true,
+            tls: TlsConfig {
+                required: true,
+                ..TlsConfig::default()
+            },
             status: ConnStatus::Offline,
-            db_count: None,
-            ping: None,
-            server: "dev".into(),
+            last_used: epoch(2026, 6, 8, 16, 40, 0),
+            created: epoch(2026, 5, 20, 8, 0, 0),
+            observation: None,
             profile: None,
         },
     ]
 }
 
-/// The notification feed. Capability gating is applied at render time against
-/// the active connection (see `state::notifications`).
-pub fn notifications() -> Vec<Notification> {
+fn staging_databases() -> Vec<String> {
+    names(&[
+        "analytics",
+        "commerce",
+        "identity",
+        "observability",
+        "billing",
+        "catalog",
+        "inventory",
+        "marketing",
+        "payments",
+        "reporting",
+        "sessions",
+        "support",
+    ])
+}
+
+/// The saved entry a new connection becomes in the mock. The mock reaches
+/// every host that is not a saved offline one, and signs the user in with the
+/// staging profile, so a saved draft can connect.
+pub fn saved_from_draft(draft: &ConnectionDraft, now: i64) -> SavedConnection {
+    let staging = connections()
+        .into_iter()
+        .find(|c| c.name == "staging-cluster")
+        .and_then(|c| c.profile);
+    let profile = staging.map(|p| ConnectionProfile {
+        user: if draft.username.trim().is_empty() {
+            p.user.clone()
+        } else {
+            draft.username.trim().to_string()
+        },
+        ..p
+    });
+    SavedConnection {
+        name: draft.name.clone(),
+        description: String::new(),
+        target: draft.target.clone(),
+        database: draft.database.clone(),
+        auth: draft.auth,
+        username: draft.username.clone(),
+        keychain: draft.keychain,
+        tls: draft.tls.clone(),
+        status: ConnStatus::NotConnected,
+        last_used: now,
+        created: now,
+        observation: None,
+        profile,
+    }
+}
+
+/// Recent activity rows, newest first.
+pub fn connection_activity() -> Vec<ConnectionEvent> {
+    let event = |at, connection: &str, kind, outcome, detail: &str| ConnectionEvent {
+        at,
+        connection: connection.into(),
+        kind,
+        outcome,
+        detail: detail.into(),
+    };
     vec![
-        Notification {
-            id: "sync-conflict-1".into(),
-            severity: Severity::Warn,
-            group: "Sync conflicts".into(),
-            required_cap: Some(Capability::Sync),
-            title: "users / u_44182 / email".into(),
-            desc: "Two writes within 14ms · LWW pending".into(),
-            when: "2m ago".into(),
-            target: NotificationTarget::Sync,
-            unread: true,
-        },
-        Notification {
-            id: "sync-conflict-2".into(),
-            severity: Severity::Warn,
-            group: "Sync conflicts".into(),
-            required_cap: Some(Capability::Sync),
-            title: "users / u_77103 / preferences".into(),
-            desc: "Concurrent edit on edge-sg-1 · merge needed".into(),
-            when: "4m ago".into(),
-            target: NotificationTarget::Sync,
-            unread: true,
-        },
-        Notification {
-            id: "cron-fail".into(),
-            severity: Severity::Err,
-            group: "Scheduled jobs".into(),
-            required_cap: None,
-            title: "vector_reindex failed".into(),
-            desc: "Out of memory at step 4 · last 3 runs failed".into(),
-            when: "3d ago".into(),
-            target: NotificationTarget::StreamsCron,
-            unread: true,
-        },
-        Notification {
-            id: "stream-stalled".into(),
-            severity: Severity::Warn,
-            group: "Streams".into(),
-            required_cap: Some(Capability::Streams),
-            title: "payment_failed consumer stalled".into(),
-            desc: "lag 4.2s · group=fraud-svc · 1 of 2 stalled".into(),
-            when: "8m ago".into(),
-            target: NotificationTarget::StreamsTopics,
-            unread: true,
-        },
-        Notification {
-            id: "lag-resolved".into(),
-            severity: Severity::Info,
-            group: "Cluster".into(),
-            required_cap: Some(Capability::Cluster),
-            title: "Replication lag normalized".into(),
-            desc: "node-5 caught up · was 1,309 behind".into(),
-            when: "12m ago".into(),
-            target: NotificationTarget::Admin,
-            unread: false,
-        },
-        Notification {
-            id: "query-done".into(),
-            severity: Severity::Info,
-            group: "Queries".into(),
-            required_cap: None,
-            title: "Long-running query finished".into(),
-            desc: "\"orders_by_region_2024.sql\" · 18 rows in 2m 41s".into(),
-            when: "22m ago".into(),
-            target: NotificationTarget::Query,
-            unread: false,
-        },
+        event(
+            epoch(2026, 6, 13, 13, 21, 0),
+            "staging-cluster",
+            ConnectionKind::Origin,
+            EventOutcome::Successful,
+            "Connected in 22ms",
+        ),
+        event(
+            epoch(2026, 6, 12, 9, 15, 42),
+            "Production",
+            ConnectionKind::Origin,
+            EventOutcome::Failed,
+            "Connection refused",
+        ),
+        event(
+            epoch(2026, 6, 10, 16, 40, 18),
+            "test-cluster",
+            ConnectionKind::Origin,
+            EventOutcome::Failed,
+            "Host unreachable",
+        ),
+        event(
+            epoch(2026, 6, 10, 14, 20, 33),
+            "Local development",
+            ConnectionKind::Lite,
+            EventOutcome::Opened,
+            "Database opened (3 dbs)",
+        ),
+        event(
+            epoch(2026, 6, 9, 11, 5, 2),
+            "staging-cluster",
+            ConnectionKind::Origin,
+            EventOutcome::Disconnected,
+            "User closed connection",
+        ),
     ]
 }
 
-/// Nav-rail badge counts: pending items on the Query and Streams entries.
-/// The mockup's figures, so the rail reads the same as the design.
-pub fn nav_badges() -> NavBadges {
-    NavBadges {
-        query: 3,
-        streams: 6,
+/// The notification feed, newest first. Capability gating is applied at
+/// render time against the active connection (see `state::notifications`).
+pub fn notifications() -> Vec<Notification> {
+    #[allow(clippy::too_many_arguments)]
+    fn entry(
+        id: &str,
+        kind: NotificationKind,
+        severity: Severity,
+        required_cap: Option<Capability>,
+        title: &str,
+        body: &str,
+        scope: &str,
+        scope_kind: ScopeKind,
+        at: i64,
+        target: NotificationTarget,
+        unread: bool,
+    ) -> Notification {
+        Notification {
+            id: id.into(),
+            kind,
+            severity,
+            required_cap,
+            title: title.into(),
+            body: body.into(),
+            scope: scope.into(),
+            scope_kind,
+            at,
+            target,
+            unread,
+        }
     }
+    vec![
+        entry(
+            "index-build-embedding",
+            NotificationKind::IndexBuild,
+            Severity::Success,
+            None,
+            "Index build completed",
+            "Index idx_articles_embedding has completed on collection articles.",
+            "articles",
+            ScopeKind::Collection,
+            epoch(2026, 6, 13, 13, 21, 0),
+            NotificationTarget::SearchIndexes,
+            true,
+        ),
+        entry(
+            "sync-write-rejected",
+            NotificationKind::SyncRejection,
+            Severity::Err,
+            Some(Capability::Sync),
+            "Sync write rejected",
+            "UNIQUE_VIOLATION for device d17.",
+            "devices",
+            ScopeKind::Collection,
+            epoch(2026, 6, 13, 12, 6, 0),
+            NotificationTarget::SyncRejectedWrites,
+            true,
+        ),
+        entry(
+            "backup-staging-nightly",
+            NotificationKind::Backup,
+            Severity::Success,
+            None,
+            "Backup completed",
+            "Scheduled backup staging nightly completed successfully.",
+            "staging",
+            ScopeKind::Database,
+            epoch(2026, 6, 13, 9, 14, 0),
+            NotificationTarget::AdminBackups,
+            true,
+        ),
+        entry(
+            "role-viewer-updated",
+            NotificationKind::RoleChange,
+            Severity::Info,
+            None,
+            "Role updated",
+            "Role viewer updated by admin.",
+            "auth",
+            ScopeKind::Role,
+            epoch(2026, 6, 13, 8, 33, 0),
+            NotificationTarget::AdminAudit,
+            true,
+        ),
+        entry(
+            "replication-lag-normalized",
+            NotificationKind::ReplicationLag,
+            Severity::Info,
+            Some(Capability::Cluster),
+            "Replication lag normalized",
+            "node-5 caught up. It was 1,309 entries behind.",
+            "raft-group-1",
+            ScopeKind::Cluster,
+            epoch(2026, 6, 12, 21, 40, 0),
+            NotificationTarget::ClusterNodes,
+            false,
+        ),
+        entry(
+            "job-vector-reindex",
+            NotificationKind::JobFailure,
+            Severity::Warn,
+            Some(Capability::Events),
+            "Scheduled job failed",
+            "vector_reindex ran out of memory at step 4. The last 3 runs failed.",
+            "vector_reindex",
+            ScopeKind::Job,
+            epoch(2026, 6, 10, 3, 0, 0),
+            NotificationTarget::EventsScheduledJobs,
+            false,
+        ),
+    ]
 }
 
-/// The active session summary shown in the statusbar. `server_version` is a
+/// What the user opened lately, newest first.
+pub fn recent_items() -> Vec<RecentItem> {
+    vec![RecentItem {
+        id: "customer-paths".into(),
+        title: "Customer paths".into(),
+        kind: RecentKind::GraphQuery,
+    }]
+}
+
+/// Sidebar badge counts: open query tabs on the Query entry.
+pub fn nav_badges() -> NavBadges {
+    NavBadges { query: 3 }
+}
+
+/// The active session summary shown in the footer. `server_version` is a
 /// neutral "dev" placeholder: NodeDB version numbers are undecided, so no
-/// specific version is invented here (see the module note in `mod.rs`).
+/// specific version is invented here.
 pub fn session_info() -> SessionInfo {
     SessionInfo {
         server_version: "dev".into(),
-        timezone: "UTC".into(),
     }
-}
-
-/// Databases visible on the connection `name`: the ones its profile above
-/// lists. Empty for an unknown or offline connection.
-pub fn databases_for(name: &str) -> Vec<String> {
-    connections()
-        .into_iter()
-        .find(|c| c.name == name)
-        .and_then(|c| c.profile)
-        .map(|p| p.databases)
-        .unwrap_or_default()
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
-    /// `connect()` builds its username from `profile.map(|p| p.user)
-    /// .unwrap_or_default()`, so a connectable entry with no profile would
-    /// silently produce a blank username, get rejected by the seam's
-    /// `MissingUsername` guard, and have that error dropped by every call
-    /// site's `if let Ok(..)` — a Connect button that does nothing, with no
-    /// error and no state change. Nothing in the types prevents that
-    /// combination; this test makes the fixture invariant that avoids it
-    /// break loudly instead.
+    /// Every reachable entry has a profile, or a connect would default its
+    /// user name to blank and fail with a message the user cannot act on.
     #[test]
-    fn every_connectable_entry_has_a_profile() {
+    fn every_available_entry_has_a_profile() {
         let conns = connections();
         assert!(!conns.is_empty(), "fixture must not be empty");
         for c in &conns {
-            if c.status.is_connectable() {
+            if c.status == ConnStatus::Available {
                 assert!(
                     c.profile.is_some(),
-                    "{} is connectable but has no profile: connect() would \
-                     default its username to blank and silently no-op",
+                    "{} is available without a profile",
                     c.name
                 );
             }
+        }
+    }
+
+    #[test]
+    fn connection_names_are_unique() {
+        let conns = connections();
+        let unique: HashSet<_> = conns.iter().map(|c| &c.name).collect();
+        assert_eq!(unique.len(), conns.len());
+    }
+
+    /// The staging profile is the account the account menu shows.
+    #[test]
+    fn staging_matches_the_design_values() {
+        let staging = connections()
+            .into_iter()
+            .find(|c| c.name == "staging-cluster")
+            .expect("staging-cluster");
+        assert_eq!(staging.summary(), "nodedb · 22ms · 12 dbs");
+        let profile = staging.profile.expect("profile");
+        assert_eq!(profile.databases.len(), 12);
+        assert_eq!(profile.display_name, "Hana Idris");
+        assert_eq!(profile.user, "admin");
+        assert_eq!(profile.role, "Database administrator");
+    }
+
+    #[test]
+    fn production_is_read_only_and_not_connected() {
+        let prod = connections()
+            .into_iter()
+            .find(|c| c.name == "Production")
+            .expect("Production");
+        assert!(prod.read_only());
+        assert_eq!(prod.status, ConnStatus::NotConnected);
+    }
+
+    #[test]
+    fn notification_ids_are_unique_and_four_are_unread() {
+        let feed = notifications();
+        let unique: HashSet<_> = feed.iter().map(|n| &n.id).collect();
+        assert_eq!(unique.len(), feed.len());
+        assert_eq!(feed.iter().filter(|n| n.unread).count(), 4);
+    }
+
+    /// Every activity row names a saved connection.
+    #[test]
+    fn activity_names_saved_connections() {
+        let saved: HashSet<_> = connections().into_iter().map(|c| c.name).collect();
+        for e in connection_activity() {
+            assert!(saved.contains(&e.connection), "{}", e.connection);
         }
     }
 }

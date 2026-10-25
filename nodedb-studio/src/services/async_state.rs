@@ -4,6 +4,7 @@
 //! testable. Every later wiring phase maps a `use_resource` result into an
 //! `AsyncState<T>` via `from_value` and hands it to the `AsyncView` component.
 
+use crate::models::cluster::ClusterMembers;
 use crate::models::explorer::RecordDetail;
 use crate::models::shell::{NavBadges, SessionInfo};
 use crate::models::viewers::SubGraph;
@@ -31,6 +32,14 @@ impl<T> IsEmpty for Vec<T> {
 impl IsEmpty for SessionInfo {
     fn is_empty(&self) -> bool {
         false
+    }
+}
+
+/// A member list is empty when it lists no members. Its observation time
+/// alone carries nothing to show.
+impl IsEmpty for ClusterMembers {
+    fn is_empty(&self) -> bool {
+        self.members.is_empty()
     }
 }
 
@@ -282,14 +291,10 @@ mod tests {
         // none of the four has a meaningful "empty" shape.
         let session_info = AsyncState::from_value(Some(Ok(SessionInfo {
             server_version: String::new(),
-            timezone: String::new(),
         })));
         assert!(matches!(session_info, AsyncState::Loaded(_)));
 
-        let nav_badges = AsyncState::from_value(Some(Ok(NavBadges {
-            query: 0,
-            streams: 0,
-        })));
+        let nav_badges = AsyncState::from_value(Some(Ok(NavBadges { query: 0 })));
         assert!(matches!(nav_badges, AsyncState::Loaded(_)));
 
         let record_detail = AsyncState::from_value(Some(Ok(RecordDetail {

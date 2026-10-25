@@ -55,7 +55,7 @@ pub trait ViewersData {
 mod tests {
     use super::*;
     use crate::services::async_state::AsyncState;
-    use crate::services::connection_service::MockConnectionService;
+    use crate::services::mock::MockConnectionService;
 
     #[tokio::test]
     async fn subgraph_edges_reference_existing_nodes() {

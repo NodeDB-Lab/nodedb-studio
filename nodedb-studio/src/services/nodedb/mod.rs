@@ -1,0 +1,12 @@
+//! The real-client backend, one file per domain trait.
+
+pub mod admin;
+pub mod cluster;
+pub mod connection;
+pub mod explorer;
+pub mod service;
+pub mod streams;
+pub mod viewers;
+pub mod workbench;
+
+pub use service::NodeDbConnectionService;

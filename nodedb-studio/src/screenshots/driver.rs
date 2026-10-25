@@ -16,10 +16,12 @@ use crate::screenshots::sync::SceneTarget;
 use crate::services::backend::Backend;
 use crate::services::error::StudioError;
 use crate::state::connection::ActiveConnection;
+use crate::state::connection_form::ConnectionForm;
 use crate::state::connections_registry::SavedConnection;
 use crate::state::explorer::Selected;
 use crate::state::preferences::{Preferences, Theme};
-use crate::state::ui::{ModalKind, Popover};
+use crate::state::ui::{ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover};
+use crate::state::workspace::Workspace;
 
 /// Time a scene gets to finish its reads, effects, and paint before capture.
 const SETTLE: Duration = Duration::from_millis(600);
@@ -64,6 +66,11 @@ struct Handles {
     modal: Signal<Option<ModalKind>>,
     popover: Signal<Option<Popover>>,
     palette: Signal<bool>,
+    palette_query: PaletteQuery,
+    form: Signal<ConnectionForm>,
+    manager: Signal<ManagerOpen>,
+    selection: Signal<ManagerSelection>,
+    workspace: Signal<Workspace>,
     target: Signal<Option<SceneTarget>>,
 }
 
@@ -86,6 +93,11 @@ fn Runner(run: RunConfig) -> Element {
         modal: use_context(),
         popover: use_context(),
         palette: use_context(),
+        palette_query: use_context(),
+        form: use_context(),
+        manager: use_context(),
+        selection: use_context(),
+        workspace: use_context(),
         // A root context, so `SceneSync` inside the router can read it.
         target: use_hook(|| {
             provide_root_context(Signal::new_in_scope(None::<SceneTarget>, ScopeId::ROOT))
@@ -145,15 +157,30 @@ async fn run_all(h: Handles, out: &Path) -> Result<usize, DriverError> {
 /// Close every overlay, move to the scene's screen, then open its overlay.
 async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
     let (mut modal, mut popover, mut palette) = (h.modal, h.popover, h.palette);
-    let (mut active, mut target) = (h.active, h.target);
+    let (mut active, mut target, mut workspace) = (h.active, h.target, h.workspace);
+    let (mut form, mut manager, mut selection) = (h.form, h.manager, h.selection);
+    let mut palette_query = h.palette_query.0;
     modal.set(None);
     popover.set(None);
     palette.set(false);
+    palette_query.set(String::new());
+    manager.set(ManagerOpen::default());
+    // Each scene starts from the default layout, so one scene's hidden
+    // panels never leak into the next image.
+    let mut layout = Workspace::default();
+    if let Screen::Studio { route, .. } = &scene.screen {
+        for id in scene.hidden {
+            layout.set_visible(route.surface(), id, false);
+        }
+    }
+    workspace.set(layout);
 
     match &scene.screen {
         Screen::Disconnected => {
             target.set(None);
             active.set(None);
+            // The manager highlights the studio connection, as the design does.
+            selection.set(ManagerSelection(Some(STUDIO_CONNECTION.to_string())));
         }
         Screen::Studio { route, collection } => {
             let connected = active
@@ -174,11 +201,18 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
         }
     }
 
-    match scene.overlay {
+    match &scene.overlay {
         Overlay::None => {}
-        Overlay::Modal(kind) => modal.set(Some(kind)),
-        Overlay::Popover(which) => popover.set(Some(which)),
-        Overlay::Palette => palette.set(true),
+        Overlay::Modal(kind) => modal.set(Some(*kind)),
+        Overlay::NewConnection(fields) => {
+            form.set((**fields).clone());
+            modal.set(Some(ModalKind::NewConnection));
+        }
+        Overlay::Popover(which) => popover.set(Some(*which)),
+        Overlay::Palette(text) => {
+            palette_query.set((*text).to_string());
+            palette.set(true);
+        }
     }
     Ok(())
 }

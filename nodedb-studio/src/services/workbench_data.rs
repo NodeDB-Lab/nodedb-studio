@@ -30,7 +30,7 @@ pub trait WorkbenchData {
 mod tests {
     use super::*;
     use crate::services::async_state::AsyncState;
-    use crate::services::connection_service::MockConnectionService;
+    use crate::services::mock::MockConnectionService;
 
     #[tokio::test]
     async fn run_query_returns_columns_and_keyed_rows() {

@@ -1,16 +1,20 @@
 //! Reusable studio chrome components.
 
 pub mod async_view;
+pub mod clipboard;
 pub mod command_palette;
+pub mod connector;
 pub mod data_grid;
 pub mod detail_panel;
+pub mod footer;
+pub mod header;
+pub mod icon;
 pub mod live_tail;
 pub mod modal;
+pub mod panel;
 pub mod popovers;
-pub mod rail;
-pub mod snav;
+pub mod sidebar;
 pub mod sparkline;
 pub mod stat_card;
-pub mod statusbar;
-pub mod subnav;
-pub mod topbar;
+pub mod tabs;
+pub mod view_menu;

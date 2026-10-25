@@ -134,7 +134,7 @@ mod tests {
     use super::*;
 
     use crate::models::collection::Collection;
-    use crate::services::connection_service::MockConnectionService;
+    use crate::services::MockConnectionService;
     use crate::services::explorer_data::ExplorerData;
 
     fn groups_with(names: &[&str]) -> Vec<CollectionGroup> {

@@ -3,8 +3,11 @@
 
 pub mod admin;
 pub mod cdc;
+pub mod cluster;
 pub mod collection;
+pub mod connections;
 pub mod explorer;
+pub mod format;
 pub mod notification;
 pub mod shell;
 pub mod streams;

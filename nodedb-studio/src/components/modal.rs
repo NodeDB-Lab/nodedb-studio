@@ -1,36 +1,50 @@
-//! Generic modal primitive: the reusable overlay shell (backdrop, panel,
-//! header, close). Callers pass the body and footer as children. The dispatch
-//! that decides *which* modal is open lives in `crate::modals`.
+//! Generic dialog primitive: the scrim, the frame, the header with its
+//! close button. Callers pass the body and footer as children, in
+//! `.dialog-body` and `.dialog-footer`. The dispatch that decides *which*
+//! dialog is open lives in `crate::modals`.
 
 use dioxus::prelude::*;
 
+use crate::components::icon::{Ico, Icon};
 use crate::state::ui::ModalKind;
 
-/// Reusable modal shell. Clicking the backdrop or the close button dismisses;
-/// clicks inside the panel do not (matches the mockup's `closeModal`).
-/// `wide` selects the `.modal.wide` variant used by Preferences. `width`
-/// overrides the panel width in px, as the mockup's entity forms do.
+/// Reusable dialog. The close button and Esc dismiss. A click on the scrim
+/// dismisses too, unless `dismiss_on_scrim` is off: a form must not lose
+/// typed text to a stray click. `width` sets the frame width in px.
 #[component]
 pub fn Modal(
     title: String,
-    #[props(default = false)] wide: bool,
     #[props(default)] width: Option<u32>,
+    #[props(default = true)] dismiss_on_scrim: bool,
+    #[props(default)] class: String,
     children: Element,
 ) -> Element {
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
-    let panel_class = if wide { "modal wide" } else { "modal" };
-    let panel_style = width.map(|w| format!("width: {w}px;")).unwrap_or_default();
+    let style = width.map(|w| format!("width: {w}px;")).unwrap_or_default();
     rsx! {
         div {
-            class: "modal-overlay open",
-            onclick: move |_| modal.set(None),
+            class: "dialog-scrim",
+            onclick: move |_| {
+                if dismiss_on_scrim {
+                    modal.set(None);
+                }
+            },
             div {
-                class: "{panel_class}",
-                style: "{panel_style}",
+                class: "dialog {class}",
+                style: "{style}",
+                role: "dialog",
+                "aria-modal": "true",
+                "aria-label": "{title}",
                 onclick: move |e| e.stop_propagation(),
-                div { class: "modal-header",
-                    h3 { "{title}" }
-                    button { class: "top-icon-btn", onclick: move |_| modal.set(None), "×" }
+                header { class: "dialog-header",
+                    h2 { class: "dialog-title", "{title}" }
+                    button {
+                        class: "icon-btn",
+                        title: "Close",
+                        "aria-label": "Close {title}",
+                        onclick: move |_| modal.set(None),
+                        Ico { icon: Icon::X, size: 18 }
+                    }
                 }
                 {children}
             }

@@ -43,6 +43,15 @@ pub enum StudioError {
     /// Connect was attempted without an explicit username.
     #[error("a username is required to connect")]
     MissingUsername,
+    /// A save would give two saved connections one name.
+    #[error("a connection named `{0}` already exists: choose another name")]
+    NameTaken(String),
+    /// A write named a saved connection that is not in the registry.
+    #[error("no saved connection named `{0}`")]
+    UnknownConnection(String),
+    /// A database switch named a database the connection does not list.
+    #[error("the connection has no database named `{0}`")]
+    UnknownDatabase(String),
 }
 
 impl StudioError {
@@ -53,7 +62,10 @@ impl StudioError {
             StudioError::NotConnected
             | StudioError::UnexpectedColumns { .. }
             | StudioError::MalformedRows { .. }
-            | StudioError::MissingUsername => false,
+            | StudioError::MissingUsername
+            | StudioError::NameTaken(_)
+            | StudioError::UnknownConnection(_)
+            | StudioError::UnknownDatabase(_) => false,
             StudioError::Connection(e)
             | StudioError::Auth(e)
             | StudioError::NotFound(e)

@@ -1,0 +1,120 @@
+/* Reset and base typography. */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+.studio-root { height: 100vh; outline: none; }
+
+/* `hidden` always wins: panels and menus toggle it while staying mounted. */
+[hidden] { display: none !important; }
+
+h1, h2, h3, h4 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+p { margin: 0; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+button:disabled { cursor: not-allowed; }
+input, textarea, select { font: inherit; color: inherit; }
+a { color: var(--text-link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, kbd, pre, .mono { font-family: var(--font-mono); }
+pre { margin: 0; }
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border: 1px solid var(--border-mid);
+  border-radius: var(--radius-sm);
+  background: var(--surface-panel);
+  color: var(--text-tertiary);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+}
+
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--border-mid);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--border-strong); }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+
+.ico { flex: none; display: block; }
+
+.muted { color: var(--text-tertiary); }
+.secondary { color: var(--text-secondary); }
+.num { font-variant-numeric: tabular-nums; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/*
+ * Application preferences. `App` sets these attributes on `.studio-root`
+ * from the saved preferences. Variables set here reach every descendant,
+ * and the overlays render inside the root.
+ */
+.studio-root { font-size: var(--fs-md); }
+
+.studio-root[data-density="comfortable"] {
+  --row-h: 40px;
+  --control-h: 36px;
+}
+
+.studio-root[data-font-size="12"] { --fs-xs: 10px; --fs-sm: 11px; --fs-md: 12px; --fs-lg: 14px; --fs-xl: 18px; }
+.studio-root[data-font-size="13"] { --fs-xs: 11px; --fs-sm: 12px; --fs-md: 13px; --fs-lg: 15px; --fs-xl: 19px; }
+.studio-root[data-font-size="15"] { --fs-xs: 13px; --fs-sm: 14px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 21px; }
+.studio-root[data-font-size="16"] { --fs-xs: 14px; --fs-sm: 15px; --fs-md: 16px; --fs-lg: 18px; --fs-xl: 22px; }
+
+.studio-root[data-editor-font="sf-mono"] { --font-mono: "SF Mono", SFMono-Regular, ui-monospace, monospace; }
+.studio-root[data-editor-font="menlo"] { --font-mono: Menlo, Monaco, "DejaVu Sans Mono", monospace; }
+.studio-root[data-editor-font="system"] { --font-mono: ui-monospace, "Cascadia Code", Consolas, monospace; }
+
+.studio-root[data-motion="reduce"] *,
+.studio-root[data-motion="reduce"] *::before,
+.studio-root[data-motion="reduce"] *::after {
+  animation-duration: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  scroll-behavior: auto !important;
+}
+
+/* The studio wrapper adds no box: the shell grid sizes itself. */
+.studio-host { display: contents; }
