@@ -167,7 +167,7 @@ pub fn connections() -> Vec<SavedConnection> {
     ]
 }
 
-fn staging_databases() -> Vec<String> {
+pub fn staging_databases() -> Vec<String> {
     names(&[
         "analytics",
         "commerce",
@@ -329,32 +329,41 @@ pub fn notifications() -> Vec<Notification> {
             NotificationTarget::SearchIndexes,
             true,
         ),
-        entry(
-            "backup-staging-nightly",
-            NotificationKind::Backup,
-            Severity::Success,
-            None,
-            "Backup completed",
-            "Scheduled backup staging nightly completed successfully.",
-            "staging",
-            ScopeKind::Database,
-            epoch(2026, 6, 13, 9, 14, 0),
-            NotificationTarget::AdminBackups,
-            true,
-        ),
-        entry(
-            "role-viewer-updated",
-            NotificationKind::RoleChange,
-            Severity::Info,
-            None,
-            "Role updated",
-            "Role viewer updated by admin.",
-            "auth",
-            ScopeKind::Role,
-            epoch(2026, 6, 13, 8, 33, 0),
-            NotificationTarget::AdminAudit,
-            true,
-        ),
+        // The role grant is audit event audit104. The entry opens it.
+        Notification {
+            subject: Some("audit104".into()),
+            ..entry(
+                "role-analyst-updated",
+                NotificationKind::RoleChange,
+                Severity::Info,
+                None,
+                "Role updated",
+                "Role analyst updated by admin.",
+                "auth",
+                ScopeKind::Role,
+                epoch(2026, 6, 13, 13, 21, 0),
+                NotificationTarget::AdminAudit,
+                true,
+            )
+        },
+        // The nightly snapshot of analytics finished after its 02:00 start.
+        // The entry opens that snapshot.
+        Notification {
+            subject: Some("snap-2026-06-13-020000-4f8c2d".into()),
+            ..entry(
+                "backup-nightly-analytics",
+                NotificationKind::Backup,
+                Severity::Success,
+                None,
+                "Backup completed",
+                "Scheduled snapshot nightly-analytics completed successfully.",
+                "analytics",
+                ScopeKind::Database,
+                epoch(2026, 6, 13, 2, 14, 0),
+                NotificationTarget::AdminBackups,
+                true,
+            )
+        },
         entry(
             "replication-lag-normalized",
             NotificationKind::ReplicationLag,

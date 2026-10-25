@@ -2,6 +2,7 @@
 //! writes one PNG per scene and theme. Built only with the `screenshots`
 //! feature on Linux. `scripts/screenshots.sh` runs it.
 
+pub mod admin_scenes;
 pub mod capture;
 pub mod cluster_scenes;
 pub mod config;

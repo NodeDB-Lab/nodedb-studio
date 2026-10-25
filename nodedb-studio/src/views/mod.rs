@@ -21,5 +21,4 @@ pub mod search;
 pub mod spatial;
 pub mod sync;
 pub mod timeseries;
-pub mod transitional;
 pub mod vector;

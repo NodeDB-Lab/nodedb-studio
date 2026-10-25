@@ -2,6 +2,12 @@
 //! databases, notifications); live UI state lives in `crate::state`.
 
 pub mod admin;
+pub mod admin_access;
+pub mod admin_audit;
+pub mod admin_backup;
+pub mod admin_config;
+pub mod admin_credential;
+pub mod admin_policy;
 pub mod array_data;
 pub mod cluster;
 pub mod cluster_activity;

@@ -142,6 +142,70 @@ const SYNC_ACTIVITY: &[PanelSpec] = &[
     panel("details", "Event details", "Show the selected event"),
 ];
 
+const ADMIN_ACCESS: &[PanelSpec] = &[
+    panel("principals", "Principals", "Show the principals and roles"),
+    panel(
+        "details",
+        "Principal details",
+        "Show the selected principal or role",
+    ),
+    panel(
+        "grants",
+        "Role grants",
+        "Show the grants of the roles involved",
+    ),
+    panel(
+        "membership",
+        "Membership",
+        "Show the roles a principal holds",
+    ),
+    panel(
+        "effective",
+        "Effective access",
+        "Show the access the subject holds",
+    ),
+];
+
+const ADMIN_POLICIES: &[PanelSpec] = &[
+    panel(
+        "policies",
+        "Row policies",
+        "Show the policies of the database",
+    ),
+    panel("editor", "Policy editor", "Show the selected policy"),
+    panel("test", "Test policy", "Show the read-only policy test"),
+];
+
+const ADMIN_AUDIT: &[PanelSpec] = &[
+    panel("log", "Audit log", "Show the audit trail"),
+    panel("details", "Event details", "Show the selected event"),
+];
+
+const ADMIN_BACKUPS: &[PanelSpec] = &[
+    panel("snapshots", "Scheduled snapshots", "Show the snapshots"),
+    panel("jobs", "Restore jobs", "Show the restore jobs"),
+    panel("details", "Snapshot details", "Show the selected snapshot"),
+    panel(
+        "restore",
+        "Restore preview",
+        "Show the restore preview form",
+    ),
+];
+
+const ADMIN_CONFIG: &[PanelSpec] = &[
+    panel("settings", "Server config", "Show the config of the target"),
+    panel(
+        "review",
+        "Proposal review",
+        "Show the review of proposed values",
+    ),
+];
+
+const ADMIN_CREDENTIALS: &[PanelSpec] = &[
+    panel("credentials", "Credentials", "Show the credential aliases"),
+    panel("edit", "Edit credential", "Show the selected credential"),
+];
+
 const EVENTS_FEEDS: &[PanelSpec] = &[
     panel("feeds", "Change feeds", "Show the feed list"),
     panel("events", "Recent events", "Show the selected feed's events"),
@@ -362,14 +426,12 @@ impl Surface {
             Surface::Sync(SyncTab::Subscriptions) => SYNC_SUBSCRIPTIONS,
             Surface::Sync(SyncTab::RejectedWrites) => SYNC_REJECTED,
             Surface::Sync(SyncTab::Activity) => SYNC_ACTIVITY,
-            Surface::Admin(
-                AdminTab::Access
-                | AdminTab::RowPolicies
-                | AdminTab::Audit
-                | AdminTab::Backups
-                | AdminTab::Config
-                | AdminTab::Credentials,
-            ) => &[],
+            Surface::Admin(AdminTab::Access) => ADMIN_ACCESS,
+            Surface::Admin(AdminTab::RowPolicies) => ADMIN_POLICIES,
+            Surface::Admin(AdminTab::Audit) => ADMIN_AUDIT,
+            Surface::Admin(AdminTab::Backups) => ADMIN_BACKUPS,
+            Surface::Admin(AdminTab::Config) => ADMIN_CONFIG,
+            Surface::Admin(AdminTab::Credentials) => ADMIN_CREDENTIALS,
         }
     }
 }

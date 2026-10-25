@@ -16,14 +16,12 @@ mod graph;
 mod search;
 mod spatial;
 mod sync;
-#[cfg(test)]
-mod test_support;
 mod timeseries;
 mod transfer;
 mod vector;
 mod workbench;
 
-pub use admin::{audit_entries, rls_policies, users};
+pub use admin::AdminStore;
 pub use cluster::{ClusterStore, cluster_members, telemetry};
 pub use connections::{
     connection_activity, connections, nav_badges, notifications, recent_items, saved_from_draft,

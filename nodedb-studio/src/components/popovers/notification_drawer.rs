@@ -26,6 +26,7 @@ use crate::routes::tabs::EventsTab;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::services::error::StudioError;
+use crate::state::admin::AdminUi;
 use crate::state::connection::{ActiveConnection, Capabilities, ConnectError};
 use crate::state::notifications::{
     Filter, apply_mark_all_read, apply_mark_read, listed, unread_count, visible,
@@ -69,6 +70,7 @@ pub fn NotificationDrawer() -> Element {
     let mut error = use_context::<Signal<ConnectError>>();
     let backend = use_context::<Rc<dyn Backend>>();
     let sync_rejects = use_context::<SyncUi>().rejects;
+    let admin = use_context::<AdminUi>();
     let nav = use_navigator();
     let mut tab = use_signal(Filter::default);
 
@@ -229,6 +231,18 @@ pub fn NotificationDrawer() -> Element {
                                                     if let (NotificationTarget::SyncRejectedWrites, Some(m)) = &target {
                                                         let mut rejects = sync_rejects;
                                                         rejects.write().selected = Some(m.clone());
+                                                    }
+                                                    // An audit entry opens its event on the first page.
+                                                    if let (NotificationTarget::AdminAudit, Some(id)) = &target {
+                                                        let mut audit = admin.audit;
+                                                        audit.set(crate::state::admin::AuditUi {
+                                                            selected: Some(id.clone()),
+                                                            ..Default::default()
+                                                        });
+                                                    }
+                                                    if let (NotificationTarget::AdminBackups, Some(id)) = &target {
+                                                        let mut backups = admin.backups;
+                                                        backups.write().selected = Some(id.clone());
                                                     }
                                                     nav.push(route.clone());
                                                 }

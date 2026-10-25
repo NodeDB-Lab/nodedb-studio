@@ -13,6 +13,7 @@ use crate::routes::tabs::{
     VectorTab,
 };
 use crate::state::workspace::Surface;
+use crate::views::admin::AdminPage;
 use crate::views::cluster::ClusterPage;
 use crate::views::console::ConsolePage;
 use crate::views::designer::DesignerPage;
@@ -24,7 +25,6 @@ use crate::views::search::SearchPage;
 use crate::views::spatial::SpatialPage;
 use crate::views::sync::SyncPage;
 use crate::views::timeseries::TimeseriesPage;
-use crate::views::transitional::AdminPage;
 use crate::views::vector::VectorPage;
 
 #[derive(Routable, Clone, PartialEq, Debug)]

@@ -8,6 +8,7 @@
 use dioxus::prelude::*;
 
 use crate::routes::Route;
+use crate::state::admin::{AdminSeed, AdminUi};
 use crate::state::cluster::{ClusterSeed, ClusterUi};
 use crate::state::console::ConsoleState;
 use crate::state::designer::DesignerState;
@@ -46,6 +47,8 @@ pub struct SceneTarget {
     pub cluster: Option<ClusterSeed>,
     /// The Sync tabs' selections and open sheets. `None` keeps the current ones.
     pub sync: Option<SyncSeed>,
+    /// The Administration tabs' selections, drafts, and open reviews. `None` keeps the current ones.
+    pub admin: Option<AdminSeed>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -72,6 +75,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let search = use_context::<SearchUi>();
     let cluster = use_context::<ClusterUi>();
     let sync = use_context::<SyncUi>();
+    let admin = use_context::<AdminUi>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -112,6 +116,9 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         }
         if let Some(seed) = t.sync {
             sync.apply(seed);
+        }
+        if let Some(seed) = t.admin {
+            admin.apply(seed);
         }
         nav.replace(t.route);
     });

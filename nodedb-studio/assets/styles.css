@@ -23,22 +23,6 @@
   .btn.primary:hover { opacity: 0.9; }
   .btn.ghost { background: transparent; border-color: transparent; }
   .btn.ghost:hover { background: var(--bg-hover); }
-  .btn.small { padding: 3px 8px; font-size: 11px; }
-
-  .pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 1px 7px;
-    border-radius: 10px;
-    font-family: var(--font-mono); font-size: 10px;
-    letter-spacing: 0.02em;
-    background: var(--bg-tertiary);
-    color: var(--text-secondary);
-  }
-  .pill.ok { background: rgba(59,109,17,0.12); color: var(--text-success); }
-  .pill.warn { background: rgba(133,79,11,0.12); color: var(--text-warning); }
-  .pill.err { background: rgba(156,36,36,0.12); color: var(--text-danger); }
-  .pill.info { background: rgba(24,95,165,0.12); color: var(--text-info); }
-  .pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
   .card {
     background: var(--bg-primary);
@@ -49,143 +33,11 @@
   .card.hover { cursor: pointer; transition: border-color 100ms, transform 100ms; }
   .card.hover:hover { border-color: var(--border-strong); transform: translateY(-1px); }
 
-  .eyebrow {
-    font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.14em;
-    text-transform: uppercase; color: var(--text-tertiary);
-  }
-
-  .table {
-    width: 100%; border-collapse: collapse;
-    font-size: 12px;
-  }
-  .table th {
-    text-align: left;
-    padding: 8px 12px;
-    font-weight: 500;
-    color: var(--text-tertiary);
-    border-bottom: 0.5px solid var(--border-mid);
-    background: var(--bg-secondary);
-    font-size: 11px;
-    text-transform: uppercase; letter-spacing: 0.05em;
-  }
-  .table td {
-    padding: 8px 12px;
-    border-bottom: 0.5px solid var(--border-soft);
-  }
-  .table tr:hover td { background: var(--bg-secondary); }
-  .table td.mono { font-family: var(--font-mono); font-size: 11px; }
-
-  .segmented {
-    display: inline-flex;
-    background: var(--bg-tertiary);
-    border: 0.5px solid var(--border-mid);
-    border-radius: 6px;
-    padding: 2px;
-  }
-  .segmented button {
-    padding: 3px 12px;
-    font-size: 12px;
-    border-radius: 4px;
-    color: var(--text-secondary);
-  }
-  .segmented button.active {
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
-  }
-
-  .form-field { margin-bottom: 14px; }
-  .form-field label {
-    display: block;
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
-    font-weight: 500;
-  }
-  .form-field input, .form-field select, .form-field textarea {
-    width: 100%;
-    padding: 6px 10px;
-    background: var(--bg-secondary);
-    border: 0.5px solid var(--border-mid);
-    border-radius: 5px;
-    outline: none;
-    font-size: 13px;
-  }
-  .form-field input:focus, .form-field select:focus { border-color: var(--accent); }
   .field-error {
     margin-top: 5px;
     font-size: 11px;
     color: var(--text-danger);
   }
-
-  /* ============================================================
-     Page header (legacy screens)
-     ============================================================ */
-  .view-padded { padding: 24px 28px; }
-  .view-header {
-    display: flex; align-items: flex-end; justify-content: space-between;
-    margin-bottom: 18px;
-    gap: 16px;
-  }
-  .view-header h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
-  .view-header p { margin: 0; color: var(--text-secondary); font-size: 12px; }
-  .view-header-actions { display: flex; gap: 8px; }
-
-  /* Strict / KV / FTS data grids */
-
-  /* Spatial */
-  .spatial-map {
-    height: 100%;
-    background:
-      linear-gradient(180deg, #d9d6c9 0%, #e3e0d3 100%);
-    position: relative;
-  }
-  /* Dark variant, keyed like the dark tokens at the top of this file. */
-  .studio-root[data-theme="dark"] .spatial-map {
-    background: linear-gradient(180deg, #1d1d1b 0%, #28282500 100%);
-  }
-  @media (prefers-color-scheme: dark) {
-    .studio-root:not([data-theme="light"]) .spatial-map {
-      background: linear-gradient(180deg, #1d1d1b 0%, #28282500 100%);
-    }
-  }
-
-  .sql-kw { color: var(--text-info); font-weight: 500; }
-  .sql-str { color: var(--text-success); }
-  .sql-num { color: var(--text-warning); }
-  .sql-comment { color: var(--text-tertiary); font-style: italic; }
-
-  /* Sub-nav tabs (for Admin etc.) */
-  .subnav {
-    display: flex; gap: 2px;
-    padding: 8px 20px 0;
-    background: var(--bg-primary);
-    border-bottom: 0.5px solid var(--border-mid);
-  }
-  .subnav-item {
-    padding: 8px 14px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -0.5px;
-    cursor: pointer;
-  }
-  .subnav-item:hover { color: var(--text-primary); }
-  .subnav-item.active {
-    color: var(--text-primary);
-    border-bottom-color: var(--accent);
-    font-weight: 500;
-  }
-  .subview { display: none; padding: 20px 24px; }
-  .subview.active { display: block; }
-  .subview.full { padding: 0; height: calc(100% - 41px); display: none; }
-  .subview.full.active { display: block; }
-
-  /* ============================================================
-     Capability gating — rail items, subnav tabs, and content
-     get hidden when current connection doesn't support them
-     ============================================================ */
-  .cap-hidden { display: none !important; }
 
   /* ============================================================
      Async render states (shared AsyncView: loading / empty / error)
@@ -222,7 +74,6 @@
     color: var(--text-tertiary);
   }
   .field-hint.required { color: var(--text-warning); }
-  .form-field input:disabled { opacity: 0.6; }
   .btn.danger {
     background: var(--text-danger);
     color: var(--bg-primary);
@@ -231,5 +82,3 @@
   .btn.danger:hover { opacity: 0.9; }
   .btn.danger:disabled { opacity: 0.4; cursor: not-allowed; }
 
-  /* App root (app.rs): focus target for the app-wide keys. */
-  .studio-root:focus { outline: none; }

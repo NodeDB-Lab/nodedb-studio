@@ -3,6 +3,7 @@
 //! fine-grained Dioxus signals at the app root (see `crate::app`), never as
 //! global statics.
 
+pub mod admin;
 pub mod cluster;
 pub mod connection;
 pub mod connection_form;

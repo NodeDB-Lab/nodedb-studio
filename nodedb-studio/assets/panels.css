@@ -119,14 +119,6 @@
 .drag-capture.horizontal { cursor: col-resize; }
 .drag-capture.vertical { cursor: row-resize; }
 
-/* Screens not yet rebuilt render their old markup inside this wrapper. */
-.legacy-page {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  background: var(--surface-panel);
-}
-
 /* One line of context under a panel header, e.g. "Groups hosted on node-2". */
 .panel-subtitle {
   padding: 10px 16px 6px;

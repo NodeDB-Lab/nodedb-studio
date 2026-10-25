@@ -4,6 +4,13 @@
 //! testable. Every later wiring phase maps a `use_resource` result into an
 //! `AsyncState<T>` via `from_value` and hands it to the `AsyncView` component.
 
+use crate::models::admin::AdminReview;
+use crate::models::admin_access::{AccessDirectory, SubjectAccess};
+use crate::models::admin_audit::{AuditEvent, AuditFacets, AuditPage};
+use crate::models::admin_backup::BackupOverview;
+use crate::models::admin_config::{ConfigProposal, ConfigView};
+use crate::models::admin_credential::{CredentialList, CredentialTest};
+use crate::models::admin_policy::{PolicySet, PolicyTestResult};
 use crate::models::array_data::{ArraySchema, SliceResult};
 use crate::models::cluster::ClusterMembers;
 use crate::models::cluster_activity::ActivityLog;
@@ -116,6 +123,81 @@ impl IsEmpty for RejectedWrites {
         self.rows.is_empty()
     }
 }
+
+/// The directory is empty when it lists no principal.
+impl IsEmpty for AccessDirectory {
+    fn is_empty(&self) -> bool {
+        self.principals.is_empty()
+    }
+}
+
+/// A policy set is empty when the database has no policy.
+impl IsEmpty for PolicySet {
+    fn is_empty(&self) -> bool {
+        self.policies.is_empty()
+    }
+}
+
+/// A page is empty when no event matches the filters.
+impl IsEmpty for AuditPage {
+    fn is_empty(&self) -> bool {
+        self.events.is_empty()
+    }
+}
+
+impl IsEmpty for BackupOverview {
+    fn is_empty(&self) -> bool {
+        self.snapshots.is_empty()
+    }
+}
+
+impl IsEmpty for ConfigView {
+    fn is_empty(&self) -> bool {
+        self.settings.is_empty()
+    }
+}
+
+impl IsEmpty for CredentialList {
+    fn is_empty(&self) -> bool {
+        self.items.is_empty()
+    }
+}
+
+/// One subject, one event, one test, one review, and one proposal always
+/// carry something: a missing one is an error.
+macro_rules! never_empty {
+    ($($t:ty),* $(,)?) => {
+        $(impl IsEmpty for $t {
+            fn is_empty(&self) -> bool {
+                false
+            }
+        })*
+    };
+}
+
+/// No proposed change has nothing to review.
+impl IsEmpty for Option<ConfigProposal> {
+    fn is_empty(&self) -> bool {
+        self.is_none()
+    }
+}
+
+/// A subject that is not chosen yet has nothing to show.
+impl IsEmpty for Option<SubjectAccess> {
+    fn is_empty(&self) -> bool {
+        self.is_none()
+    }
+}
+
+never_empty!(
+    SubjectAccess,
+    AuditEvent,
+    AuditFacets,
+    PolicyTestResult,
+    AdminReview,
+    ConfigProposal,
+    CredentialTest,
+);
 
 impl IsEmpty for SyncLog {
     fn is_empty(&self) -> bool {

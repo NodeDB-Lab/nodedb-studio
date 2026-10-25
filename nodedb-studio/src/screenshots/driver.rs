@@ -240,6 +240,7 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
                 search: scene.search.as_deref().cloned(),
                 cluster: scene.cluster.as_deref().cloned(),
                 sync: scene.sync.as_deref().cloned(),
+                admin: scene.admin.as_deref().cloned(),
             }));
         }
     }

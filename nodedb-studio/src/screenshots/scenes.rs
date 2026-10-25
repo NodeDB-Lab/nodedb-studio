@@ -14,6 +14,7 @@ use crate::routes::tabs::{
     AdminTab, ClusterTab, EventsTab, GraphTab, SearchTab, SpatialTab, SyncTab, TimeseriesTab,
     VectorTab,
 };
+use crate::screenshots::admin_scenes;
 use crate::screenshots::cluster_scenes;
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
@@ -23,6 +24,7 @@ use crate::screenshots::sync_scenes;
 use crate::screenshots::timeseries_scenes;
 use crate::screenshots::vector_scenes;
 use crate::screenshots::workbench_scenes;
+use crate::state::admin::AdminSeed;
 use crate::state::cluster::ClusterSeed;
 use crate::state::connection_form::{ConnectionForm, TestState};
 use crate::state::console::ConsoleState;
@@ -166,6 +168,8 @@ pub struct Scene {
     pub cluster: Option<Box<ClusterSeed>>,
     /// The Sync tabs' selections and open sheets. `None` keeps the current ones.
     pub sync: Option<Box<SyncSeed>>,
+    /// The Administration tabs' selections, drafts, and open reviews. `None` keeps the current ones.
+    pub admin: Option<Box<AdminSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -187,6 +191,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         search: None,
         cluster: None,
         sync: None,
+        admin: None,
     }
 }
 
@@ -367,13 +372,7 @@ pub fn scenes() -> Vec<Scene> {
     all.extend(search());
     all.extend(events());
     all.extend(cluster());
-    for tab in AdminTab::ALL {
-        all.push(scene(
-            admin_scene(*tab),
-            at(Route::Admin { tab: *tab }),
-            O::None,
-        ));
-    }
+    all.extend(admin());
     all.extend(sync());
     all.extend([
         scene(
@@ -681,15 +680,38 @@ fn sync() -> Vec<Scene> {
     ]
 }
 
-fn admin_scene(tab: AdminTab) -> &'static str {
-    match tab {
-        AdminTab::Access => "admin-access",
-        AdminTab::RowPolicies => "admin-row-policies",
-        AdminTab::Audit => "admin-audit",
-        AdminTab::Backups => "admin-backups",
-        AdminTab::Config => "admin-config",
-        AdminTab::Credentials => "admin-credentials",
-    }
+/// Administration: each tab, and the two reviews that apply a change.
+fn admin() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: AdminSeed| Scene {
+        admin: Some(Box::new(seed)),
+        ..scene(name, at(Route::Admin { tab }), Overlay::None)
+    };
+    vec![
+        at_tab("admin-access", AdminTab::Access, admin_scenes::access()),
+        at_tab(
+            "admin-access-review",
+            AdminTab::Access,
+            admin_scenes::access_review(),
+        ),
+        at_tab(
+            "admin-row-policies",
+            AdminTab::RowPolicies,
+            admin_scenes::row_policies(),
+        ),
+        at_tab("admin-audit", AdminTab::Audit, admin_scenes::audit()),
+        at_tab("admin-backups", AdminTab::Backups, admin_scenes::backups()),
+        at_tab(
+            "admin-restore-review",
+            AdminTab::Backups,
+            admin_scenes::restore_review(),
+        ),
+        at_tab("admin-config", AdminTab::Config, admin_scenes::config()),
+        at_tab(
+            "admin-credentials",
+            AdminTab::Credentials,
+            admin_scenes::credentials(),
+        ),
+    ]
 }
 
 #[cfg(test)]

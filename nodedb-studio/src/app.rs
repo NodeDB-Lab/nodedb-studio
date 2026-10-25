@@ -19,6 +19,7 @@ use crate::models::notification::Notification;
 use crate::services::MockConnectionService;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
+use crate::state::admin::AdminUi;
 use crate::state::cluster::ClusterUi;
 use crate::state::connection::{ActiveConnection, ConnectError};
 use crate::state::connection_form::ConnectionForm;
@@ -66,6 +67,7 @@ const SPATIAL: Asset = asset!("/assets/spatial.css");
 const SEARCH: Asset = asset!("/assets/search.css");
 const CLUSTER: Asset = asset!("/assets/cluster.css");
 const SYNC: Asset = asset!("/assets/sync.css");
+const ADMIN: Asset = asset!("/assets/admin.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -174,6 +176,8 @@ pub fn App() -> Element {
     ClusterUi::provide();
     // Sync keeps each tab's selection, filters, and open sheet.
     SyncUi::provide();
+    // Administration keeps each tab's selection, drafts, and open review.
+    AdminUi::provide();
     use_context_provider(|| DynamicPanels(Signal::new(Vec::new())));
     use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
@@ -322,6 +326,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: SEARCH }
         document::Stylesheet { href: CLUSTER }
         document::Stylesheet { href: SYNC }
+        document::Stylesheet { href: ADMIN }
         {scene_driver}
         div {
             class: "studio-root",

@@ -58,6 +58,9 @@ pub struct MockConnectionService {
     /// Devices, subscriptions, rejected writes, and activity, with the
     /// writes applied to them.
     pub(super) sync: Rc<RefCell<mock::SyncStore>>,
+    /// Principals, roles, policies, the audit trail, snapshots, config, and
+    /// credentials, with the changes applied to them.
+    pub(super) admin: Rc<RefCell<mock::AdminStore>>,
 }
 
 impl Default for MockConnectionService {
@@ -88,6 +91,7 @@ impl MockConnectionService {
             search: Rc::default(),
             cluster: Rc::new(RefCell::new(mock::ClusterStore::seeded())),
             sync: Rc::new(RefCell::new(mock::SyncStore::seeded())),
+            admin: Rc::new(RefCell::new(mock::AdminStore::seeded())),
         }
     }
 
@@ -117,6 +121,16 @@ impl MockConnectionService {
     pub(crate) fn without_sync_permission(self) -> Self {
         Self {
             sync: Rc::new(RefCell::new(mock::SyncStore::without_permission())),
+            ..self
+        }
+    }
+
+    /// Test-only: the same session with a principal that holds none of the
+    /// privileges an administration change needs.
+    #[cfg(test)]
+    pub(crate) fn without_admin_permission(self) -> Self {
+        Self {
+            admin: Rc::new(RefCell::new(mock::AdminStore::without_permission())),
             ..self
         }
     }
