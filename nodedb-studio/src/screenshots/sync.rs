@@ -10,6 +10,7 @@ use dioxus::prelude::*;
 use crate::routes::Route;
 use crate::state::console::ConsoleState;
 use crate::state::designer::DesignerState;
+use crate::state::events::{EventsSeed, EventsUi};
 use crate::state::explorer::{RecordView, Selected};
 use crate::state::query::QueryWorkspace;
 
@@ -25,6 +26,8 @@ pub struct SceneTarget {
     pub console: Option<ConsoleState>,
     /// The Designer's selection and drawers. `None` keeps the current ones.
     pub designer: Option<DesignerState>,
+    /// The Events & Jobs tabs' state. `None` keeps the current state.
+    pub events: Option<EventsSeed>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -44,6 +47,7 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let mut query = use_context::<Signal<QueryWorkspace>>();
     let mut console = use_context::<Signal<ConsoleState>>();
     let mut designer = use_context::<Signal<DesignerState>>();
+    let events = use_context::<EventsUi>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -63,6 +67,9 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
             // makes the page read them.
             let epoch = designer.peek().epoch + 1;
             designer.set(DesignerState { epoch, ..d });
+        }
+        if let Some(seed) = t.events {
+            events.apply(seed);
         }
         nav.replace(t.route);
     });

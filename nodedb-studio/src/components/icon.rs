@@ -63,6 +63,7 @@ pub enum Icon {
     Layers,
     Link,
     List,
+    ListX,
     Lock,
     LogOut,
     Map,
@@ -311,6 +312,13 @@ fn shapes(icon: Icon) -> &'static [Shape] {
             P("M8 6h13"),
             P("M8 12h13"),
             P("M8 18h13"),
+        ],
+        Icon::ListX => &[
+            P("M11 12H3"),
+            P("M16 6H3"),
+            P("M16 18H3"),
+            P("m19 10-4 4"),
+            P("m15 10 4 4"),
         ],
         Icon::Lock => &[R(3.0, 11.0, 18.0, 11.0, 2.0), P("M7 11V7a5 5 0 0 1 10 0v4")],
         Icon::LogOut => &[

@@ -80,6 +80,58 @@ pub async fn apply_one_or_empty<T>(
     }
 }
 
+/// Like `apply`, for a fixture read that can itself fail (an unknown id).
+/// `Empty` keeps the failure and empties a success.
+pub async fn apply_result<T>(
+    behavior: MockBehavior,
+    ready: Result<Vec<T>, StudioError>,
+) -> Result<Vec<T>, StudioError> {
+    match behavior {
+        MockBehavior::Ready => ready,
+        MockBehavior::Empty => ready.map(|_| Vec::new()),
+        MockBehavior::Erroring => Err(unreachable_server()),
+        MockBehavior::Delayed(d) => {
+            tokio::time::sleep(d).await;
+            ready
+        }
+    }
+}
+
+/// Like `apply_one`, for a single-value read that can itself fail.
+pub async fn apply_one_result<T>(
+    behavior: MockBehavior,
+    ready: Result<T, StudioError>,
+) -> Result<T, StudioError> {
+    match behavior {
+        MockBehavior::Ready | MockBehavior::Empty => ready,
+        MockBehavior::Erroring => Err(unreachable_server()),
+        MockBehavior::Delayed(d) => {
+            tokio::time::sleep(d).await;
+            ready
+        }
+    }
+}
+
+/// A write. `Erroring` refuses it before it touches state, so a failed save
+/// leaves the store as it was. `Empty` has no meaning for a write.
+pub async fn apply_write<T>(
+    behavior: MockBehavior,
+    write: impl FnOnce() -> Result<T, StudioError>,
+) -> Result<T, StudioError> {
+    match behavior {
+        MockBehavior::Ready | MockBehavior::Empty => write(),
+        MockBehavior::Erroring => Err(unreachable_server()),
+        MockBehavior::Delayed(d) => {
+            tokio::time::sleep(d).await;
+            write()
+        }
+    }
+}
+
+fn unreachable_server() -> StudioError {
+    StudioError::from(nodedb_client::NodeDbError::node_unreachable("mock"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,5 +231,40 @@ mod tests {
         )
         .await;
         assert_eq!(out.expect("delayed yields data"), 9u8);
+    }
+
+    #[tokio::test]
+    async fn apply_result_keeps_a_failure_and_empties_a_success() {
+        let ok = || Ok(vec![1u8]);
+        let bad = || Err::<Vec<u8>, _>(StudioError::NotConnected);
+        assert_eq!(
+            apply_result(MockBehavior::Ready, ok()).await.expect("ok"),
+            vec![1u8]
+        );
+        assert!(
+            apply_result(MockBehavior::Empty, ok())
+                .await
+                .expect("ok")
+                .is_empty()
+        );
+        assert!(apply_result(MockBehavior::Empty, bad()).await.is_err());
+        assert!(apply_result(MockBehavior::Erroring, ok()).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn apply_write_runs_unless_erroring() {
+        let ran = std::cell::Cell::new(false);
+        let write = || {
+            ran.set(true);
+            Ok(1u8)
+        };
+        assert!(apply_write(MockBehavior::Erroring, write).await.is_err());
+        assert!(!ran.get(), "a refused write must not run");
+        assert_eq!(
+            apply_write(MockBehavior::Empty, || Ok(2u8))
+                .await
+                .expect("runs"),
+            2
+        );
     }
 }

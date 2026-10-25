@@ -8,12 +8,16 @@ use crate::models::array_data::{ArraySchema, SliceResult};
 use crate::models::cluster::ClusterMembers;
 use crate::models::designer::DesignSchema;
 use crate::models::designer_change::ChangeReview;
+use crate::models::feed_draft::FeedPreview;
 use crate::models::graph_records::EdgePage;
+use crate::models::jobs::JobList;
+use crate::models::matviews::ViewRows;
 use crate::models::query_plan::QueryPlan;
 use crate::models::records::{CollectionAccess, Record, RecordPage};
 use crate::models::saved_query::QueryLibrary;
 use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
+use crate::models::topics::{MessageRange, ResetPreview};
 use crate::models::transfer::ExportPreview;
 use crate::models::viewers::SubGraph;
 use crate::models::workbench::{QueryRun, ResultSet, SchemaTree};
@@ -48,6 +52,40 @@ impl IsEmpty for SessionInfo {
 impl IsEmpty for ClusterMembers {
     fn is_empty(&self) -> bool {
         self.members.is_empty()
+    }
+}
+
+/// A job list is empty when the server lists no jobs.
+impl IsEmpty for JobList {
+    fn is_empty(&self) -> bool {
+        self.jobs.is_empty()
+    }
+}
+
+/// A view that holds no rows has nothing to page.
+impl IsEmpty for ViewRows {
+    fn is_empty(&self) -> bool {
+        self.total == 0
+    }
+}
+
+/// A bounded read with no messages still loaded: the range says what it
+/// covered and the retained bounds.
+impl IsEmpty for MessageRange {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for ResetPreview {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for FeedPreview {
+    fn is_empty(&self) -> bool {
+        false
     }
 }
 

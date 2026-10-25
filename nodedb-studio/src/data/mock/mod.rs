@@ -7,13 +7,11 @@
 //! server stat is a neutral "dev" placeholder rather than an invented version.
 
 mod admin;
-mod cdc;
 mod cluster;
 mod connections;
 mod designer;
-mod docs;
+mod events;
 mod explorer;
-mod streams;
 #[cfg(test)]
 mod test_support;
 mod transfer;
@@ -21,7 +19,6 @@ mod viewers;
 mod workbench;
 
 pub use admin::{audit_entries, cluster_nodes, raft_groups, rls_policies, shard_ranges, users};
-pub use cdc::{ChangeOp, cdc_events};
 pub use cluster::{cluster_members, hosted_groups};
 pub use connections::{
     connection_activity, connections, nav_badges, notifications, recent_items, saved_from_draft,
@@ -31,12 +28,14 @@ pub use designer::{DesignerStore, explorer_schema};
 // Only the tests name this.
 #[cfg(test)]
 pub use designer::design_schema;
+pub use events::{
+    FeedStore, JobStore, ListenStore, TopicStore, ViewStore, preview_feed, seen_messages,
+};
+#[cfg(test)]
+pub use events::{seeded_feeds, seeded_jobs};
 pub use explorer::{
     GRAPH, Overlay, array_schema, array_slice, collection_access, collection_schema, collections,
     edge_page, observed_at, record_page, stored_record, transfer_preview,
-};
-pub use streams::{
-    materialized_views, notify_channel_rows, notify_message_rows, scheduled_jobs, topics,
 };
 pub use transfer::transfer_jobs;
 pub use viewers::{

@@ -21,10 +21,14 @@ mod tests {
     use std::rc::Rc;
 
     use super::*;
-    use crate::models::streams::StreamSession;
+    use crate::models::feeds::FeedSession;
     use crate::services::connection_service::ConnectionService;
     use crate::services::error::StudioError;
-    use crate::services::streams_data::StreamsData;
+    use crate::services::feed_data::FeedData;
+    use crate::services::job_data::JobData;
+    use crate::services::listen_data::ListenData;
+    use crate::services::matview_data::MatViewData;
+    use crate::services::topic_data::TopicData;
     use crate::services::viewers_data::ViewersData;
     use crate::services::workbench_data::WorkbenchData;
     use crate::state::connections_registry::Credentials;
@@ -92,26 +96,30 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stub_streams_lifecycle_and_lists_are_not_connected() {
+    async fn stub_events_reads_and_session_are_not_connected() {
         let svc = NodeDbConnectionService;
-        let session = StreamSession {
-            stream: "cdc".into(),
-            group: "studio_cdc".into(),
+        let session = FeedSession {
+            feed: "feed_01".into(),
+            group: "studio_feed_01".into(),
         };
         assert!(matches!(
-            svc.open_stream_session("cdc").await,
+            svc.open_feed_session("feed_01").await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.cdc_batch(&session, 10).await,
+            svc.read_feed_events(&session, 10).await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.commit_stream_offsets(&session).await,
+            svc.commit_feed_offsets(&session).await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.close_stream_session(&session).await,
+            svc.close_feed_session(&session).await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.change_feeds().await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
@@ -125,10 +133,6 @@ mod tests {
         ));
         assert!(matches!(
             svc.notify_channels().await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.notify_messages().await,
             Err(StudioError::NotConnected)
         ));
     }

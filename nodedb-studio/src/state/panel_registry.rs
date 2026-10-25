@@ -56,6 +56,46 @@ const CLUSTER_NODES: &[PanelSpec] = &[
     panel("details", "Node details", "Show the selected node"),
 ];
 
+const EVENTS_FEEDS: &[PanelSpec] = &[
+    panel("feeds", "Change feeds", "Show the feed list"),
+    panel("events", "Recent events", "Show the selected feed's events"),
+    panel("details", "Feed details", "Show the selected feed"),
+];
+
+const EVENTS_VIEWS: &[PanelSpec] = &[
+    panel("views", "Materialized views", "Show the saved views"),
+    panel("result", "Result rows", "Show the selected view's rows"),
+    panel(
+        "definition",
+        "Definition",
+        "Show the definition and refresh policy",
+    ),
+    panel("history", "Refresh history", "Show the view's refreshes"),
+];
+
+const EVENTS_TOPICS: &[PanelSpec] = &[
+    panel("topics", "Topics", "Show the durable topics"),
+    panel("messages", "Messages", "Show the topic's messages"),
+    panel("groups", "Consumer group", "Show committed offsets and lag"),
+    panel("details", "Topic details", "Show the selected topic"),
+];
+
+const EVENTS_NOTIFICATIONS: &[PanelSpec] = &[
+    panel(
+        "listener",
+        "Notification listener",
+        "Show the listening session",
+    ),
+    panel("send", "Send notification", "Show the send form"),
+];
+
+const EVENTS_JOBS: &[PanelSpec] = &[
+    panel("jobs", "Jobs", "Show the scheduled jobs"),
+    panel("details", "Job details", "Show the selected job"),
+    panel("runs", "Job runs", "Show the job's runs"),
+    panel("log", "Run log", "Show the selected run's log"),
+];
+
 const DESIGNER: &[PanelSpec] = &[panel(
     "properties",
     "Properties",
@@ -72,14 +112,12 @@ impl Surface {
             Surface::Console => CONSOLE,
             Surface::Designer => DESIGNER,
             Surface::Cluster(ClusterTab::Nodes) => CLUSTER_NODES,
-            Surface::Events(
-                EventsTab::ChangeFeeds
-                | EventsTab::MaterializedViews
-                | EventsTab::Topics
-                | EventsTab::Notifications
-                | EventsTab::ScheduledJobs,
-            )
-            | Surface::Graph(GraphTab::Cypher | GraphTab::Builder | GraphTab::GraphRag)
+            Surface::Events(EventsTab::ChangeFeeds) => EVENTS_FEEDS,
+            Surface::Events(EventsTab::MaterializedViews) => EVENTS_VIEWS,
+            Surface::Events(EventsTab::Topics) => EVENTS_TOPICS,
+            Surface::Events(EventsTab::Notifications) => EVENTS_NOTIFICATIONS,
+            Surface::Events(EventsTab::ScheduledJobs) => EVENTS_JOBS,
+            Surface::Graph(GraphTab::Cypher | GraphTab::Builder | GraphTab::GraphRag)
             | Surface::Vector(VectorTab::Search | VectorTab::Projection | VectorTab::Index)
             | Surface::Timeseries(
                 TimeseriesTab::Explore | TimeseriesTab::Dashboards | TimeseriesTab::Lifecycle,

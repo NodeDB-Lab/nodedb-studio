@@ -79,6 +79,8 @@ impl From<&StudioError> for EditorError {
             | StudioError::QueryNameTaken(_)
             | StudioError::UnknownQuery(_)
             | StudioError::UnknownChange(_)
+            | StudioError::UnknownObject { .. }
+            | StudioError::StaleRevision { .. }
             | StudioError::EmptyStatement
             | StudioError::Syntax { .. }
             | StudioError::MissingParameter(_)

@@ -10,14 +10,22 @@ use crate::services::cluster_data::ClusterData;
 use crate::services::connection_service::ConnectionService;
 use crate::services::designer_data::DesignerData;
 use crate::services::explorer_data::ExplorerData;
-use crate::services::streams_data::StreamsData;
+use crate::services::feed_data::FeedData;
+use crate::services::job_data::JobData;
+use crate::services::listen_data::ListenData;
+use crate::services::matview_data::MatViewData;
+use crate::services::topic_data::TopicData;
 use crate::services::transfer_data::TransferData;
 use crate::services::viewers_data::ViewersData;
 use crate::services::workbench_data::WorkbenchData;
 
 pub trait Backend:
     ConnectionService
-    + StreamsData
+    + FeedData
+    + TopicData
+    + MatViewData
+    + ListenData
+    + JobData
     + ExplorerData
     + AdminData
     + ClusterData
@@ -30,7 +38,11 @@ pub trait Backend:
 
 impl<T> Backend for T where
     T: ConnectionService
-        + StreamsData
+        + FeedData
+        + TopicData
+        + MatViewData
+        + ListenData
+        + JobData
         + ExplorerData
         + AdminData
         + ClusterData

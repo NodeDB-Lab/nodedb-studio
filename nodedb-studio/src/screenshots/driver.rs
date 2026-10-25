@@ -233,6 +233,7 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
                 query: scene.query.as_deref().cloned(),
                 console: scene.console.as_deref().cloned(),
                 designer: scene.designer.as_deref().map(|d| d.state.clone()),
+                events: scene.events.as_deref().cloned(),
             }));
         }
     }

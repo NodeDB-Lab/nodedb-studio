@@ -28,12 +28,17 @@ pub struct MockConnectionService {
     /// The saved-connection name the last successful `connect` opened.
     /// Session-scoped reads (`databases`) answer for it, as a server does.
     pub(super) session: Rc<RefCell<Option<String>>>,
-    /// Offset the next `cdc_batch` reads from. Only `commit_stream_offsets`
-    /// advances it, mirroring the server: reads are idempotent.
-    pub(super) cdc_committed: Rc<Cell<usize>>,
-    /// How far the most recent `cdc_batch` read. Commit promotes this into
-    /// `cdc_committed`.
-    pub(super) cdc_read_end: Rc<Cell<usize>>,
+    /// Change feeds, with Studio's tail session cursors. Only a commit
+    /// advances a cursor, mirroring the server: reads are idempotent.
+    pub(super) feeds: Rc<RefCell<mock::FeedStore>>,
+    /// Topics, their logs, and consumer group offsets.
+    pub(super) topics: Rc<RefCell<mock::TopicStore>>,
+    /// Materialized views and their refresh history.
+    pub(super) views: Rc<RefCell<mock::ViewStore>>,
+    /// Listening sessions and the notifications queued for them.
+    pub(super) listen: Rc<RefCell<mock::ListenStore>>,
+    /// Scheduled jobs and their runs.
+    pub(super) schedules: Rc<RefCell<mock::JobStore>>,
     /// Record writes made this session, laid over the Explorer fixtures.
     pub(super) records: Rc<RefCell<mock::Overlay>>,
     /// Import and export jobs, newest first. Starting and cancelling write here.
@@ -61,8 +66,11 @@ impl MockConnectionService {
             read: Rc::default(),
             saved: Rc::new(RefCell::new(mock::connections())),
             session: Rc::default(),
-            cdc_committed: Rc::default(),
-            cdc_read_end: Rc::default(),
+            feeds: Rc::new(RefCell::new(mock::FeedStore::seeded())),
+            topics: Rc::new(RefCell::new(mock::TopicStore::seeded())),
+            views: Rc::new(RefCell::new(mock::ViewStore::seeded())),
+            listen: Rc::new(RefCell::new(mock::ListenStore::seeded())),
+            schedules: Rc::new(RefCell::new(mock::JobStore::seeded())),
             records: Rc::default(),
             jobs: Rc::new(RefCell::new(mock::transfer_jobs())),
             workbench: Rc::new(RefCell::new(mock::WorkbenchStore::seeded())),
@@ -93,9 +101,8 @@ impl MockConnectionService {
     /// Test-only: a clone that shares this instance's state cells but
     /// answers reads with a different `MockBehavior`. Lets a test simulate a
     /// single session whose connection recovers after an error (or stops
-    /// being empty), without losing whatever the cursor already recorded —
-    /// which is exactly the scenario the commit-after-a-failed-read
-    /// regression needs to observe.
+    /// being empty), without losing whatever the cursor already recorded.
+    /// That is the scenario the commit-after-a-failed-read regression needs.
     #[cfg(test)]
     pub(crate) fn with_shared_state(&self, behavior: MockBehavior) -> Self {
         Self {

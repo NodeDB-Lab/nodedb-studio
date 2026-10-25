@@ -23,6 +23,28 @@ pub fn ago(secs: u64) -> String {
     }
 }
 
+/// A span of seconds as `45s`, `1m 22s`, `2h 5m`, or `3d 4h`. Zero units drop.
+pub fn duration(secs: u64) -> String {
+    let (d, h, m, s) = (
+        secs / 86_400,
+        secs % 86_400 / 3600,
+        secs % 3600 / 60,
+        secs % 60,
+    );
+    let parts: [(u64, &str); 4] = [(d, "d"), (h, "h"), (m, "m"), (s, "s")];
+    let shown: Vec<String> = parts
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .take(2)
+        .map(|(n, u)| format!("{n}{u}"))
+        .collect();
+    if shown.is_empty() {
+        "0s".to_string()
+    } else {
+        shown.join(" ")
+    }
+}
+
 /// Seconds since 1970-01-01 UTC for a civil date and time. Fixtures write
 /// their timestamps with it, so the values read as dates.
 pub const fn epoch(year: i64, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> i64 {
@@ -37,17 +59,17 @@ pub const fn epoch(year: i64, month: u32, day: u32, hour: u32, minute: u32, seco
 }
 
 /// A calendar date and clock time, in the zone it was converted to.
-struct Civil {
-    year: i64,
-    month: u32,
-    day: u32,
-    hour: u32,
-    minute: u32,
-    second: u32,
+pub struct Civil {
+    pub year: i64,
+    pub month: u32,
+    pub day: u32,
+    pub hour: u32,
+    pub minute: u32,
+    pub second: u32,
 }
 
 /// `at` (seconds since the epoch, UTC) shifted by `offset_min` minutes.
-fn civil(at: i64, offset_min: i16) -> Civil {
+pub fn civil(at: i64, offset_min: i16) -> Civil {
     let local = at + i64::from(offset_min) * 60;
     let days = local.div_euclid(86_400);
     let secs = local.rem_euclid(86_400);
@@ -155,6 +177,16 @@ mod tests {
         assert_eq!(ago(240), "4m ago");
         assert_eq!(ago(7200), "2h ago");
         assert_eq!(ago(172_800), "2d ago");
+    }
+
+    #[test]
+    fn durations_keep_the_two_largest_units() {
+        assert_eq!(duration(0), "0s");
+        assert_eq!(duration(14), "14s");
+        assert_eq!(duration(82), "1m 22s");
+        assert_eq!(duration(300), "5m");
+        assert_eq!(duration(7500), "2h 5m");
+        assert_eq!(duration(90_000), "1d 1h");
     }
 
     #[test]

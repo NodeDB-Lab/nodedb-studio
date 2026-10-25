@@ -64,6 +64,19 @@ pub enum StudioError {
         expected: u64,
         stored: u64,
     },
+    /// A write named an event or job object the database does not hold.
+    #[error("no {kind} `{id}`")]
+    UnknownObject { kind: &'static str, id: String },
+    /// An edit named a revision of an object that has changed since. Nothing
+    /// is overwritten: the editor keeps the edit and offers a reload.
+    #[error(
+        "{object} changed: you edited revision {expected}, the server holds revision {stored}. Reload it and make the edit again."
+    )]
+    StaleRevision {
+        object: String,
+        expected: u64,
+        stored: u64,
+    },
     /// A write or read named a record the collection does not hold.
     #[error("{collection}/{id} does not exist")]
     RecordMissing { collection: String, id: String },
@@ -118,6 +131,8 @@ impl StudioError {
             | StudioError::UnknownConnection(_)
             | StudioError::UnknownDatabase(_)
             | StudioError::RevisionConflict { .. }
+            | StudioError::UnknownObject { .. }
+            | StudioError::StaleRevision { .. }
             | StudioError::RecordMissing { .. }
             | StudioError::PermissionDenied { .. }
             | StudioError::Rejected { .. }

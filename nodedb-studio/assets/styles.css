@@ -257,46 +257,6 @@
   .se-card .stats .s .v { font-family: var(--font-mono); font-size: 16px; font-weight: 500; }
   .se-card .stats .s .l { font-size: 10px; color: var(--text-tertiary); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em; }
 
-  /* CDC live tail */
-  .live-tail {
-    background: var(--bg-primary);
-    height: 100%;
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    overflow: hidden;
-  }
-  .tail-toolbar {
-    padding: 10px 16px;
-    background: var(--bg-secondary);
-    border-bottom: 0.5px solid var(--border-mid);
-    display: flex; align-items: center; gap: 10px;
-  }
-  .tail-body { overflow: auto; padding: 8px 0; font-family: var(--font-mono); font-size: 11px; }
-  .tail-row {
-    display: grid;
-    grid-template-columns: 80px 70px 80px 1fr;
-    gap: 12px;
-    padding: 4px 16px;
-    border-bottom: 0.5px solid var(--border-soft);
-  }
-  .tail-row:hover { background: var(--bg-secondary); }
-  .tail-row .time { color: var(--text-tertiary); }
-  .tail-row .op.ins { color: var(--text-success); }
-  .tail-row .op.upd { color: var(--text-info); }
-  .tail-row .op.del { color: var(--text-danger); }
-  .tail-row .coll { color: var(--text-secondary); }
-  .tail-row .payload { color: var(--text-primary); word-break: break-all; }
-  .tail-footer {
-    padding: 4px 16px;
-    background: var(--bg-secondary);
-    border-top: 0.5px solid var(--border-soft);
-    font-family: var(--font-mono); font-size: 10px;
-    color: var(--text-tertiary);
-    display: flex; gap: 16px;
-  }
-  .tail-pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--text-success); animation: pulse 1.4s infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
-
   /* ============================================================
      Cluster topology
      ============================================================ */
@@ -401,61 +361,6 @@
   .async-error-msg {
     color: var(--text-secondary);
     max-width: 280px;
-  }
-
-  /* ============================================================
-     Streams lateral sub-nav — same visual as Admin subnav but
-     with a different class to avoid the existing subview handler
-     ============================================================ */
-  .snav {
-    display: flex; align-items: center; gap: 2px;
-    padding: 8px 16px 0;
-    background: var(--bg-primary);
-    border-bottom: 0.5px solid var(--border-mid);
-  }
-  .snav-back {
-    padding: 6px 10px;
-    font-size: 14px;
-    color: var(--text-tertiary);
-    background: none; border: none;
-    cursor: pointer;
-    margin-right: 6px;
-    border-radius: 4px;
-  }
-  .snav-back:hover { color: var(--text-primary); background: var(--bg-hover); }
-  .snav-item {
-    padding: 8px 14px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    border-bottom: 2px solid transparent;
-    margin-bottom: -0.5px;
-    cursor: pointer;
-  }
-  .snav-item:hover { color: var(--text-primary); }
-  .snav-item.active {
-    color: var(--text-primary);
-    border-bottom-color: var(--accent);
-    font-weight: 500;
-  }
-  .snav-item .pulse-dot {
-    display: inline-block;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--text-success);
-    margin-left: 6px;
-    vertical-align: middle;
-    animation: pulse 1.4s infinite;
-  }
-
-  /* When a streams sub-screen has the lateral nav, the inner
-     content sits below it. Most streams sub-screens use the
-     .live-tail container which is grid-template-rows. We wrap
-     them so the snav is row 1 and content fills the rest. */
-  .streams-sub-shell {
-    height: 100%;
-    display: grid;
-    grid-template-rows: auto 1fr;
-    overflow: hidden;
   }
 
   /* ============================================================

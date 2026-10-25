@@ -24,6 +24,7 @@ use crate::state::connection_form::ConnectionForm;
 use crate::state::connections_registry::SavedConnection;
 use crate::state::console::ConsoleState;
 use crate::state::designer::DesignerState;
+use crate::state::events::EventsUi;
 use crate::state::explorer::{RecordView, RecordsEpoch, TransferNotice};
 use crate::state::persist::{PREFERENCES, PersistMode, Store, WORKSPACE};
 use crate::state::preferences::Preferences;
@@ -49,6 +50,7 @@ const OVERLAYS: Asset = asset!("/assets/overlays.css");
 const EXPLORER: Asset = asset!("/assets/explorer.css");
 const WORKBENCH: Asset = asset!("/assets/workbench.css");
 const DESIGNER: Asset = asset!("/assets/designer.css");
+const EVENTS: Asset = asset!("/assets/events.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -137,6 +139,9 @@ pub fn App() -> Element {
     // The Designer's selection and open drawers outlive the page. Staged
     // changes live behind the seam.
     use_context_provider(|| Signal::new(DesignerState::default()));
+    // Events & Jobs keeps each tab's selection, filter, tail, and open sheet
+    // while the user is on another page.
+    EventsUi::provide();
     use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
     // highlights.
@@ -276,6 +281,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: EXPLORER }
         document::Stylesheet { href: WORKBENCH }
         document::Stylesheet { href: DESIGNER }
+        document::Stylesheet { href: EVENTS }
         {scene_driver}
         div {
             class: "studio-root",

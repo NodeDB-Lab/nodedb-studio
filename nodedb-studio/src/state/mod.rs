@@ -8,6 +8,7 @@ pub mod connection_form;
 pub mod connections_registry;
 pub mod console;
 pub mod designer;
+pub mod events;
 pub mod explorer;
 pub mod notifications;
 pub mod palette;

@@ -12,9 +12,11 @@ use crate::models::workbench::TxAccess;
 use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab};
 use crate::routes::{Destination, Route};
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
+use crate::screenshots::events_scenes;
 use crate::screenshots::workbench_scenes;
 use crate::state::connection_form::{ConnectionForm, TestState};
 use crate::state::console::ConsoleState;
+use crate::state::events::EventsSeed;
 use crate::state::explorer::{
     CollectionTab, DetailsTab, GraphSub, RecordView, Selected, TransferTab,
 };
@@ -135,6 +137,8 @@ pub struct Scene {
     pub transaction: Option<TxAccess>,
     /// The Designer's staged changes and open drawers. `None` keeps them.
     pub designer: Option<Box<DesignerSeed>>,
+    /// The Events & Jobs tabs' state. `None` keeps the current state.
+    pub events: Option<Box<EventsSeed>>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -149,6 +153,7 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         console: None,
         transaction: None,
         designer: None,
+        events: None,
     }
 }
 
@@ -307,13 +312,7 @@ pub fn scenes() -> Vec<Scene> {
         scene("spatial", at(Destination::Spatial.route()), O::None),
         scene("search", at(Destination::Search.route()), O::None),
     ]);
-    for tab in EventsTab::ALL {
-        all.push(scene(
-            events_scene(*tab),
-            at(Route::Events { tab: *tab }),
-            O::None,
-        ));
-    }
+    all.extend(events());
     for tab in ClusterTab::ALL {
         all.push(scene(
             cluster_scene(*tab),
@@ -426,14 +425,40 @@ fn designer() -> Vec<Scene> {
     ]
 }
 
-fn events_scene(tab: EventsTab) -> &'static str {
-    match tab {
-        EventsTab::ChangeFeeds => "events-change-feeds",
-        EventsTab::MaterializedViews => "events-materialized-views",
-        EventsTab::Topics => "events-topics",
-        EventsTab::Notifications => "events-notifications",
-        EventsTab::ScheduledJobs => "events-scheduled-jobs",
-    }
+/// Events & Jobs: each tab, and the Create change feed drawer.
+fn events() -> Vec<Scene> {
+    let at_tab = |name, tab, seed: EventsSeed| Scene {
+        events: Some(Box::new(seed)),
+        ..scene(name, at(Route::Events { tab }), Overlay::None)
+    };
+    vec![
+        at_tab(
+            "events-changefeeds",
+            EventsTab::ChangeFeeds,
+            events_scenes::changefeeds(),
+        ),
+        at_tab(
+            "events-feed-editor",
+            EventsTab::ChangeFeeds,
+            events_scenes::feed_editor(),
+        ),
+        at_tab("events-topics", EventsTab::Topics, events_scenes::topics()),
+        at_tab(
+            "events-materialized-views",
+            EventsTab::MaterializedViews,
+            events_scenes::materialized_views(),
+        ),
+        at_tab(
+            "events-notifications",
+            EventsTab::Notifications,
+            events_scenes::notifications(),
+        ),
+        at_tab(
+            "events-scheduled-jobs",
+            EventsTab::ScheduledJobs,
+            events_scenes::scheduled_jobs(),
+        ),
+    ]
 }
 
 fn cluster_scene(tab: ClusterTab) -> &'static str {
@@ -588,6 +613,21 @@ mod tests {
                     assert!(ids.contains(h), "scene `{}` hides unknown `{h}`", s.name);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn every_events_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in [
+            "events-changefeeds",
+            "events-feed-editor",
+            "events-topics",
+            "events-materialized-views",
+            "events-notifications",
+            "events-scheduled-jobs",
+        ] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
         }
     }
 

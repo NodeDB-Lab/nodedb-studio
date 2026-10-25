@@ -257,10 +257,10 @@ impl ConnectionService for MockConnectionService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::cdc::CdcRow;
+    use crate::models::feeds::ChangeFeed;
     use crate::services::async_state::AsyncState;
+    use crate::services::feed_data::FeedData;
     use crate::services::mock_behavior::MockBehavior;
-    use crate::services::streams_data::StreamsData;
 
     #[tokio::test]
     async fn mark_all_read_persists_across_reads() {
@@ -578,23 +578,23 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn cdc_feed_ready_is_loaded() {
+    async fn change_feeds_ready_is_loaded() {
         let svc = MockConnectionService::ready();
-        let state = AsyncState::from_value(Some(svc.cdc_feed().await));
+        let state = AsyncState::from_value(Some(svc.change_feeds().await));
         assert!(matches!(state, AsyncState::Loaded(_)));
     }
 
     #[tokio::test]
-    async fn cdc_feed_empty_is_empty() {
+    async fn change_feeds_empty_is_empty() {
         let svc = MockConnectionService::empty();
-        let state = AsyncState::from_value(Some(svc.cdc_feed().await));
+        let state = AsyncState::from_value(Some(svc.change_feeds().await));
         assert!(state.is_empty());
     }
 
     #[tokio::test]
-    async fn cdc_feed_erroring_is_retriable_error() {
+    async fn change_feeds_erroring_is_retriable_error() {
         let svc = MockConnectionService::erroring();
-        let state = AsyncState::from_value(Some(svc.cdc_feed().await));
+        let state = AsyncState::from_value(Some(svc.change_feeds().await));
         assert!(state.error_message().is_some());
         assert!(state.is_retriable());
     }
@@ -607,11 +607,11 @@ mod tests {
     #[tokio::test]
     async fn delayed_read_transitions_loading_to_loaded_without_guard() {
         let svc = MockConnectionService::ready();
-        let mut latest: AsyncState<Vec<CdcRow>> = AsyncState::Loading;
+        let mut latest: AsyncState<Vec<ChangeFeed>> = AsyncState::Loading;
         assert!(latest.is_loading());
         // simulate the scheduler interleaving other work before the read resolves
         tokio::task::yield_now().await;
-        let result = svc.cdc_feed().await;
+        let result = svc.change_feeds().await;
         latest = AsyncState::from_value(Some(result));
         assert!(matches!(latest, AsyncState::Loaded(_)));
     }
