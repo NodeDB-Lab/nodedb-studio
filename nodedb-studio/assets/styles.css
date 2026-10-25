@@ -133,9 +133,6 @@
 
   /* Strict / KV / FTS data grids */
 
-  /* Graph mini viewer */
-  .graph-mini { padding: 0; height: 100%; }
-
   /* Timeseries viewer */
   .ts-chart {
     padding: 20px;
@@ -165,77 +162,6 @@
   .sql-str { color: var(--text-success); }
   .sql-num { color: var(--text-warning); }
   .sql-comment { color: var(--text-tertiary); font-style: italic; }
-
-  /* ============================================================
-     View: Graph Explorer
-     ============================================================ */
-  .gx-frame {
-    display: grid;
-    grid-template-rows: auto 1fr;
-    height: 100%;
-  }
-  .gx-top {
-    padding: 10px 16px;
-    background: var(--bg-secondary);
-    border-bottom: 0.5px solid var(--border-mid);
-    display: flex; align-items: center; gap: 14px;
-  }
-  .gx-body { display: grid; grid-template-rows: 160px 1fr; overflow: hidden; }
-  .gx-editor {
-    padding: 10px 16px;
-    background: var(--bg-primary);
-    border-bottom: 0.5px solid var(--border-mid);
-    font-family: var(--font-mono); font-size: 12px;
-    line-height: 1.6;
-    overflow: auto;
-  }
-  .cypher-kw { color: var(--text-info); font-weight: 500; }
-  .cypher-fn { color: var(--text-warning); }
-  .cypher-str { color: var(--text-success); }
-
-  .gx-canvas {
-    position: relative;
-    background:
-      radial-gradient(circle at 20% 30%, var(--bg-secondary) 0%, var(--bg-primary) 60%);
-    overflow: hidden;
-  }
-  .gx-canvas svg { width: 100%; height: 100%; display: block; }
-  .gx-node circle { stroke: var(--bg-primary); stroke-width: 2; cursor: pointer; }
-  .gx-node text { font-family: var(--font-mono); font-size: 10px; fill: var(--text-primary); text-anchor: middle; pointer-events: none; }
-  .gx-edge { stroke: var(--text-tertiary); stroke-width: 1.5; fill: none; opacity: 0.7; }
-  .gx-edge-label { font-family: var(--font-mono); font-size: 9px; fill: var(--text-tertiary); }
-
-  .gx-drawer {
-    position: absolute;
-    right: 16px; top: 16px;
-    width: 280px;
-    background: var(--bg-primary);
-    border: 0.5px solid var(--border-mid);
-    border-radius: 8px;
-    box-shadow: var(--shadow-popover);
-    padding: 14px;
-    font-size: 12px;
-  }
-  .gx-drawer h4 { margin: 0 0 8px; font-size: 13px; }
-  .gx-drawer .kv { display: grid; grid-template-columns: 80px 1fr; gap: 6px 12px; }
-  .gx-drawer .kv .k { color: var(--text-tertiary); font-family: var(--font-mono); font-size: 11px; }
-  .gx-drawer .kv .v { font-family: var(--font-mono); font-size: 11px; word-break: break-all; }
-
-  /* GraphRAG fusion */
-  .grag-split { display: grid; grid-template-columns: 1fr 360px; height: 100%; }
-  .grag-results { padding: 16px; overflow: auto; }
-  .grag-result {
-    padding: 12px; margin-bottom: 8px;
-    background: var(--bg-primary);
-    border: 0.5px solid var(--border-mid);
-    border-radius: 8px;
-  }
-  .grag-result-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-  .grag-score { font-family: var(--font-mono); font-size: 11px; padding: 2px 6px; border-radius: 3px; }
-  .grag-score.vec { background: rgba(24,95,165,0.12); color: var(--text-info); }
-  .grag-score.graph { background: rgba(59,109,17,0.12); color: var(--text-success); }
-  .grag-result-body { color: var(--text-secondary); font-size: 12px; }
-  .grag-prov { margin-top: 8px; font-family: var(--font-mono); font-size: 10px; color: var(--text-tertiary); }
 
   /* ============================================================
      View: Streams & Events landing
@@ -361,47 +287,6 @@
   .async-error-msg {
     color: var(--text-secondary);
     max-width: 280px;
-  }
-
-  /* ============================================================
-     Graph Explorer Cypher — pinned drawer column instead of
-     floating over the canvas
-     ============================================================ */
-  .gx-canvas-shell {
-    display: grid;
-    grid-template-columns: 1fr 300px;
-    height: 100%;
-    overflow: hidden;
-  }
-  .gx-drawer-col {
-    background: var(--bg-secondary);
-    border-left: 0.5px solid var(--border-mid);
-    padding: 16px;
-    overflow-y: auto;
-    font-size: 12px;
-  }
-  .gx-drawer-col h4 { margin: 0 0 8px; font-size: 13px; }
-  .gx-drawer-col .kv {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 6px 12px;
-  }
-  .gx-drawer-col .kv .k {
-    color: var(--text-tertiary);
-    font-family: var(--font-mono);
-    font-size: 11px;
-  }
-  .gx-drawer-col .kv .v {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    word-break: break-all;
-  }
-  .gx-drawer-col .empty {
-    color: var(--text-tertiary);
-    font-style: italic;
-    text-align: center;
-    padding: 40px 10px;
-    font-size: 11px;
   }
 
   .field-hint {

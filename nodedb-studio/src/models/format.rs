@@ -45,6 +45,19 @@ pub fn duration(secs: u64) -> String {
     }
 }
 
+/// A large count in short form: `18.4M`, `3.2M`, `482K`, `912`.
+pub fn compact(n: u64) -> String {
+    let short = |value: f64, unit: &str| {
+        let text = format!("{value:.1}");
+        format!("{}{unit}", text.strip_suffix(".0").unwrap_or(&text))
+    };
+    match n {
+        0..=999 => n.to_string(),
+        1_000..=999_999 => short(n as f64 / 1_000.0, "K"),
+        _ => short(n as f64 / 1_000_000.0, "M"),
+    }
+}
+
 /// Seconds since 1970-01-01 UTC for a civil date and time. Fixtures write
 /// their timestamps with it, so the values read as dates.
 pub const fn epoch(year: i64, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> i64 {
@@ -187,6 +200,15 @@ mod tests {
         assert_eq!(duration(300), "5m");
         assert_eq!(duration(7500), "2h 5m");
         assert_eq!(duration(90_000), "1d 1h");
+    }
+
+    #[test]
+    fn compact_counts_read_short() {
+        assert_eq!(compact(912), "912");
+        assert_eq!(compact(482_613), "482.6K");
+        assert_eq!(compact(3_200_000), "3.2M");
+        assert_eq!(compact(18_400_000), "18.4M");
+        assert_eq!(compact(2_000_000), "2M");
     }
 
     #[test]

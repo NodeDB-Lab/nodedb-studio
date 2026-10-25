@@ -9,7 +9,7 @@ use crate::models::collection::Profile;
 use crate::models::connections::ConnectionTest;
 use crate::models::records::Filter;
 use crate::models::workbench::TxAccess;
-use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab};
+use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab, GraphTab};
 use crate::routes::{Destination, Route};
 use crate::screenshots::designer_scenes::{self, DesignerSeed};
 use crate::screenshots::events_scenes;
@@ -306,7 +306,27 @@ pub fn scenes() -> Vec<Scene> {
     all.extend(designer());
     all.extend(workbench());
     all.extend([
-        scene("graph-explorer", at(Destination::Graph.route()), O::None),
+        scene(
+            "graph",
+            at(Route::Graph {
+                tab: GraphTab::Cypher,
+            }),
+            O::None,
+        ),
+        scene(
+            "graph-builder",
+            at(Route::Graph {
+                tab: GraphTab::Builder,
+            }),
+            O::None,
+        ),
+        scene(
+            "graph-rag",
+            at(Route::Graph {
+                tab: GraphTab::GraphRag,
+            }),
+            O::None,
+        ),
         scene("vector-space", at(Destination::Vector.route()), O::None),
         scene("timeseries", at(Destination::Timeseries.route()), O::None),
         scene("spatial", at(Destination::Spatial.route()), O::None),
@@ -629,6 +649,18 @@ mod tests {
         ] {
             assert!(names.contains(&expected), "no scene `{expected}`");
         }
+    }
+
+    #[test]
+    fn every_graph_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in ["graph", "graph-builder", "graph-rag"] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
+        }
+        assert!(
+            !names.contains(&"graph-explorer"),
+            "the placeholder scene is gone"
+        );
     }
 
     #[test]

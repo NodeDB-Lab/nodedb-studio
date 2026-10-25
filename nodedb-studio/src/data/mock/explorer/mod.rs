@@ -5,7 +5,7 @@
 mod access;
 mod analytics;
 mod array;
-mod build;
+pub(super) mod build;
 mod catalog;
 mod docs;
 mod edges;

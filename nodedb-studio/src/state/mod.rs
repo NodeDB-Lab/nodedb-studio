@@ -10,6 +10,7 @@ pub mod console;
 pub mod designer;
 pub mod events;
 pub mod explorer;
+pub mod graph;
 pub mod notifications;
 pub mod palette;
 pub mod panel_registry;

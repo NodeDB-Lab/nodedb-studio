@@ -174,10 +174,6 @@ mod tests {
     async fn stub_viewer_reads_are_not_connected() {
         let svc = NodeDbConnectionService;
         assert!(matches!(
-            svc.sub_graph("social").await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
             svc.vector_points("embeddings").await,
             Err(StudioError::NotConnected)
         ));

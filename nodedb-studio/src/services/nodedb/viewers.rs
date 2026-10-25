@@ -2,19 +2,13 @@
 
 use async_trait::async_trait;
 
-use crate::models::viewers::{
-    FtsHit, SeriesPoint, SpatialFeature, SubGraph, SyncPeer, VectorPoint,
-};
+use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer, VectorPoint};
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::viewers_data::ViewersData;
 
 #[async_trait(?Send)]
 impl ViewersData for NodeDbConnectionService {
-    async fn sub_graph(&self, _collection: &str) -> Result<SubGraph, StudioError> {
-        Err(StudioError::NotConnected)
-    }
-
     async fn vector_points(&self, _collection: &str) -> Result<Vec<VectorPoint>, StudioError> {
         Err(StudioError::NotConnected)
     }

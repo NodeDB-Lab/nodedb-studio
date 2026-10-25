@@ -96,6 +96,36 @@ const EVENTS_JOBS: &[PanelSpec] = &[
     panel("log", "Run log", "Show the selected run's log"),
 ];
 
+const GRAPH_CYPHER: &[PanelSpec] = &[
+    panel("query", "Query", "Show the Cypher editor"),
+    panel("selection", "Selection", "Show the selected node or edge"),
+];
+
+const GRAPH_BUILDER: &[PanelSpec] = &[
+    panel("build", "Build query", "Show the pattern form"),
+    panel("graph", "Graph view", "Show the result graph"),
+    panel("details", "Node details", "Show the selected node or edge"),
+];
+
+const GRAPH_RAG: &[PanelSpec] = &[
+    panel("query", "Query", "Show the question and retrieval source"),
+    panel(
+        "evidence",
+        "Retrieved evidence",
+        "Show the retrieved records",
+    ),
+    panel(
+        "context",
+        "Graph neighbor context",
+        "Show the graph around the evidence",
+    ),
+    panel(
+        "selected",
+        "Selected evidence",
+        "Show the chosen record's citation",
+    ),
+];
+
 const DESIGNER: &[PanelSpec] = &[panel(
     "properties",
     "Properties",
@@ -117,8 +147,10 @@ impl Surface {
             Surface::Events(EventsTab::Topics) => EVENTS_TOPICS,
             Surface::Events(EventsTab::Notifications) => EVENTS_NOTIFICATIONS,
             Surface::Events(EventsTab::ScheduledJobs) => EVENTS_JOBS,
-            Surface::Graph(GraphTab::Cypher | GraphTab::Builder | GraphTab::GraphRag)
-            | Surface::Vector(VectorTab::Search | VectorTab::Projection | VectorTab::Index)
+            Surface::Graph(GraphTab::Cypher) => GRAPH_CYPHER,
+            Surface::Graph(GraphTab::Builder) => GRAPH_BUILDER,
+            Surface::Graph(GraphTab::GraphRag) => GRAPH_RAG,
+            Surface::Vector(VectorTab::Search | VectorTab::Projection | VectorTab::Index)
             | Surface::Timeseries(
                 TimeseriesTab::Explore | TimeseriesTab::Dashboards | TimeseriesTab::Lifecycle,
             )

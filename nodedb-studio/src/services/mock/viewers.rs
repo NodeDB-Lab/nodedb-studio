@@ -3,26 +3,14 @@
 use async_trait::async_trait;
 
 use crate::data::mock;
-use crate::models::viewers::{
-    FtsHit, SeriesPoint, SpatialFeature, SubGraph, SyncPeer, VectorPoint,
-};
+use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer, VectorPoint};
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;
-use crate::services::mock_behavior::{apply, apply_one_or_empty};
+use crate::services::mock_behavior::apply;
 use crate::services::viewers_data::ViewersData;
 
 #[async_trait(?Send)]
 impl ViewersData for MockConnectionService {
-    async fn sub_graph(&self, collection: &str) -> Result<SubGraph, StudioError> {
-        let c = collection.to_string();
-        apply_one_or_empty(
-            self.behavior,
-            move || mock::sub_graph(&c),
-            mock::empty_sub_graph,
-        )
-        .await
-    }
-
     async fn vector_points(&self, collection: &str) -> Result<Vec<VectorPoint>, StudioError> {
         let c = collection.to_string();
         apply(self.behavior, move || mock::vector_points(&c)).await

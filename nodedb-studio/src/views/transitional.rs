@@ -8,14 +8,11 @@ use dioxus::prelude::*;
 
 use crate::components::tabs::{RouteTabs, tab_items};
 use crate::routes::Route;
-use crate::routes::tabs::{
-    AdminTab, GraphTab, SearchTab, SpatialTab, SyncTab, TimeseriesTab, VectorTab,
-};
+use crate::routes::tabs::{AdminTab, SearchTab, SpatialTab, SyncTab, TimeseriesTab, VectorTab};
 use crate::views::admin::audit::AuditView;
 use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
 use crate::views::fts_inspector::FtsInspector;
-use crate::views::graph_explorer::GraphExplorer;
 use crate::views::spatial_view::SpatialView;
 use crate::views::sync::Sync;
 use crate::views::timeseries_dashboard::TimeseriesDashboard;
@@ -31,17 +28,6 @@ fn Unbuilt(title: &'static str) -> Element {
                 p { "This page is being rebuilt for the new workspace." }
             }
         }
-    }
-}
-
-#[component]
-pub fn GraphPage(tab: GraphTab) -> Element {
-    rsx! {
-        RouteTabs {
-            items: tab_items(GraphTab::ALL, |t| t.label(), |tab| Route::Graph { tab }),
-            current: Route::Graph { tab },
-        }
-        div { class: "legacy-page", GraphExplorer {} }
     }
 }
 

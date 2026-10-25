@@ -1,67 +1,10 @@
-//! Specialized-viewer fixtures: graph, vector, timeseries, spatial, FTS, sync.
+//! Specialized-viewer fixtures: vector, timeseries, spatial, FTS, sync.
 //!
-//! The client decodes `SubGraph` node/edge properties and `SearchResult.metadata`
-//! as empty, which is why `models::viewers` defines its own display-carrying
+//! The client decodes `SearchResult.metadata` as empty, which is why `models::viewers` defines its own display-carrying
 //! types instead of reusing client types here. These fixtures are deterministic
 //! stand-ins for what the real implementation will decode from raw SQL rows.
 
-use crate::models::viewers::{
-    FtsHit, GraphEdge, GraphNode, SeriesPoint, SpatialFeature, SubGraph, SyncPeer, VectorPoint,
-};
-
-/// A small connected graph for `collection`: every edge references a node
-/// present in `nodes`. Ids and labels are keyed off `collection` so a caller
-/// that passes the wrong collection produces visibly different data.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn sub_graph(collection: &str) -> SubGraph {
-    let nodes = vec![
-        GraphNode {
-            id: format!("{collection}-n1"),
-            label: format!("{collection}-alice"),
-            x: 0.0,
-            y: 0.0,
-        },
-        GraphNode {
-            id: format!("{collection}-n2"),
-            label: format!("{collection}-bob"),
-            x: 1.0,
-            y: 0.5,
-        },
-        GraphNode {
-            id: format!("{collection}-n3"),
-            label: format!("{collection}-carol"),
-            x: 2.0,
-            y: 1.0,
-        },
-    ];
-    let edges = vec![
-        GraphEdge {
-            id: format!("{collection}-e1"),
-            from: format!("{collection}-n1"),
-            to: format!("{collection}-n2"),
-            label: "follows".into(),
-        },
-        GraphEdge {
-            id: format!("{collection}-e2"),
-            from: format!("{collection}-n2"),
-            to: format!("{collection}-n3"),
-            label: "follows".into(),
-        },
-    ];
-    SubGraph { nodes, edges }
-}
-
-/// The genuinely-empty graph `MockBehavior::Empty` returns for `sub_graph`: a
-/// collection with zero nodes is a real graph-viewer outcome, not an absent
-/// value, so unlike `record_detail` this must not fold into `sub_graph`'s
-/// fixture nodes.
-#[allow(dead_code)] // SEAM-UNWIRED
-pub fn empty_sub_graph() -> SubGraph {
-    SubGraph {
-        nodes: Vec::new(),
-        edges: Vec::new(),
-    }
-}
+use crate::models::viewers::{FtsHit, SeriesPoint, SpatialFeature, SyncPeer, VectorPoint};
 
 /// A 2D projection of embeddings for `collection`, grouped into a couple of
 /// clusters. Ids are keyed off `collection` so a caller that passes the

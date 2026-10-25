@@ -16,7 +16,7 @@ pub mod designer;
 pub mod events;
 pub mod explorer;
 pub mod fts_inspector;
-pub mod graph_explorer;
+pub mod graph;
 pub mod query;
 pub mod spatial_view;
 pub mod sync;

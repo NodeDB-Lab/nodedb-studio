@@ -19,7 +19,6 @@ use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
 use crate::models::topics::{MessageRange, ResetPreview};
 use crate::models::transfer::ExportPreview;
-use crate::models::viewers::SubGraph;
 use crate::models::workbench::{QueryRun, ResultSet, SchemaTree};
 use crate::services::error::StudioError;
 
@@ -153,12 +152,11 @@ impl IsEmpty for QueryPlan {
     }
 }
 
-// `ResultSet` and `SubGraph` are also single fetched values, but unlike the
-// four above they wrap a list (rows / nodes) whose emptiness IS a real,
-// common outcome — "your query returned no rows" for a workbench, or "this
-// collection has no nodes" for a graph viewer. Folding `MockBehavior::Empty`
-// into `Ready` for these would make `AsyncState::Empty` unreachable for the
-// query and graph panes, so they report their own emptiness instead of the
+// `ResultSet` is also a single fetched value, but unlike the four above it
+// wraps a list of rows whose emptiness IS a real, common outcome: "your query
+// returned no rows". Folding `MockBehavior::Empty` into `Ready` for it would
+// make `AsyncState::Empty` unreachable for the query pane, so it reports its
+// own emptiness instead of the
 // blanket `false` above (see `apply_one_or_empty` in `mock_behavior`, which
 // gives the mock seam methods a way to actually deliver an empty payload).
 impl IsEmpty for ResultSet {
@@ -198,12 +196,6 @@ impl IsEmpty for SchemaTree {
 impl IsEmpty for QueryLibrary {
     fn is_empty(&self) -> bool {
         self.queries.is_empty()
-    }
-}
-
-impl IsEmpty for SubGraph {
-    fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
     }
 }
 
@@ -318,7 +310,6 @@ impl<T> AsyncState<T> {
 mod tests {
     use super::*;
     use crate::models::explorer::RecordRow;
-    use crate::models::viewers::GraphNode;
 
     #[test]
     fn async_state_none_is_loading() {
@@ -470,32 +461,6 @@ mod tests {
         )
         .expect("rectangular"))));
         assert!(matches!(result_set, AsyncState::Loaded(_)));
-    }
-
-    #[test]
-    fn zero_node_sub_graph_is_empty() {
-        // A collection with no nodes is a real outcome for the graph viewer
-        // and must reach `AsyncState::Empty`, not `Loaded` with an empty
-        // graph.
-        let sub_graph = AsyncState::from_value(Some(Ok(SubGraph {
-            nodes: Vec::new(),
-            edges: Vec::new(),
-        })));
-        assert!(matches!(sub_graph, AsyncState::Empty));
-    }
-
-    #[test]
-    fn non_empty_sub_graph_is_loaded() {
-        let sub_graph = AsyncState::from_value(Some(Ok(SubGraph {
-            nodes: vec![GraphNode {
-                id: "n1".to_string(),
-                label: "alice".to_string(),
-                x: 0.0,
-                y: 0.0,
-            }],
-            edges: Vec::new(),
-        })));
-        assert!(matches!(sub_graph, AsyncState::Loaded(_)));
     }
 
     #[test]

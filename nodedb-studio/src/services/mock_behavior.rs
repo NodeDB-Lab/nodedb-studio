@@ -58,8 +58,8 @@ pub async fn apply_one<T>(
 }
 
 /// Apply the behaviour to a single-value fixture thunk whose value can
-/// itself be "empty" (used by `run_query` and `sub_graph`: a zero-row result
-/// set or a zero-node graph is a real, common outcome, not an absent value).
+/// itself be "empty" (used by `run_query`: a zero-row result set is a real,
+/// common outcome, not an absent value).
 /// Unlike `apply_one`, `Empty` calls `empty` rather than `ready`, so the
 /// caller controls exactly what the empty shape looks like.
 pub async fn apply_one_or_empty<T>(

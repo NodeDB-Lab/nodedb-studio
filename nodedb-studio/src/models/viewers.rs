@@ -1,42 +1,12 @@
-//! Specialized-viewer models: graph, vector, timeseries, spatial, FTS, sync.
+//! Specialized-viewer models: vector, timeseries, spatial, FTS, sync.
 //!
-//! The client decodes `SubGraph` node/edge properties and `SearchResult.metadata`
-//! as empty, so Studio cannot get display fields (labels, coordinates, excerpts)
-//! by calling those typed client methods. These models carry the fields the
-//! viewers actually render; the real seam implementation populates them by
-//! decoding raw SQL rows rather than the client's typed graph/search types.
+//! The client decodes `SearchResult.metadata` as empty, so Studio cannot get
+//! display fields (coordinates, excerpts) by calling those typed client
+//! methods. These models carry the fields the viewers actually render; the
+//! real seam implementation populates them by decoding raw SQL rows rather
+//! than the client's typed search types.
 
 use serde::{Deserialize, Serialize};
-
-/// One node in a graph viewer. `x`/`y` are a laid-out display position, not
-/// stored coordinates.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct GraphNode {
-    pub id: String,
-    pub label: String,
-    pub x: f32,
-    pub y: f32,
-}
-
-/// One edge in a graph viewer. `from`/`to` reference `GraphNode::id`.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GraphEdge {
-    pub id: String,
-    pub from: String,
-    pub to: String,
-    pub label: String,
-}
-
-/// A graph viewer's full render input: every edge must reference a node
-/// present in `nodes`.
-#[allow(dead_code)] // SEAM-UNWIRED
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct SubGraph {
-    pub nodes: Vec<GraphNode>,
-    pub edges: Vec<GraphEdge>,
-}
 
 /// One point in a vector viewer's projection. `x`/`y` are a 2D projection of
 /// the embedding, not the raw vector.

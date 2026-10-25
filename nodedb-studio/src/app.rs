@@ -26,6 +26,7 @@ use crate::state::console::ConsoleState;
 use crate::state::designer::DesignerState;
 use crate::state::events::EventsUi;
 use crate::state::explorer::{RecordView, RecordsEpoch, TransferNotice};
+use crate::state::graph::GraphUi;
 use crate::state::persist::{PREFERENCES, PersistMode, Store, WORKSPACE};
 use crate::state::preferences::Preferences;
 use crate::state::query::{QueryWorkspace, TxEpoch};
@@ -51,6 +52,7 @@ const EXPLORER: Asset = asset!("/assets/explorer.css");
 const WORKBENCH: Asset = asset!("/assets/workbench.css");
 const DESIGNER: Asset = asset!("/assets/designer.css");
 const EVENTS: Asset = asset!("/assets/events.css");
+const GRAPH: Asset = asset!("/assets/graph.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -142,6 +144,8 @@ pub fn App() -> Element {
     // Events & Jobs keeps each tab's selection, filter, tail, and open sheet
     // while the user is on another page.
     EventsUi::provide();
+    // Graph Explorer keeps each mode's query, form, selection, and canvas.
+    GraphUi::provide();
     use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
     // highlights.
@@ -282,6 +286,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: WORKBENCH }
         document::Stylesheet { href: DESIGNER }
         document::Stylesheet { href: EVENTS }
+        document::Stylesheet { href: GRAPH }
         {scene_driver}
         div {
             class: "studio-root",

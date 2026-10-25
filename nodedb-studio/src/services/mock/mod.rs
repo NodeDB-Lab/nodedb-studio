@@ -6,6 +6,7 @@ pub mod connection;
 pub mod designer;
 pub mod explorer;
 pub mod feeds;
+pub mod graph;
 pub mod jobs;
 pub mod listen;
 pub mod matviews;
