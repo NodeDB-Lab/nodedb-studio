@@ -19,6 +19,7 @@ use crate::state::connection::ActiveConnection;
 use crate::state::connection_form::ConnectionForm;
 use crate::state::connections_registry::SavedConnection;
 use crate::state::preferences::{Preferences, Theme};
+use crate::state::query::TxEpoch;
 use crate::state::record_editor::RecordEditor;
 use crate::state::ui::{ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover};
 use crate::state::workspace::Workspace;
@@ -78,6 +79,7 @@ struct Handles {
     manager: Signal<ManagerOpen>,
     selection: Signal<ManagerSelection>,
     workspace: Signal<Workspace>,
+    tx_epoch: TxEpoch,
     target: Signal<Option<SceneTarget>>,
 }
 
@@ -106,6 +108,7 @@ fn Runner(run: RunConfig) -> Element {
         manager: use_context(),
         selection: use_context(),
         workspace: use_context(),
+        tx_epoch: use_context(),
         // A root context, so `SceneSync` inside the router can read it.
         target: use_hook(|| {
             provide_root_context(Signal::new_in_scope(None::<SceneTarget>, ScopeId::ROOT))
@@ -182,6 +185,9 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
         for id in scene.hidden {
             layout.set_visible(route.surface(), id, false);
         }
+        for (id, px) in scene.sizes {
+            layout.set_size(route.surface(), id, *px);
+        }
     }
     workspace.set(layout);
 
@@ -204,9 +210,20 @@ async fn apply(h: &Handles, scene: &Scene) -> Result<(), DriverError> {
                 // changes. Let that settle before the scene sets its own.
                 tokio::time::sleep(CONNECT_SETTLE).await;
             }
+            // One session transaction, shared by Query and Console: every
+            // scene starts with none, then opens the one it needs.
+            let _ = h.service.rollback_transaction().await;
+            if let Some(access) = scene.transaction {
+                let _ = h.service.begin_transaction(access).await;
+            }
+            let mut epoch = h.tx_epoch.0;
+            let next = *epoch.peek() + 1;
+            epoch.set(next);
             target.set(Some(SceneTarget {
                 route: route.clone(),
                 explorer: explorer.as_ref().map(|seed| seed.target()),
+                query: scene.query.as_deref().cloned(),
+                console: scene.console.as_deref().cloned(),
             }));
         }
     }

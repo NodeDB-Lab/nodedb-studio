@@ -38,6 +38,9 @@ pub struct MockConnectionService {
     pub(super) records: Rc<RefCell<mock::Overlay>>,
     /// Import and export jobs, newest first. Starting and cancelling write here.
     pub(super) jobs: Rc<RefCell<Vec<TransferJob>>>,
+    /// The transaction, saved queries, and console history. Writes change
+    /// them and every later read sees the change.
+    pub(super) workbench: Rc<RefCell<mock::WorkbenchStore>>,
 }
 
 impl Default for MockConnectionService {
@@ -59,6 +62,7 @@ impl MockConnectionService {
             cdc_read_end: Rc::default(),
             records: Rc::default(),
             jobs: Rc::new(RefCell::new(mock::transfer_jobs())),
+            workbench: Rc::new(RefCell::new(mock::WorkbenchStore::seeded())),
         }
     }
 

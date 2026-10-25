@@ -132,27 +132,6 @@
   .view-header-actions { display: flex; gap: 8px; }
 
   /* Strict / KV / FTS data grids */
-  .data-grid {
-    width: 100%; border-collapse: collapse;
-    font-size: 12px;
-  }
-  .data-grid th {
-    text-align: left;
-    padding: 6px 12px;
-    background: var(--bg-secondary);
-    border-bottom: 0.5px solid var(--border-mid);
-    font-family: var(--font-mono); font-size: 10px;
-    color: var(--text-tertiary);
-    text-transform: uppercase; letter-spacing: 0.05em;
-    position: sticky; top: 0;
-    font-weight: 500;
-  }
-  .data-grid td {
-    padding: 6px 12px;
-    border-bottom: 0.5px solid var(--border-soft);
-    font-family: var(--font-mono); font-size: 11px;
-  }
-  .data-grid tr:hover td { background: var(--bg-secondary); }
 
   /* Graph mini viewer */
   .graph-mini { padding: 0; height: 100%; }
@@ -182,97 +161,10 @@
     }
   }
 
-  /* ============================================================
-     View: Query workspace
-     ============================================================ */
-  .query-view {
-    display: grid;
-    grid-template-rows: auto 1fr;
-    height: 100%;
-  }
-  .query-tabs {
-    background: var(--bg-secondary);
-    border-bottom: 0.5px solid var(--border-mid);
-    display: flex; align-items: center;
-    padding: 0 8px;
-    overflow-x: auto;
-  }
-  .query-tab {
-    display: flex; align-items: center; gap: 6px;
-    padding: 8px 14px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    border-right: 0.5px solid var(--border-soft);
-    cursor: pointer;
-    white-space: nowrap;
-  }
-  .query-tab.active {
-    background: var(--bg-primary);
-    color: var(--text-primary);
-    font-weight: 500;
-  }
-  .query-tab .close { opacity: 0.5; font-size: 14px; }
-  .query-tab .close:hover { opacity: 1; }
-  .query-tab .dirty { width: 6px; height: 6px; border-radius: 50%; background: var(--text-warning); display: inline-block; }
-  .query-tab-add { padding: 8px 12px; font-size: 14px; color: var(--text-tertiary); cursor: pointer; }
-  .query-tab-add:hover { color: var(--text-primary); }
-
-  .query-body {
-    display: grid;
-    grid-template-rows: 200px 1fr;
-    overflow: hidden;
-  }
-  .query-editor {
-    background: var(--bg-primary);
-    padding: 12px 16px;
-    border-bottom: 0.5px solid var(--border-mid);
-    overflow: auto;
-    position: relative;
-  }
-  .query-editor .gutter {
-    position: absolute; left: 0; top: 0; bottom: 0;
-    width: 36px;
-    color: var(--text-tertiary);
-    font-family: var(--font-mono); font-size: 11px;
-    text-align: right; padding: 12px 8px 0 0;
-    border-right: 0.5px solid var(--border-soft);
-    user-select: none;
-  }
-  .query-editor pre {
-    margin: 0 0 0 44px;
-    font-family: var(--font-mono); font-size: 12px;
-    line-height: 1.6;
-    white-space: pre-wrap;
-  }
   .sql-kw { color: var(--text-info); font-weight: 500; }
   .sql-str { color: var(--text-success); }
   .sql-num { color: var(--text-warning); }
   .sql-comment { color: var(--text-tertiary); font-style: italic; }
-
-  .query-results {
-    display: grid;
-    grid-template-rows: auto 1fr auto;
-    overflow: hidden;
-    background: var(--bg-primary);
-  }
-  .results-toolbar {
-    padding: 6px 14px;
-    border-bottom: 0.5px solid var(--border-soft);
-    background: var(--bg-secondary);
-    display: flex; align-items: center; gap: 12px;
-    font-size: 11px; font-family: var(--font-mono);
-    color: var(--text-tertiary);
-  }
-  .results-toolbar .ok { color: var(--text-success); }
-  .results-body { overflow: auto; }
-  .results-footer {
-    padding: 4px 14px;
-    border-top: 0.5px solid var(--border-soft);
-    background: var(--bg-secondary);
-    font-family: var(--font-mono); font-size: 10px;
-    color: var(--text-tertiary);
-    display: flex; gap: 12px;
-  }
 
   /* ============================================================
      View: Graph Explorer
@@ -579,107 +471,6 @@
     display: grid;
     grid-template-rows: auto 1fr;
     overflow: hidden;
-  }
-
-  /* ============================================================
-     Query workspace — schema panel (left column)
-     ============================================================ */
-  .query-body-3col {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    height: calc(100% - 37px);
-    overflow: hidden;
-  }
-  .query-schema {
-    background: var(--bg-secondary);
-    border-right: 0.5px solid var(--border-mid);
-    overflow-y: auto;
-    padding: 8px 6px;
-  }
-  .query-schema-toolbar {
-    padding: 4px 8px 8px;
-  }
-  .query-schema-toolbar input {
-    width: 100%;
-    padding: 4px 8px;
-    background: var(--bg-primary);
-    border: 0.5px solid var(--border-mid);
-    border-radius: 4px;
-    font-size: 11px;
-    outline: none;
-    font-family: var(--font-mono);
-  }
-  .qs-section {
-    margin-top: 6px;
-  }
-  .qs-section-label {
-    font-family: var(--font-mono); font-size: 9px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-tertiary);
-    padding: 6px 10px 4px;
-  }
-  details.qs-table {
-    margin: 0;
-  }
-  details.qs-table > summary {
-    display: flex; align-items: center; gap: 8px;
-    padding: 4px 8px 4px 6px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: 4px;
-    list-style: none;
-    user-select: none;
-  }
-  details.qs-table > summary::-webkit-details-marker { display: none; }
-  details.qs-table > summary:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-  details.qs-table[open] > summary { color: var(--text-primary); }
-  details.qs-table > summary .chev {
-    font-size: 8px;
-    color: var(--text-tertiary);
-    width: 10px;
-    transition: transform 100ms;
-  }
-  details.qs-table[open] > summary .chev { transform: rotate(90deg); }
-  details.qs-table > summary .ico {
-    font-family: var(--font-mono); font-size: 9px;
-    width: 16px; height: 16px;
-    display: grid; place-items: center;
-    background: var(--bg-tertiary);
-    border-radius: 3px;
-    color: var(--text-tertiary);
-    flex-shrink: 0;
-  }
-  details.qs-table > summary .name { flex: 1; min-width: 0; }
-  details.qs-table > summary .count {
-    font-family: var(--font-mono); font-size: 10px;
-    color: var(--text-tertiary);
-  }
-  .qs-col {
-    display: flex; align-items: center; gap: 8px;
-    padding: 3px 8px 3px 32px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text-secondary);
-    cursor: pointer;
-    border-radius: 3px;
-  }
-  .qs-col:hover { background: var(--bg-hover); color: var(--text-primary); }
-  .qs-col .type {
-    margin-left: auto;
-    color: var(--text-tertiary);
-    font-size: 10px;
-  }
-  .qs-col .badge-pk {
-    font-size: 9px;
-    color: var(--text-warning);
-    padding: 0 4px;
-    background: rgba(133,79,11,0.12);
-    border-radius: 3px;
   }
 
   /* ============================================================

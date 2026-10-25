@@ -7,12 +7,14 @@
 use crate::models::array_data::{ArraySchema, SliceResult};
 use crate::models::cluster::ClusterMembers;
 use crate::models::graph_records::EdgePage;
+use crate::models::query_plan::QueryPlan;
 use crate::models::records::{CollectionAccess, Record, RecordPage};
+use crate::models::saved_query::QueryLibrary;
 use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
 use crate::models::transfer::ExportPreview;
 use crate::models::viewers::SubGraph;
-use crate::models::workbench::{QueryPlan, ResultSet};
+use crate::models::workbench::{QueryRun, ResultSet, SchemaTree};
 use crate::services::error::StudioError;
 
 /// Anything that can report emptiness, so `from_value` can distinguish a
@@ -122,6 +124,26 @@ impl IsEmpty for QueryPlan {
 impl IsEmpty for ResultSet {
     fn is_empty(&self) -> bool {
         self.rows().is_empty()
+    }
+}
+
+/// A run with no rows still ran: the Results panel states that, with the
+/// columns, rather than the generic empty message.
+impl IsEmpty for QueryRun {
+    fn is_empty(&self) -> bool {
+        false
+    }
+}
+
+impl IsEmpty for SchemaTree {
+    fn is_empty(&self) -> bool {
+        self.tables.is_empty() && self.views.is_empty()
+    }
+}
+
+impl IsEmpty for QueryLibrary {
+    fn is_empty(&self) -> bool {
+        self.queries.is_empty()
     }
 }
 
@@ -358,7 +380,9 @@ mod tests {
         assert!(matches!(page, AsyncState::Loaded(_)));
 
         let query_plan = AsyncState::from_value(Some(Ok(QueryPlan {
-            text: String::new(),
+            mode: crate::models::query_plan::ExplainMode::Explain,
+            operators: Vec::new(),
+            elapsed_ms: None,
         })));
         assert!(matches!(query_plan, AsyncState::Loaded(_)));
     }

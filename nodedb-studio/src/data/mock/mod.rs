@@ -37,4 +37,9 @@ pub use transfer::transfer_jobs;
 pub use viewers::{
     empty_sub_graph, fts_hits, series, spatial_features, sub_graph, sync_peers, vector_points,
 };
-pub use workbench::{empty_result_set, query_plan, result_set, schema_tree};
+pub use workbench::{WorkbenchStore, empty_result_set, query_plan, query_session, schema_tree};
+// Only the screenshot scenes and the tests name these.
+#[cfg(any(test, all(feature = "screenshots", target_os = "linux")))]
+pub use workbench::{
+    CUSTOMER_SPEND_ID, DATABASE as WORKBENCH_DATABASE, ORDERS_SQL, library as query_library,
+};

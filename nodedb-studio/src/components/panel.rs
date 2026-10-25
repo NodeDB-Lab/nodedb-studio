@@ -78,6 +78,12 @@ fn current_size(ws: &Workspace, surface: Surface, id: &str, size: PanelSize) -> 
     size.clamp(ws.size(surface, id).unwrap_or(size.default))
 }
 
+/// The inline style of a resizable region that is not a closable panel, such
+/// as the Query editor. It sizes like a panel and takes a `ResizeHandle`.
+pub fn region_style(ws: &Workspace, surface: Surface, id: &str, size: PanelSize) -> String {
+    size.style(current_size(ws, surface, id, size))
+}
+
 /// A closable workspace panel. `id` must appear in `surface.panels()`.
 /// Without `size` the panel fills the space its container gives it.
 #[component]

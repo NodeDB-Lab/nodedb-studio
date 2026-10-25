@@ -76,6 +76,30 @@ pub enum StudioError {
     /// The server's own validation refused a write.
     #[error("the server rejected the write: {reason}")]
     Rejected { reason: String },
+    /// A save would give two saved queries one name.
+    #[error("a saved query named `{0}` already exists: choose another name")]
+    QueryNameTaken(String),
+    /// A write named a saved query the library does not hold.
+    #[error("no saved query `{0}`")]
+    UnknownQuery(String),
+    /// A run, explain, or console command had no statement text.
+    #[error("the statement is empty")]
+    EmptyStatement,
+    /// The statement text did not parse.
+    #[error("syntax error: {reason}")]
+    Syntax { reason: String },
+    /// The statement uses a parameter the request did not bind.
+    #[error("parameter :{0} has no value")]
+    MissingParameter(String),
+    /// Commit or rollback with no transaction open.
+    #[error("no transaction is open")]
+    NoTransaction,
+    /// Begin while a transaction is open.
+    #[error("a transaction is already open: commit it or roll it back first")]
+    TransactionOpen,
+    /// A write inside a read-only transaction.
+    #[error("the transaction is read-only: roll it back and begin a read-write one to write")]
+    ReadOnlyTransaction,
 }
 
 impl StudioError {
@@ -93,7 +117,15 @@ impl StudioError {
             | StudioError::RevisionConflict { .. }
             | StudioError::RecordMissing { .. }
             | StudioError::PermissionDenied { .. }
-            | StudioError::Rejected { .. } => false,
+            | StudioError::Rejected { .. }
+            | StudioError::QueryNameTaken(_)
+            | StudioError::UnknownQuery(_)
+            | StudioError::EmptyStatement
+            | StudioError::Syntax { .. }
+            | StudioError::MissingParameter(_)
+            | StudioError::NoTransaction
+            | StudioError::TransactionOpen
+            | StudioError::ReadOnlyTransaction => false,
             StudioError::Connection(e)
             | StudioError::Auth(e)
             | StudioError::NotFound(e)

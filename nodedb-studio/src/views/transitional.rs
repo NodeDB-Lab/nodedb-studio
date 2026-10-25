@@ -14,11 +14,9 @@ use crate::routes::tabs::{
 use crate::views::admin::audit::AuditView;
 use crate::views::admin::rbac::RbacView;
 use crate::views::admin::rls::RlsView;
-use crate::views::console::Console;
 use crate::views::designer::Designer;
 use crate::views::fts_inspector::FtsInspector;
 use crate::views::graph_explorer::GraphExplorer;
-use crate::views::query::Query;
 use crate::views::spatial_view::SpatialView;
 use crate::views::streams::cdc::StreamsCdc;
 use crate::views::streams::cron::StreamsCron;
@@ -40,11 +38,6 @@ fn Unbuilt(title: &'static str) -> Element {
             }
         }
     }
-}
-
-#[component]
-pub fn QueryPage() -> Element {
-    rsx! { div { class: "legacy-page", Query {} } }
 }
 
 #[component]
@@ -155,9 +148,4 @@ pub fn AdminPage(tab: AdminTab) -> Element {
             }
         }
     }
-}
-
-#[component]
-pub fn ConsolePage() -> Element {
-    rsx! { div { class: "legacy-page", Console {} } }
 }

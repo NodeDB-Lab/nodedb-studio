@@ -2,9 +2,9 @@
 
 pub mod async_view;
 pub mod clipboard;
+pub mod code_editor;
 pub mod command_palette;
 pub mod connector;
-pub mod data_grid;
 pub mod footer;
 pub mod header;
 pub mod icon;
@@ -18,4 +18,5 @@ pub mod sidebar;
 pub mod sparkline;
 pub mod stat_card;
 pub mod tabs;
+pub mod tx_badge;
 pub mod view_menu;

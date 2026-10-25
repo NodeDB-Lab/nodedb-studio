@@ -8,7 +8,9 @@
 use dioxus::prelude::*;
 
 use crate::routes::Route;
+use crate::state::console::ConsoleState;
 use crate::state::explorer::{RecordView, Selected};
+use crate::state::query::QueryWorkspace;
 
 /// Where the current studio scene points.
 #[derive(Clone, PartialEq)]
@@ -16,6 +18,10 @@ pub struct SceneTarget {
     pub route: Route,
     /// The Explorer's selection and view. `None` keeps its own.
     pub explorer: Option<(Selected, RecordView)>,
+    /// The Query tabs. `None` keeps the current ones.
+    pub query: Option<QueryWorkspace>,
+    /// The Console session. `None` keeps the current one.
+    pub console: Option<ConsoleState>,
 }
 
 /// Renders nothing. Outside a scene run it has no target and does nothing.
@@ -32,6 +38,8 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
     let nav = use_navigator();
     let mut selected = use_context::<Signal<Option<Selected>>>();
     let mut view = use_context::<Signal<RecordView>>();
+    let mut query = use_context::<Signal<QueryWorkspace>>();
+    let mut console = use_context::<Signal<ConsoleState>>();
     use_effect(move || {
         let Some(t) = target.read().clone() else {
             return;
@@ -39,6 +47,12 @@ fn SyncTo(target: Signal<Option<SceneTarget>>) -> Element {
         if let Some((sel, seeded)) = t.explorer {
             selected.set(Some(sel));
             view.set(seeded);
+        }
+        if let Some(q) = t.query {
+            query.set(q);
+        }
+        if let Some(c) = t.console {
+            console.set(c);
         }
         nav.replace(t.route);
     });

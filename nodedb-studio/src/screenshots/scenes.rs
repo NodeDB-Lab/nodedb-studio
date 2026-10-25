@@ -8,12 +8,16 @@ use crate::data::mock;
 use crate::models::collection::Profile;
 use crate::models::connections::ConnectionTest;
 use crate::models::records::Filter;
+use crate::models::workbench::TxAccess;
 use crate::routes::tabs::{AdminTab, ClusterTab, EventsTab};
 use crate::routes::{Destination, Route};
+use crate::screenshots::workbench_scenes;
 use crate::state::connection_form::{ConnectionForm, TestState};
+use crate::state::console::ConsoleState;
 use crate::state::explorer::{
     CollectionTab, DetailsTab, GraphSub, RecordView, Selected, TransferTab,
 };
+use crate::state::query::QueryWorkspace;
 use crate::state::record_editor::RecordEditor;
 use crate::state::ui::{ModalKind, Popover, PrefsPane};
 
@@ -120,6 +124,14 @@ pub struct Scene {
     /// Panels of the scene's page to hide, by `PanelSpec` id. Every other
     /// panel shows at its default size.
     pub hidden: &'static [&'static str],
+    /// Panel and region sizes to set, by id, in CSS pixels.
+    pub sizes: &'static [(&'static str, f64)],
+    /// The Query tabs the scene opens with. `None` keeps the current ones.
+    pub query: Option<Box<QueryWorkspace>>,
+    /// The Console session the scene opens with. `None` keeps the current one.
+    pub console: Option<Box<ConsoleState>>,
+    /// A transaction to open before the scene. `None` leaves the session idle.
+    pub transaction: Option<TxAccess>,
 }
 
 fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
@@ -129,6 +141,10 @@ fn scene(name: &'static str, screen: Screen, overlay: Overlay) -> Scene {
         connection: STUDIO_CONNECTION,
         overlay,
         hidden: &[],
+        sizes: &[],
+        query: None,
+        console: None,
+        transaction: None,
     }
 }
 
@@ -277,15 +293,9 @@ pub fn scenes() -> Vec<Scene> {
             },
             O::None,
         ),
-        scene("query", at(Route::Query {}), O::None),
-        scene(
-            "query-view-menu",
-            at(Route::Query {}),
-            O::Popover(Popover::View),
-        ),
         scene("designer", at(Route::Designer {}), O::None),
-        scene("console", at(Route::Console {}), O::None),
     ]);
+    all.extend(workbench());
     all.extend([
         scene("graph-explorer", at(Destination::Graph.route()), O::None),
         scene("vector-space", at(Destination::Vector.route()), O::None),
@@ -367,6 +377,36 @@ pub fn scenes() -> Vec<Scene> {
         )
     });
     all
+}
+
+/// Query and Console, in the order the design lists them. The first two
+/// leave the Saved queries panel hidden, as the Query mockup does.
+fn workbench() -> Vec<Scene> {
+    let query = |name, overlay| Scene {
+        hidden: &["library"],
+        query: Some(Box::new(workbench_scenes::query())),
+        ..scene(name, at(Route::Query {}), overlay)
+    };
+    vec![
+        query("query", Overlay::None),
+        query("query-view-menu", Overlay::Popover(Popover::View)),
+        Scene {
+            hidden: &["library", "schema"],
+            sizes: &[("editor", 250.0)],
+            query: Some(Box::new(workbench_scenes::query_plan())),
+            transaction: Some(TxAccess::ReadOnly),
+            ..scene("query-plan", at(Route::Query {}), Overlay::None)
+        },
+        Scene {
+            sizes: &[("editor", 392.0)],
+            query: Some(Box::new(workbench_scenes::query_library())),
+            ..scene("query-library", at(Route::Query {}), Overlay::None)
+        },
+        Scene {
+            console: Some(Box::new(workbench_scenes::console())),
+            ..scene("console-session", at(Route::Console {}), Overlay::None)
+        },
+    ]
 }
 
 fn events_scene(tab: EventsTab) -> &'static str {
@@ -490,6 +530,45 @@ mod tests {
                         s.name,
                         seed.collection
                     );
+                }
+            }
+        }
+    }
+
+    /// The Query and Console views the design names, each once.
+    #[test]
+    fn every_workbench_view_has_a_scene() {
+        let names: Vec<&str> = scenes().iter().map(|s| s.name).collect();
+        for expected in [
+            "query",
+            "query-view-menu",
+            "query-plan",
+            "query-library",
+            "console-session",
+        ] {
+            assert!(names.contains(&expected), "no scene `{expected}`");
+        }
+    }
+
+    /// The sidebar badge and the page count the same tabs.
+    #[test]
+    fn every_query_scene_opens_the_three_tabs_the_badge_counts() {
+        let badge = mock::nav_badges().query as usize;
+        for s in scenes() {
+            if let Some(q) = &s.query {
+                assert_eq!(q.count(), badge, "scene `{}`", s.name);
+            }
+        }
+    }
+
+    /// A hidden panel must exist on the page, or the scene hides nothing.
+    #[test]
+    fn hidden_panels_exist_on_their_page() {
+        for s in scenes() {
+            if let Screen::Studio { route, .. } = &s.screen {
+                let ids: Vec<&str> = route.surface().panels().iter().map(|p| p.id).collect();
+                for h in s.hidden {
+                    assert!(ids.contains(h), "scene `{}` hides unknown `{h}`", s.name);
                 }
             }
         }

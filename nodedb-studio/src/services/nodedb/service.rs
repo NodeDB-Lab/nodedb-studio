@@ -136,16 +136,32 @@ mod tests {
     #[tokio::test]
     async fn stub_workbench_reads_are_not_connected() {
         let svc = NodeDbConnectionService;
+        let request = crate::models::workbench::QueryRequest {
+            sql: "SELECT 1".into(),
+            params: Vec::new(),
+            database: "analytics".into(),
+            page: 0,
+            page_size: 50,
+        };
         assert!(matches!(
-            svc.run_query("SELECT 1").await,
+            svc.run_query(&request).await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.explain("SELECT 1").await,
+            svc.explain(&request, crate::models::query_plan::ExplainMode::Explain)
+                .await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
             svc.schema_tree().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.transaction().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.query_library().await,
             Err(StudioError::NotConnected)
         ));
     }

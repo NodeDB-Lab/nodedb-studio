@@ -89,6 +89,17 @@
   --viz-6: #5c7a99;
   --viz-grid: #e7ecf2;
 
+
+  /* Terminal: the Console transcript is dark in both themes. */
+  --terminal-bg: #111a27;
+  --terminal-fg: #e6edf6;
+  --terminal-dim: #8c9db3;
+  --terminal-kw: #7cb1ff;
+  --terminal-fn: #c4b2fa;
+  --terminal-str: #86dba6;
+  --terminal-num: #f6b07a;
+  --terminal-err: #f59a9a;
+
   /* Elevation */
   --shadow-popover: 0 10px 28px rgba(15, 27, 45, 0.12), 0 1px 4px rgba(15, 27, 45, 0.06);
   --shadow-overlay: 0 20px 56px rgba(15, 27, 45, 0.18), 0 2px 8px rgba(15, 27, 45, 0.08);
@@ -188,6 +199,7 @@
   --viz-5: #f07a8a;
   --viz-6: #8fa6bf;
   --viz-grid: #26313c;
+  --terminal-bg: #0d141c;
   --shadow-popover: 0 10px 28px rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0, 0, 0, 0.3);
   --shadow-overlay: 0 20px 56px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
 }
@@ -254,6 +266,7 @@
     --viz-5: #f07a8a;
     --viz-6: #8fa6bf;
     --viz-grid: #26313c;
+    --terminal-bg: #0d141c;
     --shadow-popover: 0 10px 28px rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0, 0, 0, 0.3);
     --shadow-overlay: 0 20px 56px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
   }

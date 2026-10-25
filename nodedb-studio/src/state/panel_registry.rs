@@ -41,6 +41,11 @@ const QUERY: &[PanelSpec] = &[
     panel("results", "Results", "Show results, plan, and messages"),
 ];
 
+const CONSOLE: &[PanelSpec] = &[
+    panel("console", "Console", "Show the session and transcript"),
+    panel("history", "Command history", "Show earlier commands"),
+];
+
 const CLUSTER_NODES: &[PanelSpec] = &[
     panel("nodes", "Nodes", "Show configured members"),
     panel(
@@ -58,9 +63,9 @@ impl Surface {
             Surface::Explorer => EXPLORER,
             Surface::DataTransfer => DATA_TRANSFER,
             Surface::Query => QUERY,
+            Surface::Console => CONSOLE,
             Surface::Cluster(ClusterTab::Nodes) => CLUSTER_NODES,
             Surface::Designer
-            | Surface::Console
             | Surface::Events(
                 EventsTab::ChangeFeeds
                 | EventsTab::MaterializedViews

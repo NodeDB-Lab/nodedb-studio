@@ -22,9 +22,11 @@ use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, ConnectError};
 use crate::state::connection_form::ConnectionForm;
 use crate::state::connections_registry::SavedConnection;
+use crate::state::console::ConsoleState;
 use crate::state::explorer::{RecordView, RecordsEpoch, TransferNotice};
 use crate::state::persist::{PREFERENCES, PersistMode, Store, WORKSPACE};
 use crate::state::preferences::Preferences;
+use crate::state::query::{QueryWorkspace, TxEpoch};
 use crate::state::record_editor::{DeleteRequest, RecordEditor};
 use crate::state::ui::{
     ManagerOpen, ManagerSelection, ModalKind, PaletteQuery, Popover, PrefsPane,
@@ -44,6 +46,7 @@ const PANELS: Asset = asset!("/assets/panels.css");
 const CONNECTIONS: Asset = asset!("/assets/connections.css");
 const OVERLAYS: Asset = asset!("/assets/overlays.css");
 const EXPLORER: Asset = asset!("/assets/explorer.css");
+const WORKBENCH: Asset = asset!("/assets/workbench.css");
 
 /// Quiet period before a changed preference or layout is written to disk.
 const SAVE_DELAY: std::time::Duration = std::time::Duration::from_millis(400);
@@ -124,6 +127,12 @@ pub fn App() -> Element {
     use_context_provider(|| RecordsEpoch(Signal::new(0)));
     use_context_provider(|| TransferNotice(Signal::new(None)));
     use_context_provider(|| Signal::new(RecordView::default()));
+    // The Query tabs and the Console transcript outlive their pages, and the
+    // sidebar badge counts the tabs. The transaction counter wakes every
+    // reader of the session's transaction after a change.
+    use_context_provider(|| Signal::new(QueryWorkspace::default()));
+    use_context_provider(|| Signal::new(ConsoleState::default()));
+    use_context_provider(|| TxEpoch(Signal::new(0)));
     // Whether the manager shows over an open session, and which connection it
     // highlights.
     let mut manager = use_context_provider(|| Signal::new(ManagerOpen::default()));
@@ -260,6 +269,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: CONNECTIONS }
         document::Stylesheet { href: OVERLAYS }
         document::Stylesheet { href: EXPLORER }
+        document::Stylesheet { href: WORKBENCH }
         {scene_driver}
         div {
             class: "studio-root",

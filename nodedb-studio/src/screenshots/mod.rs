@@ -7,6 +7,7 @@ pub mod config;
 pub mod driver;
 pub mod scenes;
 pub mod sync;
+pub mod workbench_scenes;
 
 pub use config::RunConfig;
 pub use driver::ScreenshotDriver;

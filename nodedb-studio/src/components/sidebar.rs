@@ -16,18 +16,27 @@ use crate::routes::{Destination, NAV_GROUPS, Route};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::connection::{ActiveConnection, Capabilities};
+use crate::state::query::QueryWorkspace;
 use crate::state::workspace::Workspace;
 
 /// The badge text for `d`, or `None` for no badge.
 ///
 /// Zero shows no badge. A load in flight or a failed read also shows none: a
 /// badge is a hint, and the screen it points at reports its own load error.
-fn badge_text(badges: &AsyncState<NavBadges>, d: Destination) -> Option<String> {
-    let AsyncState::Loaded(b) = badges else {
-        return None;
-    };
+///
+/// Query counts the tabs the Query page holds once it has read the session.
+/// Until then it shows the server's count, so the badge and the page agree.
+fn badge_text(
+    badges: &AsyncState<NavBadges>,
+    open_tabs: Option<usize>,
+    d: Destination,
+) -> Option<String> {
     let n = match d {
-        Destination::Query => b.query,
+        Destination::Query => match (open_tabs, badges) {
+            (Some(open), _) => open as u32,
+            (None, AsyncState::Loaded(b)) => b.query,
+            (None, AsyncState::Loading | AsyncState::Empty | AsyncState::Error(_)) => return None,
+        },
         Destination::Explorer
         | Destination::Designer
         | Destination::Events
@@ -66,6 +75,8 @@ pub fn Sidebar() -> Element {
         async move { backend.nav_badges().await }
     });
     let badges = resource_state(&badges);
+    let queries = use_context::<Signal<QueryWorkspace>>();
+    let open_tabs = queries.read().is_loaded().then(|| queries.read().count());
     let collapsed = workspace.read().nav_collapsed();
     let caps = active.read().as_ref().map(|c| c.capabilities);
     let current = route.destination();
@@ -100,7 +111,7 @@ pub fn Sidebar() -> Element {
                                 key: "{d.label()}",
                                 dest: d,
                                 active: d == current,
-                                badge: badge_text(&badges, d),
+                                badge: badge_text(&badges, open_tabs, d),
                             }
                         }
                     }
@@ -137,22 +148,43 @@ mod tests {
     #[test]
     fn query_count_renders_as_a_badge() {
         let b = AsyncState::Loaded(NavBadges { query: 3 });
-        assert_eq!(badge_text(&b, Destination::Query), Some("3".to_string()));
-        assert_eq!(badge_text(&b, Destination::Explorer), None);
+        assert_eq!(
+            badge_text(&b, None, Destination::Query),
+            Some("3".to_string())
+        );
+        assert_eq!(badge_text(&b, None, Destination::Explorer), None);
+    }
+
+    /// The page's own tab count wins once the page has read the session.
+    #[test]
+    fn open_tabs_override_the_server_count() {
+        let b = AsyncState::Loaded(NavBadges { query: 3 });
+        assert_eq!(
+            badge_text(&b, Some(4), Destination::Query),
+            Some("4".to_string())
+        );
+        assert_eq!(
+            badge_text(&AsyncState::Loading, Some(2), Destination::Query),
+            Some("2".to_string())
+        );
+        assert_eq!(badge_text(&b, Some(0), Destination::Query), None);
     }
 
     #[test]
     fn zero_shows_no_badge() {
         let b = AsyncState::Loaded(NavBadges { query: 0 });
-        assert_eq!(badge_text(&b, Destination::Query), None);
+        assert_eq!(badge_text(&b, None, Destination::Query), None);
     }
 
     /// A failed or pending read must not invent a count.
     #[test]
     fn loading_and_error_show_no_badge() {
-        assert_eq!(badge_text(&AsyncState::Loading, Destination::Query), None);
+        assert_eq!(
+            badge_text(&AsyncState::Loading, None, Destination::Query),
+            None
+        );
         let err = AsyncState::Error(StudioError::NotConnected);
-        assert_eq!(badge_text(&err, Destination::Query), None);
+        assert_eq!(badge_text(&err, None, Destination::Query), None);
     }
 
     #[test]

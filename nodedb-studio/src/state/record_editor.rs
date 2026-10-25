@@ -75,7 +75,15 @@ impl From<&StudioError> for EditorError {
             | StudioError::MissingUsername
             | StudioError::NameTaken(_)
             | StudioError::UnknownConnection(_)
-            | StudioError::UnknownDatabase(_) => EditorError::Failed(e.to_string()),
+            | StudioError::UnknownDatabase(_)
+            | StudioError::QueryNameTaken(_)
+            | StudioError::UnknownQuery(_)
+            | StudioError::EmptyStatement
+            | StudioError::Syntax { .. }
+            | StudioError::MissingParameter(_)
+            | StudioError::NoTransaction
+            | StudioError::TransactionOpen
+            | StudioError::ReadOnlyTransaction => EditorError::Failed(e.to_string()),
         }
     }
 }

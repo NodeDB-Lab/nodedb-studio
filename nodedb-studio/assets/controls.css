@@ -8,9 +8,11 @@
  *               .checkbox  .switch  .radio  .seg (segmented)  .field (label + control)
  *               .select.native (a real <select> with the same look)
  *               .choice (radio card)  .choice-group  .choice-grid
+ *               .seg.accent (the active segment fills with the accent)
  *   Tabs        .page-tabs  .tab-bar  .tab-bar.sub (compact)
  *   Labels      .badge.<tone>  .chip  .status (.status-dot + text)
- *               .count-badge  .kbd-hint  .tag
+ *               .count-badge  .kbd-hint  .tag  .unsaved-dot (.blue)
+ *   Code        .code-input (gutter + highlighted textarea)  .tok-*
  *   Data        .dt (dense table)  .kv (key/value list)  .code-block
  *               .json (syntax spans)  .list (selectable rows)
  *   Layout      .toolbar  .toolbar-spacer  .section-label  .stack
@@ -247,6 +249,8 @@ select.select.native {
   box-shadow: 0 1px 2px rgba(15, 27, 45, 0.12);
 }
 
+.seg.accent > button.active { background: var(--accent-blue); color: #fff; box-shadow: none; }
+
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field > label, .field > .field-label { color: var(--text-secondary); font-size: var(--fs-sm); font-weight: 500; }
 .field .hint { color: var(--text-tertiary); font-size: var(--fs-xs); }
@@ -361,6 +365,24 @@ select.select.native {
   line-height: 1;
 }
 
+/* A change not yet saved: amber on a tab, blue on a saved object. */
+.unsaved-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--warn); }
+.unsaved-dot.blue { background: var(--accent-blue); }
+
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  line-height: 18px;
+  background: transparent;
+  color: inherit;
+  font-family: var(--font-sans);
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -463,6 +485,8 @@ select.select.native {
 .tok-key { color: #b4235a; }
 .tok-com { color: var(--text-tertiary); font-style: italic; }
 .tok-op { color: var(--text-secondary); }
+.tok-func { color: var(--tone-violet-fg); }
+.tok-param { color: var(--tone-orange-fg); }
 :root:has(.studio-root[data-theme="dark"]) .tok-str { color: #7fd8a3; }
 :root:has(.studio-root[data-theme="dark"]) .tok-num { color: #f6b07a; }
 :root:has(.studio-root[data-theme="dark"]) .tok-key { color: #f39ac0; }
@@ -620,3 +644,60 @@ select.select.native {
 /* A search field that shares a toolbar row: grows, then caps. */
 .search-field.grow { flex: 1 1 180px; max-width: 300px; }
 .toolbar.nowrap { flex-wrap: nowrap; }
+
+/*
+ * Code input: a highlighted `pre` under a transparent `textarea` of the same
+ * metrics, in one scroll container with a line-number gutter.
+ */
+.code-input {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--surface-panel);
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 20px;
+}
+.code-scroll { display: flex; flex: 1; min-height: 0; overflow: auto; }
+.code-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-width: 48px;
+  padding: 10px 10px 10px 12px;
+  background: var(--surface-panel);
+  color: var(--text-tertiary);
+  text-align: right;
+  user-select: none;
+}
+.code-gutter span { height: 20px; }
+.code-stack { position: relative; flex: 1 0 auto; min-width: 0; }
+.code-highlight, .code-textarea {
+  margin: 0;
+  padding: 10px 14px 10px 4px;
+  border: 0;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: normal;
+  white-space: pre;
+  tab-size: 4;
+}
+.code-highlight { min-height: 100%; color: var(--text-primary); pointer-events: none; }
+.code-textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--text-primary);
+}
+.code-textarea::selection { background: color-mix(in srgb, var(--accent-blue) 30%, transparent); }
+.code-textarea::placeholder { color: var(--text-tertiary); }
+.code-input:focus-within { box-shadow: inset 0 0 0 1px var(--focus-ring); }
