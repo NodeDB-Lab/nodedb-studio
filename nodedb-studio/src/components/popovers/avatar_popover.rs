@@ -15,7 +15,8 @@ use crate::state::ui::{ModalKind, Popover, PrefsPane};
 
 #[component]
 pub fn AvatarPopover() -> Element {
-    let mut active = use_context::<Signal<Option<ActiveConnection>>>();
+    let active = use_context::<Signal<Option<ActiveConnection>>>();
+    let connector = crate::components::connector::use_connector();
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let registry = use_context::<Signal<Vec<SavedConnection>>>();
@@ -101,7 +102,7 @@ pub fn AvatarPopover() -> Element {
                 button {
                     class: "btn danger block",
                     r#type: "button",
-                    onclick: move |_| { popover.set(None); active.set(None); },
+                    onclick: move |_| { popover.set(None); connector.disconnect(); },
                     Ico { icon: Icon::Unplug, size: 16 }
                     "Disconnect"
                 }
