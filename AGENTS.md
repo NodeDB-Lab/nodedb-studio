@@ -18,7 +18,8 @@ NodeDB Studio is a **desktop GUI client for NodeDB**, built in Rust with
   Views reach the backend only through `Rc<dyn Backend>` (`services/backend.rs`),
   composed of per-domain async traits (`services/*_data.rs`). Today
   `services/mock/` serves hardcoded data; `services/nodedb/` is the client-backed
-  stub that returns `StudioError::NotConnected` until wired.
+  backend. It serves connect, databases, the catalog and query, and returns
+  `StudioError::NotConnected` for everything else.
 - **Serialization**: `sonic_rs` for any runtime JSON (display), `serde` derive on
   models. The wire format to the server is the client's concern (MessagePack).
 
@@ -75,6 +76,25 @@ For UI changes, also check the screen renders: `cargo run -p nodedb-studio`, or
 `src/screenshots/scenes.rs`. Launch through `cargo run`: a bare debug or release
 binary counts as a `dx` bundle and loads no stylesheet. Scenes live in
 `src/screenshots/scenes.rs` and the per-area `*_scenes.rs` files.
+
+## Backends
+
+The mock is the default. CI, the tests, and the screenshot scenes use only the mock.
+
+Run the app on the real backend, against a NodeDB 0.6.2 server:
+
+```bash
+NODEDB_STUDIO_BACKEND=native cargo run -p nodedb-studio
+```
+
+Any other non-empty value logs a warning and uses the mock.
+
+The live tests are `#[ignore]` and need a NodeDB 0.6.2 server:
+
+```bash
+NODEDB_PROBE_ADDR=host:port NODEDB_PROBE_USER=... NODEDB_PROBE_PASSWORD=... \
+  cargo nextest run --run-ignored ignored-only -E 'test(live_)'
+```
 
 ## Project structure
 
