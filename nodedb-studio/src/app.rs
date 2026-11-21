@@ -95,6 +95,18 @@ where
     });
 }
 
+/// Turns off autocorrect, autocapitalize and spellcheck on every text field
+/// as it takes focus. Studio's fields hold identifiers, hosts and SQL: the
+/// system corrects `nodedb` to `Nodded`.
+const NO_AUTOCORRECT: &str = r#"document.addEventListener('focusin', (e) => {
+  const t = e.target;
+  if (t.matches && t.matches('input, textarea')) {
+    t.setAttribute('autocorrect', 'off');
+    t.setAttribute('autocapitalize', 'off');
+    t.spellcheck = false;
+  }
+}, true);"#;
+
 /// The environment variable that selects the backend.
 const BACKEND_ENV: &str = "NODEDB_STUDIO_BACKEND";
 
@@ -357,6 +369,7 @@ pub fn App() -> Element {
         document::Stylesheet { href: CLUSTER }
         document::Stylesheet { href: SYNC }
         document::Stylesheet { href: ADMIN }
+        document::Script { {NO_AUTOCORRECT} }
         {scene_driver}
         div {
             class: "studio-root",
