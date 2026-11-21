@@ -133,6 +133,13 @@ mod tests {
             sync,
             cluster: false,
             readonly: false,
+            record_revisions: true,
+            read_only_transactions: true,
+            arrays: true,
+            backups: true,
+            config: true,
+            credentials: true,
+            explain_analyze: true,
         }
     }
 

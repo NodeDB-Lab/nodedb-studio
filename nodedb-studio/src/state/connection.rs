@@ -41,6 +41,33 @@ pub struct Capabilities {
     pub cluster: bool,
     /// Current credentials cannot write.
     pub readonly: bool,
+    // The flags below default to true on load: a saved profile written before
+    // they existed came from the mock, which offers everything.
+    /// The server numbers each record's revisions, so a user can read them.
+    #[serde(default = "yes")]
+    pub record_revisions: bool,
+    /// `BEGIN READ ONLY` really refuses writes.
+    #[serde(default = "yes")]
+    pub read_only_transactions: bool,
+    /// The server can describe and slice an array.
+    #[serde(default = "yes")]
+    pub arrays: bool,
+    /// The server lists backups: the Admin Backups tab.
+    #[serde(default = "yes")]
+    pub backups: bool,
+    /// The server lists its config: the Admin Config tab.
+    #[serde(default = "yes")]
+    pub config: bool,
+    /// The server lists credentials: the Admin Credentials tab.
+    #[serde(default = "yes")]
+    pub credentials: bool,
+    /// The server runs EXPLAIN ANALYZE: the Plan view's Analyze mode.
+    #[serde(default = "yes")]
+    pub explain_analyze: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Capabilities {
@@ -166,6 +193,13 @@ mod tests {
             sync: false,
             cluster: false,
             readonly: false,
+            record_revisions: true,
+            read_only_transactions: true,
+            arrays: true,
+            backups: true,
+            config: true,
+            credentials: true,
+            explain_analyze: true,
         }
     }
 
@@ -179,6 +213,15 @@ mod tests {
             capabilities: caps(),
             current_database: "main".into(),
         }
+    }
+
+    /// A profile saved before the newer flags existed came from the mock,
+    /// which offers everything.
+    #[test]
+    fn a_profile_saved_before_the_newer_flags_offers_them() {
+        let old = r#"{"graph":true,"vector":true,"events":true,"timeseries":true,"spatial":true,"search":true,"sync":true,"cluster":true,"readonly":false}"#;
+        let caps: Capabilities = sonic_rs::from_str(old).expect("loads");
+        assert!(caps.record_revisions && caps.credentials && caps.explain_analyze);
     }
 
     #[test]

@@ -13,6 +13,7 @@ use crate::models::workbench::{TxAccess, TxState};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
+use crate::state::gates::{explain_mode, tx_accesses, use_caps};
 use crate::state::query::{QueryTab, QueryWorkspace, TxEpoch};
 use crate::views::query::tasks::{self, Env, TxOp};
 
@@ -73,7 +74,11 @@ pub fn Toolbar(
         (_, Some(why)) => why.clone(),
         (_, None) => "Run (Ctrl+Enter)".to_string(),
     };
-    let mode = tab.as_ref().map(|t| t.mode).unwrap_or_default();
+    let caps = use_caps();
+    let mode = explain_mode(
+        tab.as_ref().map(|t| t.mode).unwrap_or_default(),
+        caps.as_ref(),
+    );
     let (saved_id, dirty) = tab
         .as_ref()
         .map(|t| (t.saved.clone(), t.dirty()))
@@ -134,14 +139,16 @@ pub fn Toolbar(
                         "aria-label": "Run",
                         onclick: move |e| e.stop_propagation(),
                         div { class: "menu-title", "Transaction" }
-                        button {
-                            class: "menu-item",
-                            role: "menuitem",
-                            disabled: tx_state.is_open(),
-                            title: if tx_state.is_open() { "A transaction is already open" } else { "Begin a transaction that cannot write" },
-                            onclick: { let mut begin = begin.clone(); move |_| begin(TxAccess::ReadOnly) },
-                            Ico { icon: Icon::Eye, size: 16 }
-                            "Begin read-only transaction"
+                        if tx_accesses(caps.as_ref()).contains(&TxAccess::ReadOnly) {
+                            button {
+                                class: "menu-item",
+                                role: "menuitem",
+                                disabled: tx_state.is_open(),
+                                title: if tx_state.is_open() { "A transaction is already open" } else { "Begin a transaction that cannot write" },
+                                onclick: { let mut begin = begin.clone(); move |_| begin(TxAccess::ReadOnly) },
+                                Ico { icon: Icon::Eye, size: 16 }
+                                "Begin read-only transaction"
+                            }
                         }
                         button {
                             class: "menu-item",
@@ -162,7 +169,7 @@ pub fn Toolbar(
                 onclick: {
                     let backend = backend.clone();
                     let db = active_db.clone();
-                    move |_| tasks::start_explain(env, backend.clone(), &db)
+                    move |_| tasks::start_explain(env, backend.clone(), &db, mode)
                 },
                 Ico { icon: Icon::Workflow, size: 16 }
                 "{mode.label()}"

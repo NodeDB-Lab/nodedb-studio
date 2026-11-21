@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::record_check::ChangeKind;
+use crate::state::gates::{shows_revisions, use_caps};
 use crate::state::record_editor::{EditorError, EditorMode, RecordEditor};
 
 #[component]
@@ -15,6 +16,11 @@ pub fn ValidationPanel(editor: RecordEditor) -> Element {
         "Immutable"
     } else {
         "Typed or assigned by the server"
+    };
+    let show_revisions = shows_revisions(use_caps().as_ref());
+    let no_diff = match (&editor.stored, show_revisions) {
+        (Some(r), true) => format!("No field differs from revision {}.", r.revision),
+        _ => "No field differs from the stored record.".to_string(),
     };
     let revision_line = if edit {
         "Enabled"
@@ -32,7 +38,7 @@ pub fn ValidationPanel(editor: RecordEditor) -> Element {
             }
             h4 { class: "inspector-section", "Changed fields ({changes.len()})" }
             if changes.is_empty() {
-                p { class: "meta", if edit { "No field differs from revision {editor.stored.as_ref().map_or(0, |r| r.revision)}." } else { "The record has no fields yet." } }
+                p { class: "meta", if edit { "{no_diff}" } else { "The record has no fields yet." } }
             }
             for c in changes.iter() {
                 div { key: "{c.field}", class: "change-line",
@@ -81,10 +87,11 @@ fn unquote(text: &str) -> String {
 #[component]
 pub fn ChangesTable(editor: RecordEditor) -> Element {
     let changes = editor.changes();
-    let stored = editor.stored.as_ref().map_or_else(
-        || "Stored".to_string(),
-        |r| format!("Stored revision {}", r.revision),
-    );
+    let show_revisions = shows_revisions(use_caps().as_ref());
+    let stored = match (&editor.stored, show_revisions) {
+        (Some(r), true) => format!("Stored revision {}", r.revision),
+        _ => "Stored".to_string(),
+    };
     rsx! {
         section { class: "editor-changes", "aria-label": "Changes",
             h3 { class: "side-title", "Changes ({changes.len()})" }
@@ -114,7 +121,18 @@ pub fn ChangesTable(editor: RecordEditor) -> Element {
 /// The save error, with the way out each kind has.
 #[component]
 pub fn SaveError(error: EditorError, on_reload: EventHandler<()>) -> Element {
+    let show_revisions = shows_revisions(use_caps().as_ref());
     match error {
+        EditorError::Conflict { .. } if !show_revisions => rsx! {
+            div { class: "callout warn", role: "alert",
+                Ico { icon: Icon::TriangleAlert, size: 16 }
+                div { class: "callout-body",
+                    strong { "The record changed" }
+                    p { "This record changed since you opened it. Your edit is kept, and nothing was saved." }
+                    button { class: "btn sm", onclick: move |_| on_reload.call(()), "Load the current record" }
+                }
+            }
+        },
         EditorError::Conflict { expected, stored } => rsx! {
             div { class: "callout warn", role: "alert",
                 Ico { icon: Icon::TriangleAlert, size: 16 }

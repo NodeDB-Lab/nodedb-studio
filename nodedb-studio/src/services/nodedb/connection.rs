@@ -226,6 +226,19 @@ impl ConnectionService for NodeDbConnectionService {
                 // ponytail: assumes the user can write. Read the session's
                 // grants when a read-only login must hide the write actions.
                 readonly: false,
+                // 0.6.2 cannot do these, so the UI must not offer them.
+                // Records carry a content fingerprint, not a revision.
+                record_revisions: false,
+                // It accepts BEGIN READ ONLY, then runs writes inside it.
+                read_only_transactions: false,
+                // No statement describes an array.
+                arrays: false,
+                // No source for the Backups, Config and Credentials tabs.
+                backups: false,
+                config: false,
+                credentials: false,
+                // A parse error: 0.6.2 has no EXPLAIN ANALYZE.
+                explain_analyze: false,
             },
             current_database: database,
         })

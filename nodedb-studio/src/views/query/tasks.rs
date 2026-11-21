@@ -207,10 +207,10 @@ pub fn start_run(env: Env, backend: Rc<dyn Backend>, active_db: &str, page: usiz
     }
 }
 
-/// Plan the active tab's statement in its chosen mode.
-pub fn start_explain(env: Env, backend: Rc<dyn Backend>, active_db: &str) {
+/// Plan the active tab's statement in `mode`, the tab's mode when the
+/// server offers it.
+pub fn start_explain(env: Env, backend: Rc<dyn Backend>, active_db: &str, mode: ExplainMode) {
     let mut ws = env.ws;
-    let mode = ws.peek().active().map(|t| t.mode).unwrap_or_default();
     if let Some((id, request)) = prepare(&mut ws, active_db, 0) {
         spawn_forever(async move { explain(env, backend, id, request, mode).await });
     }
