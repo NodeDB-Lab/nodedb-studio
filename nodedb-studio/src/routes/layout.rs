@@ -9,6 +9,7 @@ use crate::components::header::Header;
 use crate::components::sidebar::Sidebar;
 use crate::routes::Route;
 use crate::state::connection::ActiveConnection;
+use crate::state::gates;
 use crate::state::ui::Popover;
 use crate::state::workspace::Workspace;
 
@@ -22,16 +23,15 @@ pub fn StudioLayout() -> Element {
 
     // A route the active connection cannot serve (after a switch to a
     // connection without Graph, say) falls back to Explorer, so the page is
-    // never empty.
+    // never empty. The page is not rendered meanwhile: its first render
+    // would start the requests the connection cannot answer.
+    let served = {
+        let caps = active.read().as_ref().map(|c| c.capabilities);
+        gates::serves(caps.as_ref(), route.destination())
+    };
     use_effect(move || {
-        if let Some(cap) = route.destination().required_cap() {
-            let has = active
-                .read()
-                .as_ref()
-                .is_some_and(|c| c.capabilities.has(cap));
-            if !has {
-                nav.replace(Route::Explorer {});
-            }
+        if !served {
+            nav.replace(Route::Explorer {});
         }
     });
 
@@ -63,7 +63,11 @@ pub fn StudioLayout() -> Element {
             Sidebar {}
             div { class: "shell-main",
                 Header {}
-                main { class: "page", Outlet::<Route> {} }
+                main { class: "page",
+                    if served {
+                        Outlet::<Route> {}
+                    }
+                }
             }
             Footer {}
             CommandPalette {}
