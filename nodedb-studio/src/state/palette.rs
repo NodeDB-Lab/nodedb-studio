@@ -434,6 +434,20 @@ mod tests {
         assert!(ids(&all).contains(&"nav:Explorer"));
     }
 
+    /// A connection without Sync offers no command that opens a Sync page.
+    #[test]
+    fn capability_gate_removes_sync_commands() {
+        let mut caps = all_caps();
+        let opens_sync = |all: &[Command]| {
+            all.iter().any(|c| {
+                matches!(&c.action, PaletteAction::Navigate(r) if r.destination() == Destination::Sync)
+            })
+        };
+        assert!(opens_sync(&catalog(caps, Surface::Query)));
+        caps.sync = false;
+        assert!(!opens_sync(&catalog(caps, Surface::Query)));
+    }
+
     #[test]
     fn switch_commands_skip_the_current_connection() {
         let all = catalog(all_caps(), Surface::Explorer);

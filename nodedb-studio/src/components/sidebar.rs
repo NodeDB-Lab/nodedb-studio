@@ -15,7 +15,7 @@ use crate::models::shell::NavBadges;
 use crate::routes::{Destination, NAV_GROUPS, Route};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
-use crate::state::connection::{ActiveConnection, Capabilities};
+use crate::state::connection::ActiveConnection;
 use crate::state::query::QueryWorkspace;
 use crate::state::workspace::Workspace;
 
@@ -51,13 +51,6 @@ fn badge_text(
         | Destination::Console => 0,
     };
     (n > 0).then(|| n.to_string())
-}
-
-fn reachable(caps: Option<&Capabilities>, d: Destination) -> bool {
-    match d.required_cap() {
-        Some(cap) => caps.is_some_and(|c| c.has(cap)),
-        None => true,
-    }
 }
 
 #[component]
@@ -106,7 +99,7 @@ pub fn Sidebar() -> Element {
                 for group in NAV_GROUPS.iter() {
                     div { key: "{group.label}", class: "nav-group",
                         div { class: "nav-group-label", "{group.label}" }
-                        for d in group.items.iter().copied().filter(|d| reachable(caps.as_ref(), *d)) {
+                        for d in group.items.iter().copied().filter(|d| crate::state::gates::serves(caps.as_ref(), *d)) {
                             NavEntry {
                                 key: "{d.label()}",
                                 dest: d,
@@ -189,7 +182,7 @@ mod tests {
 
     #[test]
     fn gated_destinations_need_their_capability() {
-        assert!(reachable(None, Destination::Explorer));
-        assert!(!reachable(None, Destination::Cluster));
+        assert!(crate::state::gates::serves(None, Destination::Explorer));
+        assert!(!crate::state::gates::serves(None, Destination::Cluster));
     }
 }

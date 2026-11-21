@@ -7,6 +7,7 @@ use dioxus::prelude::*;
 
 use crate::models::workbench::TxAccess;
 use crate::models::workbench::query_plan::ExplainMode;
+use crate::routes::destination::Destination;
 use crate::routes::tabs::AdminTab;
 use crate::state::connection::{ActiveConnection, Capabilities};
 
@@ -15,6 +16,15 @@ use crate::state::connection::{ActiveConnection, Capabilities};
 pub fn use_caps() -> Option<Capabilities> {
     try_use_context::<Signal<Option<ActiveConnection>>>()
         .and_then(|s| s.read().as_ref().map(|c| c.capabilities))
+}
+
+/// Whether the connection serves a destination. The sidebar and the layout
+/// both ask here, so a screen is listed exactly when it can render.
+pub fn serves(caps: Option<&Capabilities>, d: Destination) -> bool {
+    match d.required_cap() {
+        Some(cap) => caps.is_some_and(|c| c.has(cap)),
+        None => true,
+    }
 }
 
 /// Show a record's revision number.
@@ -168,6 +178,30 @@ mod tests {
             admin_tab(AdminTab::Config, Some(&mock_caps())),
             AdminTab::Config
         );
+    }
+
+    /// With `sync` off no Sync route is served, no palette entry or
+    /// notification leads there, and so no `SyncData` request starts: those
+    /// requests live only in `views/sync`, which only the Sync route renders.
+    #[test]
+    fn a_server_without_sync_serves_no_sync_screen() {
+        use crate::models::notification::NotificationTarget;
+        use crate::routes::Route;
+        use crate::routes::tabs::SyncTab;
+
+        let mut c = test_caps();
+        c.sync = false;
+        for tab in SyncTab::ALL {
+            let route = Route::Sync { tab: *tab };
+            assert!(!serves(Some(&c), route.destination()), "{route:?}");
+            assert!(!serves(None, route.destination()), "{route:?}");
+        }
+        assert!(!serves(
+            Some(&c),
+            NotificationTarget::SyncRejectedWrites.route().destination()
+        ));
+        assert!(serves(Some(&test_caps()), Destination::Sync));
+        assert!(serves(Some(&c), Destination::Explorer));
     }
 
     #[test]
