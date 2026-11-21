@@ -41,6 +41,9 @@ struct Probe {
 /// Who the server says the session is.
 struct Identity {
     user: String,
+    /// The tenant the user belongs to. Two tenants can each have a user of
+    /// the same name.
+    tenant_id: String,
     /// The role line: `superuser`, or the roles the user holds.
     role: String,
     /// A superuser or a tenant admin. Only they may list databases.
@@ -94,13 +97,18 @@ fn database_name(saved: &str) -> String {
 
 async fn identity_of(client: &NativeClient) -> Result<Identity, StudioError> {
     let table = to_table(&client.query("SHOW SESSION").await?);
-    let rows = decode_rows(&table, &["username", "roles", "is_superuser"], |r| {
-        Ok(identity(
-            r.field("username")?,
-            r.field("roles")?,
-            r.field("is_superuser")?,
-        ))
-    })?;
+    let rows = decode_rows(
+        &table,
+        &["username", "tenant_id", "roles", "is_superuser"],
+        |r| {
+            Ok(identity(
+                r.field("username")?,
+                r.field("tenant_id")?,
+                r.field("roles")?,
+                r.field("is_superuser")?,
+            ))
+        },
+    )?;
     rows.into_iter()
         .next()
         .ok_or_else(|| StudioError::MalformedRows {
@@ -110,13 +118,14 @@ async fn identity_of(client: &NativeClient) -> Result<Identity, StudioError> {
 
 /// One `SHOW SESSION` row as an identity. The native result prints a
 /// boolean as `t` or `f`.
-fn identity(username: &str, roles: &str, is_superuser: &str) -> Identity {
+fn identity(username: &str, tenant_id: &str, roles: &str, is_superuser: &str) -> Identity {
     let superuser = matches!(is_superuser, "t" | "true");
     let tenant_admin = roles
         .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
         .any(|r| r == "tenant_admin");
     Identity {
         user: username.to_string(),
+        tenant_id: tenant_id.to_string(),
         role: if superuser {
             "superuser".to_string()
         } else {
@@ -152,6 +161,11 @@ impl ConnectionService for NodeDbConnectionService {
         name: &str,
         creds: &Credentials,
     ) -> Result<ActiveConnection, StudioError> {
+        // A new session would drop the open transaction's connection, and
+        // the server would roll it back with no word to the user.
+        if self.tx_open() {
+            return Err(StudioError::TransactionOpen);
+        }
         let entry = self
             .saved
             .borrow()
@@ -180,7 +194,12 @@ impl ConnectionService for NodeDbConnectionService {
                 return Err(e);
             }
         };
-        let Identity { user, role, .. } = seen.who;
+        let Identity {
+            user,
+            tenant_id,
+            role,
+            ..
+        } = seen.who;
         let database = database_name(&entry.database);
         // Multi-node only: a single-node server refuses `SHOW CLUSTER`.
         let cluster = seen.client.query("SHOW CLUSTER").await.is_ok();
@@ -207,9 +226,14 @@ impl ConnectionService for NodeDbConnectionService {
             })
             .unwrap_or_default();
         let mut session = Session::new(config, database.clone(), seen.version, &user);
-        // Studio's own records belong to the saved connection, so a
-        // reconnect finds them.
+        // Studio's own records belong to the saved connection and the
+        // tenant, so a reconnect finds them.
         session.connection = name.to_string();
+        session.tenant_id = tenant_id;
+        // A BEGIN can have finished while the server answered.
+        if self.tx_open() {
+            return Err(StudioError::TransactionOpen);
+        }
         *self.session.borrow_mut() = Some(session);
         Ok(ActiveConnection {
             name: name.to_string(),
@@ -241,6 +265,8 @@ impl ConnectionService for NodeDbConnectionService {
                 backups: false,
                 config: false,
                 credentials: false,
+                // A parse error: 0.6.2 has no EXPLAIN ANALYZE.
+                explain_analyze: false,
             },
             current_database: database,
         })

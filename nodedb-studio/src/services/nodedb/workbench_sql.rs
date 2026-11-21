@@ -228,6 +228,100 @@ pub(super) fn resets_session(sql: &str) -> bool {
     first_word(sql).as_deref() == Some("DISCARD")
 }
 
+/// What the history keeps in place of a password.
+pub(super) const MASK: &str = "'********'";
+
+/// The byte length of the string literal that opens `rest`: `'..'` with
+/// `''` for a quote, or with `escape` (`E'..'`) also `\` before any
+/// character. An unclosed literal runs to the end.
+fn literal_len(rest: &[u8], escape: bool) -> usize {
+    let mut i = 1;
+    while i < rest.len() {
+        match rest[i] {
+            b'\\' if escape => i += 2,
+            b'\'' if rest.get(i + 1) == Some(&b'\'') => i += 2,
+            b'\'' => return i + 1,
+            _ => i += 1,
+        }
+    }
+    rest.len()
+}
+
+/// The byte length of the comment that opens `rest`, `0` for none. Block
+/// comments nest, as in `comment`. An unclosed one runs to the end.
+fn comment_len(rest: &[u8]) -> usize {
+    if rest.starts_with(b"--") {
+        return rest.iter().position(|&b| b == b'\n').unwrap_or(rest.len());
+    }
+    if !rest.starts_with(b"/*") {
+        return 0;
+    }
+    let (mut i, mut depth) = (2, 1usize);
+    while i < rest.len() && depth > 0 {
+        if rest[i..].starts_with(b"*/") {
+            depth -= 1;
+            i += 2;
+        } else if rest[i..].starts_with(b"/*") {
+            depth += 1;
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+    i
+}
+
+/// `sql` with the string literal after each `PASSWORD` keyword replaced by
+/// `MASK`. 0.6.2 takes a secret in statement text only there:
+/// `CREATE USER .. [WITH] PASSWORD '..'` and `ALTER USER .. SET PASSWORD
+/// '..'`. `CREATE API KEY` takes none: the server makes the key. Every
+/// delimiter is ASCII, so the byte scan never splits a character.
+pub(super) fn masked(sql: &str) -> String {
+    let bytes = sql.as_bytes();
+    let mut out = String::with_capacity(sql.len());
+    let (mut at, mut after_password) = (0, false);
+    while at < bytes.len() {
+        let rest = &bytes[at..];
+        let c = rest[0];
+        let escape = matches!(c, b'E' | b'e') && rest.get(1) == Some(&b'\'');
+        let (len, password) = if c == b'\'' || escape {
+            let len = usize::from(escape) + literal_len(&rest[usize::from(escape)..], escape);
+            if after_password {
+                out.push_str(MASK);
+                at += len;
+                after_password = false;
+                continue;
+            }
+            (len, false)
+        } else if c.is_ascii_whitespace() || c == b'=' {
+            (1, after_password)
+        } else if let n @ 1.. = comment_len(rest) {
+            (n, after_password)
+        } else if c.is_ascii_alphabetic() || c == b'_' || !c.is_ascii() {
+            let n = rest
+                .iter()
+                .position(|&b| {
+                    !(b.is_ascii_alphanumeric() || b == b'_' || b == b'$' || !b.is_ascii())
+                })
+                .unwrap_or(rest.len());
+            (n, rest[..n].eq_ignore_ascii_case(b"PASSWORD"))
+        } else if c == b'"' {
+            // A quoted name: `""` is a quote inside it.
+            let mut i = 1;
+            while i < rest.len() && !(rest[i] == b'"' && rest.get(i + 1) != Some(&b'"')) {
+                i += if rest[i] == b'"' { 2 } else { 1 };
+            }
+            ((i + 1).min(rest.len()), false)
+        } else {
+            (1, false)
+        };
+        out.push_str(&sql[at..at + len]);
+        at += len;
+        after_password = password;
+    }
+    out
+}
+
 /// The first words of a statement that only reads.
 const READS: &[&str] = &["SELECT", "SHOW", "DESCRIBE", "EXPLAIN", "WITH"];
 
@@ -409,6 +503,49 @@ mod tests {
             assert!(resets_session(sql), "{sql}");
         }
         assert!(!resets_session("SELECT 'DISCARD ALL'"));
+    }
+
+    #[test]
+    fn the_literal_after_password_is_masked() {
+        for (sql, want) in [
+            (
+                "CREATE USER alice WITH PASSWORD 'it''s secret' ROLE readonly",
+                "CREATE USER alice WITH PASSWORD '********' ROLE readonly",
+            ),
+            (
+                r"alter user bob set password E'a\'b''c\\' ;",
+                "alter user bob set password '********' ;",
+            ),
+            (
+                "Create User c Password /* the pw */ e'x' -- note\n",
+                "Create User c Password /* the pw */ '********' -- note\n",
+            ),
+            (
+                "CREATE USER d PASSWORD -- next line\n  'p\u{e4}ss' TENANT 'acme'",
+                "CREATE USER d PASSWORD -- next line\n  '********' TENANT 'acme'",
+            ),
+            (
+                "CREATE USER \u{e9} WITH PASSWORD = 'never closed",
+                "CREATE USER \u{e9} WITH PASSWORD = '********'",
+            ),
+        ] {
+            assert_eq!(masked(sql), want, "{sql}");
+        }
+    }
+
+    #[test]
+    fn text_without_a_password_literal_is_kept() {
+        for sql in [
+            "SELECT 1",
+            "SELECT 'PASSWORD', \"PASSWORD\" 'x', passwords 'y' FROM t",
+            "SELECT '--', 'it''s' /* PASSWORD 'z' */ FROM t",
+            "ALTER USER a PASSWORD EXPIRES '2026-12-31T00:00:00Z'",
+            "ALTER USER a MUST CHANGE PASSWORD",
+            "CREATE API KEY FOR alice EXPIRES 3600",
+            "",
+        ] {
+            assert_eq!(masked(sql), sql, "{sql}");
+        }
     }
 
     #[test]

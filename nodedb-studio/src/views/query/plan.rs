@@ -9,6 +9,7 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::thousands;
 use crate::models::query_plan::{ExplainMode, PlanOperator, QueryPlan, duration};
+use crate::state::gates::{explain_mode, explain_modes, use_caps};
 use crate::state::query::{PlanState, QueryTab, QueryWorkspace};
 
 /// An estimate, or a dash when the server reports none.
@@ -35,7 +36,8 @@ fn card_line(op: &PlanOperator, plan: &QueryPlan) -> String {
 #[component]
 pub fn PlanView(tab: QueryTab) -> Element {
     let mut ws = use_context::<Signal<QueryWorkspace>>();
-    let mode = tab.mode;
+    let caps = use_caps();
+    let mode = explain_mode(tab.mode, caps.as_ref());
     let shown = match &tab.plan {
         PlanState::Ready(plan) => Some(plan.mode),
         PlanState::None | PlanState::Running | PlanState::Failed(_) => None,
@@ -44,7 +46,7 @@ pub fn PlanView(tab: QueryTab) -> Element {
         div { class: "plan",
             div { class: "plan-bar",
                 div { class: "choice-group", role: "radiogroup", "aria-label": "Plan mode",
-                    for m in [ExplainMode::Explain, ExplainMode::Analyze] {
+                    for &m in explain_modes(caps.as_ref()) {
                         label {
                             key: "{m.label()}",
                             class: if mode == m { "choice selected" } else { "choice" },
@@ -224,6 +226,51 @@ mod tests {
             !html.contains("Est. rows") && !html.contains("Estimated rows"),
             "{html}"
         );
+    }
+
+    /// The Plan view of a tab left in Analyze mode, on a server that does
+    /// or does not run EXPLAIN ANALYZE.
+    fn plan_view(analyze: bool) -> String {
+        use crate::state::connection::ActiveConnection;
+        #[derive(Props, Clone, PartialEq)]
+        struct P {
+            analyze: bool,
+        }
+        let mut dom = VirtualDom::new_with_props(
+            |p: P| {
+                let mut capabilities = crate::state::gates::test_caps();
+                capabilities.explain_analyze = p.analyze;
+                use_context_provider(|| {
+                    Signal::new(Some(ActiveConnection {
+                        name: "s".into(),
+                        sub: String::new(),
+                        display_name: "A".into(),
+                        user: "a".into(),
+                        role: "r".into(),
+                        capabilities,
+                        current_database: "d".into(),
+                    }))
+                });
+                let mut w = QueryWorkspace::default();
+                let id = w.new_tab("d");
+                let mut tab = w.tab_mut(id).cloned().expect("the new tab");
+                tab.mode = ExplainMode::Analyze;
+                use_context_provider(|| Signal::new(w));
+                rsx! { PlanView { tab } }
+            },
+            P { analyze },
+        );
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    #[test]
+    fn analyze_is_offered_only_where_the_server_runs_it() {
+        let offered = plan_view(true);
+        assert!(offered.contains("Analyze"), "{offered}");
+        let hidden = plan_view(false);
+        assert!(!hidden.contains("Analyze"), "{hidden}");
+        assert!(hidden.contains(ExplainMode::Explain.note()), "{hidden}");
     }
 
     #[test]

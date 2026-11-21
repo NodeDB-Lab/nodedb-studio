@@ -27,4 +27,5 @@ pub mod sync;
 pub mod timeseries;
 pub mod ui;
 pub mod vector;
+pub mod workbench_records;
 pub mod workspace;

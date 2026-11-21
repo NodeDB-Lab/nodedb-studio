@@ -27,6 +27,7 @@ fn all_capabilities(readonly: bool) -> Capabilities {
         backups: true,
         config: true,
         credentials: true,
+        explain_analyze: true,
     }
 }
 

@@ -5,6 +5,7 @@
 
 use dioxus::prelude::*;
 
+use crate::models::query_plan::ExplainMode;
 use crate::models::workbench::TxAccess;
 use crate::routes::tabs::AdminTab;
 use crate::state::connection::{ActiveConnection, Capabilities};
@@ -27,6 +28,25 @@ pub fn tx_accesses(caps: Option<&Capabilities>) -> &'static [TxAccess] {
         &[TxAccess::ReadOnly, TxAccess::ReadWrite]
     } else {
         &[TxAccess::ReadWrite]
+    }
+}
+
+/// The plan modes the Plan view offers.
+pub fn explain_modes(caps: Option<&Capabilities>) -> &'static [ExplainMode] {
+    if caps.is_none_or(|c| c.explain_analyze) {
+        &[ExplainMode::Explain, ExplainMode::Analyze]
+    } else {
+        &[ExplainMode::Explain]
+    }
+}
+
+/// The plan mode to use: `chosen` when offered, else plain EXPLAIN. A tab
+/// keeps its mode across a switch to a server without ANALYZE.
+pub fn explain_mode(chosen: ExplainMode, caps: Option<&Capabilities>) -> ExplainMode {
+    if explain_modes(caps).contains(&chosen) {
+        chosen
+    } else {
+        ExplainMode::Explain
     }
 }
 
@@ -78,6 +98,7 @@ pub fn test_caps() -> Capabilities {
         backups: true,
         config: true,
         credentials: true,
+        explain_analyze: true,
     }
 }
 
@@ -102,6 +123,7 @@ mod tests {
             backups: false,
             config: false,
             credentials: false,
+            explain_analyze: false,
             ..mock_caps()
         }
     }
@@ -113,6 +135,11 @@ mod tests {
         assert!(describes_arrays(Some(&c)));
         assert_eq!(tx_accesses(Some(&c)).len(), 2);
         assert_eq!(admin_tabs(Some(&c)), AdminTab::ALL);
+        assert_eq!(explain_modes(Some(&c)).len(), 2);
+        assert_eq!(
+            explain_mode(ExplainMode::Analyze, Some(&c)),
+            ExplainMode::Analyze
+        );
     }
 
     #[test]
@@ -121,6 +148,11 @@ mod tests {
         assert!(!shows_revisions(Some(&c)));
         assert!(!describes_arrays(Some(&c)));
         assert_eq!(tx_accesses(Some(&c)), &[TxAccess::ReadWrite]);
+        assert_eq!(explain_modes(Some(&c)), &[ExplainMode::Explain]);
+        assert_eq!(
+            explain_mode(ExplainMode::Analyze, Some(&c)),
+            ExplainMode::Explain
+        );
         assert_eq!(
             admin_tabs(Some(&c)),
             [AdminTab::Access, AdminTab::RowPolicies, AdminTab::Audit]
@@ -141,6 +173,7 @@ mod tests {
     #[test]
     fn no_connection_offers_everything() {
         assert!(shows_revisions(None));
+        assert_eq!(explain_modes(None).len(), 2);
         assert_eq!(admin_tabs(None), AdminTab::ALL);
     }
 }

@@ -6,7 +6,7 @@
 //! `StudioError::NotConnected` until it is wired.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -14,12 +14,13 @@ use nodedb_client::native::pool::PoolConfig;
 use nodedb_client::{NativeClient, NodeDbError, QueryResult};
 use nodedb_types::protocol::AuthMethod as WireAuth;
 
-use crate::data::mock::WorkbenchStore;
 use crate::models::connections::{AuthMethod, ConnectionTarget, TlsConfig};
 use crate::services::decode::Table;
 use crate::services::error::StudioError;
+use crate::services::nodedb::workbench_conn::StmtConn;
 use crate::services::nodedb::workbench_tx::Tx;
 use crate::state::connections_registry::SavedConnection;
+use crate::state::workbench_records::WorkbenchRecords;
 
 /// The backend that talks to a NodeDB server.
 #[derive(Default)]
@@ -34,18 +35,23 @@ pub struct NodeDbConnectionService {
     pub(super) secrets: RefCell<HashMap<String, String>>,
     pub(super) session: RefCell<Option<Session>>,
     /// Studio's own records, saved queries and console history, by saved
-    /// connection name and signed-in user. A reconnect keeps them.
+    /// connection name, tenant, and signed-in user. A reconnect keeps them.
     // ponytail: memory only, so a restart starts empty, and a renamed
     // connection starts a new library. Persist it with `state::persist`
     // when saved queries must survive a restart.
-    libraries: RefCell<HashMap<(String, String), WorkbenchStore>>,
+    libraries: RefCell<HashMap<LibraryKey, WorkbenchRecords>>,
 }
+
+/// Whose records a library holds: saved connection, tenant, user.
+type LibraryKey = (String, String, String);
 
 /// The last statement `run_query` executed, kept so a page change reads the
 /// buffered rows and never executes the statement a second time.
 pub(super) struct LastRun {
     pub database: String,
     pub sql: String,
+    /// The values bound to the statement's parameters, in `$n` order.
+    pub values: Vec<nodedb_types::Value>,
     pub result: QueryResult,
     pub elapsed_ms: u32,
 }
@@ -64,14 +70,25 @@ pub(super) struct Session {
     pub connection: String,
     /// The user the server signed in.
     pub user: String,
+    /// The user's tenant, as `SHOW SESSION` reports it. Blank outside
+    /// `connect`.
+    pub tenant_id: String,
     pub config: PoolConfig,
     /// The database session-scoped reads answer for.
     pub database: String,
     pub server_version: String,
     clients: HashMap<String, Rc<NativeClient>>,
     pub last_run: Option<LastRun>,
-    /// The open transaction. Dropping the session closes its connection,
-    /// and the server rolls back what a closed connection left open.
+    /// The connection the user's statements on each database run on, by
+    /// database name, opened on first use. Each holds its own server
+    /// session: settings made on one database do not reach another.
+    /// Dropping the session closes them, and the server rolls back what a
+    /// closed connection left open.
+    pub conns: HashMap<String, StmtConn>,
+    /// Databases whose statement connection closed: the next statement
+    /// there tells the user the settings are gone.
+    pub reset: HashSet<String>,
+    /// The open transaction, on its database's statement connection.
     pub tx: Option<Tx>,
 }
 
@@ -81,11 +98,14 @@ impl Session {
             id: next_id(),
             connection: String::new(),
             user: user.to_string(),
+            tenant_id: String::new(),
             config,
             database,
             server_version,
             clients: HashMap::new(),
             last_run: None,
+            conns: HashMap::new(),
+            reset: HashSet::new(),
             tx: None,
         }
     }
@@ -210,21 +230,21 @@ impl NodeDbConnectionService {
         Ok(to_table(&client.query(sql).await?))
     }
 
-    /// Run `f` on Studio's own records for the session's connection and
-    /// user. Each user owns the queries they save.
+    /// Run `f` on Studio's own records for the session's connection,
+    /// tenant, and user. Each user owns the queries they save.
     pub(super) fn local<T>(
         &self,
-        f: impl FnOnce(&mut WorkbenchStore) -> Result<T, StudioError>,
+        f: impl FnOnce(&mut WorkbenchRecords) -> Result<T, StudioError>,
     ) -> Result<T, StudioError> {
         let key = {
             let session = self.session.borrow();
             let s = session.as_ref().ok_or(StudioError::NotConnected)?;
-            (s.connection.clone(), s.user.clone())
+            (s.connection.clone(), s.tenant_id.clone(), s.user.clone())
         };
         let mut libraries = self.libraries.borrow_mut();
         f(libraries
             .entry(key)
-            .or_insert_with_key(|(_, user)| WorkbenchStore::empty(user, now_epoch)))
+            .or_insert_with_key(|(_, _, user)| WorkbenchRecords::empty(user, now_epoch)))
     }
 }
 

@@ -1,8 +1,20 @@
-//! Calls on a transaction's pinned connection: opening it, awaiting a call
-//! within a time limit, and what a call without an answer means.
+//! The session's statement connections: one per database, outside the
+//! pool. Taking one out for a call, putting it back, closing it, awaiting a
+//! call within a time limit, and what a call without an answer means.
+//!
+//! The server keeps settings (`SET`), sequence values (`currval`) and the
+//! transaction per connection. The pool hands each call whichever
+//! connection is free, so every statement the user types runs on the
+//! statement connection of its database instead. Each database has its own,
+//! with its own settings. A transaction opens on it and leaves it open after
+//! COMMIT or ROLLBACK. Studio's own reads keep using the pool.
+//!
+//! No `RefCell` borrow lives across an `.await`. A call takes the
+//! connection out of the session, awaits, and puts it back. A call that
+//! needs the connection meanwhile is refused, never queued.
 
 use std::future::Future;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use nodedb_client::native::connection::NativeConnection;
 use nodedb_client::native::pool::PoolConfig;
@@ -10,13 +22,26 @@ use nodedb_client::{NodeDbError, QueryResult};
 use nodedb_types::Value;
 use nodedb_types::error::{ErrorCode, ErrorDetails};
 
+use crate::models::workbench::TxState;
 use crate::services::error::StudioError;
+use crate::services::nodedb::NodeDbConnectionService;
+use crate::services::nodedb::service::{Session, next_id};
+use crate::services::nodedb::workbench_tx::Tx;
 
 /// A failed block refuses every statement except transaction control. This
 /// read answers in an open block and is refused in a failed one.
 const PROBE: &str = "SHOW transaction_read_only";
 
-/// How long one statement on the transaction's connection can run.
+/// A connection idle this long is checked with the server before its next
+/// call. 0.6.2 closes a native session idle for `idle_timeout_secs` (3600 s
+/// by default), and rolls its transaction back.
+pub(super) const IDLE_PROBE_AFTER: Duration = Duration::from_secs(30);
+
+/// Shown with the first statement on a connection that replaces one that
+/// closed.
+pub(super) const SETTINGS_RESET: &str = "Studio's connection to this database had closed, so this statement ran on a new one. Settings made with SET are back to their defaults, and currval() has no value until the next nextval().";
+
+/// How long one statement on a statement connection can run.
 pub(super) const STATEMENT_LIMIT: Duration = Duration::from_secs(300);
 
 /// How long BEGIN, COMMIT, ROLLBACK and the probe can take.
@@ -73,6 +98,32 @@ fn commit_unknown(detail: &str) -> StudioError {
     ))
 }
 
+/// A statement outside a transaction went out and no answer came back. Not
+/// retriable, so no Retry runs a write a second time.
+pub(super) fn no_answer(detail: impl std::fmt::Display) -> StudioError {
+    StudioError::Connection(NodeDbError::from_wire(
+        ErrorCode::INTERNAL,
+        format!(
+            "the statement got no answer ({detail}). It can have run: check the data before you run it again."
+        ),
+    ))
+}
+
+/// A second call while one runs on the same statement connection.
+pub(super) fn busy() -> StudioError {
+    StudioError::Setup(NodeDbError::bad_request(
+        "a statement is still running on this database's connection: wait for it to finish, then try again",
+    ))
+}
+
+/// A connect replaced the session while a call ran on its connection.
+fn replaced() -> StudioError {
+    StudioError::Connection(NodeDbError::from_wire(
+        ErrorCode::INTERNAL,
+        "Studio connected again while the statement ran, and closed the connection it ran on. It can have run: check the data before you run it again.",
+    ))
+}
+
 /// The answer to the COMMIT or ROLLBACK that ended a transaction.
 pub(super) fn ended(
     committing: bool,
@@ -95,7 +146,7 @@ pub(super) async fn failed_on(conn: &mut NativeConnection) -> Result<bool, Gone>
         .is_err())
 }
 
-/// Open the connection a transaction pins, as the pool would.
+/// Open a statement connection, as the pool would.
 pub(super) async fn open(config: &PoolConfig) -> Result<NativeConnection, StudioError> {
     let connect = async {
         let mut conn = if config.tls.enabled {
@@ -111,6 +162,250 @@ pub(super) async fn open(config: &PoolConfig) -> Result<NativeConnection, Studio
         .await
         .map_err(|_| NodeDbError::sync_connection_failed("connect timeout"))?
         .map_err(StudioError::from)
+}
+
+/// One database's statement connection.
+pub(super) struct StmtConn {
+    /// Tells this connection from the one a reconnect opens.
+    pub id: u64,
+    /// `None` while a call runs on it.
+    pub conn: Option<NativeConnection>,
+    /// When the last call on it finished.
+    pub used: Instant,
+}
+
+impl StmtConn {
+    pub fn idle(&self) -> bool {
+        self.used.elapsed() >= IDLE_PROBE_AFTER
+    }
+}
+
+/// A statement connection out of the session while a call runs on it.
+/// Dropped without being put back (a cancelled call), it closes the
+/// connection: the server rolls back an open transaction and forgets the
+/// session's settings.
+pub(super) struct Lease<'a> {
+    svc: &'a NodeDbConnectionService,
+    session: u64,
+    database: String,
+    id: u64,
+    /// The transaction open on this connection when the call took it.
+    pub tx: Option<u64>,
+    conn: Option<NativeConnection>,
+    /// The connection replaces one that closed: the settings made there
+    /// are gone.
+    pub reset: bool,
+}
+
+impl Lease<'_> {
+    pub fn conn(&mut self) -> Result<&mut NativeConnection, StudioError> {
+        self.conn.as_mut().ok_or_else(busy)
+    }
+
+    pub fn database(&self) -> &str {
+        &self.database
+    }
+
+    /// Put the connection back after `update` accepts the transaction
+    /// change, and read the transaction state. A refused change closes the
+    /// connection instead: what it holds on the server is not what Studio
+    /// shows.
+    pub fn put_back(
+        mut self,
+        update: impl FnOnce(&mut Option<Tx>) -> Result<(), StudioError>,
+    ) -> Result<TxState, StudioError> {
+        let conn = self.conn.take();
+        let mut session = self.svc.session.borrow_mut();
+        let Some(s) = session.as_mut().filter(|s| s.id == self.session) else {
+            return Err(replaced());
+        };
+        if let Err(e) = update(&mut s.tx) {
+            s.close(&self.database, self.id);
+            return Err(e);
+        }
+        if let Some(slot) = s.conns.get_mut(&self.database).filter(|c| c.id == self.id) {
+            slot.conn = conn;
+            slot.used = Instant::now();
+        }
+        Ok(s.tx.as_ref().map_or(TxState::Idle, Tx::state))
+    }
+
+    /// Close the connection. The server rolls back an open transaction.
+    pub fn end(mut self) {
+        self.conn = None;
+        self.svc.close(self.session, &self.database, self.id);
+    }
+}
+
+impl Drop for Lease<'_> {
+    fn drop(&mut self) {
+        if self.conn.take().is_some() {
+            self.svc.close(self.session, &self.database, self.id);
+        }
+    }
+}
+
+impl Session {
+    /// Forget connection `id` of `database`, and the transaction on it. The
+    /// next statement there opens a new one and says the settings are gone.
+    pub(super) fn close(&mut self, database: &str, id: u64) {
+        if self.conns.get(database).is_some_and(|c| c.id == id) {
+            self.conns.remove(database);
+            self.reset.insert(database.to_string());
+            if self.tx.as_ref().is_some_and(|tx| tx.database() == database) {
+                self.tx = None;
+            }
+        }
+    }
+}
+
+impl NodeDbConnectionService {
+    fn close(&self, session: u64, database: &str, id: u64) {
+        // `try_` because this runs from `Drop`. Every borrow of the session
+        // is short and never held across an await, so it succeeds.
+        if let Ok(mut s) = self.session.try_borrow_mut()
+            && let Some(s) = s.as_mut().filter(|s| s.id == session)
+        {
+            s.close(database, id);
+        }
+    }
+
+    /// Take `database`'s connection out of `s`. `None` when it has none or
+    /// a call runs on it.
+    pub(super) fn checkout(&self, s: &mut Session, database: &str) -> Option<Lease<'_>> {
+        let tx =
+            s.tx.as_ref()
+                .filter(|tx| tx.database() == database)
+                .map(Tx::id);
+        let slot = s.conns.get_mut(database)?;
+        let conn = slot.conn.take()?;
+        Some(Lease {
+            svc: self,
+            session: s.id,
+            database: database.to_string(),
+            id: slot.id,
+            tx,
+            conn: Some(conn),
+            reset: false,
+        })
+    }
+
+    /// Take the statement connection of `database` (blank: the session's).
+    /// `check` sees the database and the open transaction first, and can
+    /// refuse before anything reaches the server. A database without a
+    /// connection opens one. A connection idle past `IDLE_PROBE_AFTER` is
+    /// asked first: a dead one ends its transaction, or outside one is
+    /// replaced.
+    pub(super) async fn take(
+        &self,
+        database: &str,
+        check: impl FnOnce(&str, Option<&Tx>) -> Result<(), StudioError>,
+    ) -> Result<Lease<'_>, StudioError> {
+        let (session, database, held, config) = {
+            let mut guard = self.session.borrow_mut();
+            let s = guard.as_mut().ok_or(StudioError::NotConnected)?;
+            let database = s.database_or_default(database);
+            check(&database, s.tx.as_ref())?;
+            let held = match s.conns.get(&database) {
+                Some(slot) => {
+                    let idle = slot.idle();
+                    Some((self.checkout(s, &database).ok_or_else(busy)?, idle))
+                }
+                // A transaction lives on its database's connection.
+                None if s.tx.as_ref().is_some_and(|tx| tx.database() == database) => {
+                    s.tx = None;
+                    return Err(lost("Studio no longer held its connection"));
+                }
+                None => None,
+            };
+            let config = PoolConfig {
+                database: Some(database.clone()),
+                ..s.config.clone()
+            };
+            (s.id, database, held, config)
+        };
+        if let Some((mut lease, idle)) = held {
+            if !idle {
+                return Ok(lease);
+            }
+            match failed_on(lease.conn()?).await {
+                Ok(_) => return Ok(lease),
+                Err(Gone(detail)) => {
+                    let in_tx = lease.tx.is_some();
+                    lease.end();
+                    if in_tx {
+                        return Err(lost(detail));
+                    }
+                }
+            }
+        }
+        let conn = open(&config).await?;
+        let mut guard = self.session.borrow_mut();
+        let Some(s) = guard.as_mut().filter(|s| s.id == session) else {
+            return Err(StudioError::Connection(
+                NodeDbError::sync_connection_failed(
+                    "Studio connected again before the statement started, so it did not run",
+                ),
+            ));
+        };
+        // Another call opened one first.
+        if s.conns.contains_key(&database) {
+            return Err(busy());
+        }
+        let id = next_id();
+        s.conns.insert(
+            database.clone(),
+            StmtConn {
+                id,
+                conn: None,
+                used: Instant::now(),
+            },
+        );
+        let reset = s.reset.remove(&database);
+        Ok(Lease {
+            svc: self,
+            session,
+            database,
+            id,
+            tx: None,
+            conn: Some(conn),
+            reset,
+        })
+    }
+}
+
+/// Kill the statement connection of `database`, as a server that closed it
+/// leaves it. `idle` makes it look unused for longer than
+/// `IDLE_PROBE_AFTER`. A frame over the server's 16 MiB limit makes the
+/// server answer an error and close the connection.
+#[cfg(test)]
+pub(super) async fn kill_conn(svc: &NodeDbConnectionService, database: &str, idle: bool) {
+    let mut conn = svc
+        .session
+        .borrow_mut()
+        .as_mut()
+        .and_then(|s| s.conns.get_mut(database))
+        .and_then(|c| c.conn.take())
+        .expect("a statement connection");
+    let huge = format!("SELECT '{}'", "x".repeat(17 * 1024 * 1024));
+    let out = tokio::time::timeout(Duration::from_secs(30), conn.execute_sql(&huge))
+        .await
+        .expect("the server answers in time");
+    assert!(
+        out.as_ref().is_err_and(is_dead),
+        "the connection is dead: {out:?}"
+    );
+    let mut session = svc.session.borrow_mut();
+    let slot = session
+        .as_mut()
+        .and_then(|s| s.conns.get_mut(database))
+        .expect("still held");
+    slot.conn = Some(conn);
+    if idle {
+        slot.used = Instant::now()
+            .checked_sub(IDLE_PROBE_AFTER * 2)
+            .expect("the clock runs long enough");
+    }
 }
 
 #[cfg(test)]

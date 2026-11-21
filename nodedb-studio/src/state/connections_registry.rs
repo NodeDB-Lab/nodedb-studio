@@ -229,6 +229,7 @@ mod tests {
                 backups: true,
                 config: true,
                 credentials: true,
+                explain_analyze: true,
             },
             databases: vec!["analytics".into(), "commerce".into()],
             default_database: "analytics".into(),

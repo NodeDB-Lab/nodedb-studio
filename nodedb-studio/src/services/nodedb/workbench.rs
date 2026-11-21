@@ -25,24 +25,25 @@ use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::nodedb::service::{LastRun, to_table};
-use crate::services::nodedb::workbench_sql::is_plain_read;
+use crate::services::nodedb::workbench_sql::{is_plain_read, masked};
 use crate::services::nodedb::workbench_tx::read_only_unsupported;
 use crate::services::workbench_data::WorkbenchData;
 
 impl NodeDbConnectionService {
     /// Page `request.page` of the last run, when it ran the same statement
-    /// on the same database.
+    /// with the same bound `values` on the same database.
     fn buffered_page(
         &self,
         request: &QueryRequest,
         sql: &str,
+        values: &[Value],
     ) -> Result<Option<QueryRun>, StudioError> {
         let tx = self.tx_state()?;
         let session = self.session.borrow();
         let Some(last) = session.as_ref().and_then(|s| s.last_run.as_ref()) else {
             return Ok(None);
         };
-        if last.database != request.database || last.sql != sql {
+        if last.database != request.database || last.sql != sql || last.values != values {
             return Ok(None);
         }
         build_run(
@@ -229,21 +230,21 @@ impl WorkbenchData for NodeDbConnectionService {
         if sql.is_empty() {
             return Err(StudioError::EmptyStatement);
         }
+        let (positional, values) = if request.params.is_empty() {
+            (sql.to_string(), Vec::new())
+        } else {
+            bind_params(sql, &request.params)?
+        };
         // A page change reads the buffered rows. Executing again would repeat
         // a write, so only a plain read runs again for a page.
         if request.page > 0 {
-            if let Some(run) = self.buffered_page(request, sql)? {
+            if let Some(run) = self.buffered_page(request, sql, &values)? {
                 return Ok(run);
             }
             if !is_plain_read(sql) {
                 return Err(run_again_first());
             }
         }
-        let (positional, values) = if request.params.is_empty() {
-            (sql.to_string(), Vec::new())
-        } else {
-            bind_params(sql, &request.params)?
-        };
         let started = Instant::now();
         let ran = self
             .execute(&request.database, &positional, &values)
@@ -256,16 +257,16 @@ impl WorkbenchData for NodeDbConnectionService {
             elapsed_ms,
             ran.tx,
         )?;
-        if let Some(text) = ran.warning {
-            run.messages.push(QueryMessage {
+        run.messages
+            .extend(ran.warnings.iter().map(|text| QueryMessage {
                 level: MessageLevel::Warning,
                 text: text.to_string(),
-            });
-        }
+            }));
         if let Some(session) = self.session.borrow_mut().as_mut() {
             session.last_run = Some(LastRun {
                 database: request.database.clone(),
                 sql: sql.to_string(),
+                values,
                 result: ran.result,
                 elapsed_ms,
             });
@@ -406,9 +407,10 @@ impl WorkbenchData for NodeDbConnectionService {
         if text.trim_end_matches(';').trim().is_empty() {
             return Err(StudioError::EmptyStatement);
         }
-        // The history keeps what the user ran, whatever the server answers.
+        // The history keeps what the user ran, whatever the server answers,
+        // with any password masked.
         self.local(|s| {
-            s.record(protocol, text);
+            s.record(protocol, &masked(text));
             Ok(())
         })?;
         // SQL, admin commands such as `SHOW DATABASES`, and Cypher `MATCH`
@@ -416,12 +418,10 @@ impl WorkbenchData for NodeDbConnectionService {
         let started = Instant::now();
         let ran = self.execute(database, text, &[]).await?;
         Ok(ConsoleReply {
-            output: match ran.warning {
-                Some(text) => ConsoleOutput::Text(vec![text.to_string()]),
-                None => console_output(&ran.result),
-            },
+            output: console_output(&ran.result),
             elapsed_ms: ms_since(started),
             tx: ran.tx,
+            notes: ran.warnings.iter().map(|w| w.to_string()).collect(),
         })
     }
 
@@ -645,9 +645,95 @@ mod tests {
         assert!(err.to_string().contains("parse error"), "got {err}");
     }
 
-    /// Sign `user` in on saved connection `probe`, as `connect` does, with
-    /// a session that never reached a server.
+    /// A setting the user makes holds for their next statement, though
+    /// Studio's own reads keep several pooled connections busy. The pool
+    /// hands out its oldest idle connection, so a pooled statement after
+    /// two concurrent reads lands on another connection than the SET.
+    #[tokio::test]
+    #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+    async fn live_query_session_settings_stick() {
+        use crate::services::connection_service::ConnectionService;
+        let svc = live().await;
+        let c = svc.client(None).expect("a client");
+        // 0.6.2 plans `CREATE SEQUENCE IF NOT EXISTS` for a new sequence and
+        // refuses it. The plain form fails when an earlier run made it.
+        let _ = c.query("CREATE SEQUENCE studio_probe_w_seq").await;
+        let busy = || async {
+            let (a, b) = tokio::join!(svc.databases(), svc.databases());
+            assert!(a.is_ok() && b.is_ok(), "{a:?} {b:?}");
+        };
+        busy().await;
+        svc.run_query(&q("SET application_name = 'studio_probe_w1'", 0, 50))
+            .await
+            .expect("sets");
+        // The pool held two idle connections: this one gets the other.
+        let shown = svc
+            .run_query(&q("SHOW application_name", 0, 50))
+            .await
+            .expect("shows");
+        assert_eq!(shown.result.rows()[0].cells, ["studio_probe_w1"]);
+        // The Console shares the session, and a closing `;` stays out of
+        // the value.
+        let show = |want: &str| ConsoleOutput::Table {
+            columns: vec!["setting".into()],
+            rows: vec![vec![want.into()]],
+        };
+        let typed = svc
+            .console_run(Protocol::Sql, "", "SHOW application_name;")
+            .await
+            .expect("shows");
+        assert_eq!(typed.output, show("studio_probe_w1"));
+        svc.console_run(
+            Protocol::Sql,
+            "",
+            "SET application_name = 'studio_probe_w2';",
+        )
+        .await
+        .expect("sets");
+        busy().await;
+        let shown = svc
+            .run_query(&q("SHOW application_name", 0, 50))
+            .await
+            .expect("shows");
+        assert_eq!(shown.result.rows()[0].cells, ["studio_probe_w2"]);
+        // Studio's own reads stay on the pool, out of the user's session.
+        for _ in 0..3 {
+            let pooled = c.query("SHOW application_name").await.expect("reads");
+            assert_ne!(to_table(&pooled).rows, [["studio_probe_w1"]]);
+        }
+        busy().await;
+        let next = svc
+            .run_query(&q("SELECT nextval('studio_probe_w_seq') AS v", 0, 50))
+            .await
+            .expect("advances");
+        let current = svc
+            .run_query(&q("SELECT currval('studio_probe_w_seq') AS v", 0, 50))
+            .await
+            .expect("reads the session's own value");
+        assert_eq!(current.result.rows()[0].cells, next.result.rows()[0].cells);
+        // A connection the server closed while it sat idle is replaced, and
+        // the user reads that the settings are gone, because they are.
+        crate::services::nodedb::workbench_conn::kill_conn(&svc, "default", true).await;
+        let fresh = svc
+            .console_run(Protocol::Sql, "default", "SHOW application_name")
+            .await
+            .expect("runs on a new connection");
+        assert_eq!(fresh.output, show(""));
+        assert_eq!(
+            fresh.notes,
+            [crate::services::nodedb::workbench_conn::SETTINGS_RESET]
+        );
+        let again = svc.run_query(&q("SELECT 1", 0, 50)).await.expect("runs");
+        assert!(again.messages.is_empty(), "{:?}", again.messages);
+    }
+
+    /// Sign `user` of tenant 1 in on saved connection `probe`, as `connect`
+    /// does, with a session that never reached a server.
     fn sign_in(svc: &NodeDbConnectionService, user: &str) {
+        sign_in_to(svc, user, "1");
+    }
+
+    fn sign_in_to(svc: &NodeDbConnectionService, user: &str, tenant: &str) {
         use nodedb_client::native::pool::PoolConfig;
         use nodedb_types::protocol::AuthMethod as WireAuth;
         let config = PoolConfig::new(
@@ -663,7 +749,76 @@ mod tests {
             user,
         );
         session.connection = "probe".into();
+        session.tenant_id = tenant.into();
         *svc.session.borrow_mut() = Some(session);
+    }
+
+    /// Two tenants can each have an `alice`. Neither reads the other's
+    /// saved queries or console history.
+    #[tokio::test]
+    async fn the_same_user_name_in_another_tenant_has_its_own_records() {
+        let svc = offline();
+        let mine = svc.save_query(&save("Mine")).await.expect("saves");
+        // Recorded before the statement fails to reach a server.
+        let _ = svc.console_run(Protocol::Sql, "", "SELECT 'mine'").await;
+        sign_in_to(&svc, "alice", "2");
+        assert!(svc.query_library().await.expect("reads").queries.is_empty());
+        let all = HistoryQuery {
+            protocol: None,
+            window: crate::models::console::HistoryWindow::AllTime,
+        };
+        assert!(svc.console_history(&all).await.expect("reads").is_empty());
+        sign_in_to(&svc, "alice", "1");
+        assert_eq!(svc.query_library().await.expect("reads").queries, [mine]);
+        assert_eq!(svc.console_history(&all).await.expect("reads").len(), 1);
+    }
+
+    /// The history keeps a typed password masked, whatever the server
+    /// answers.
+    #[tokio::test]
+    async fn the_console_history_masks_a_password() {
+        let svc = offline();
+        let typed = "CREATE USER bob WITH PASSWORD 'hunter''2' ROLE readonly;";
+        assert!(svc.console_run(Protocol::Sql, "", typed).await.is_err());
+        let all = HistoryQuery {
+            protocol: None,
+            window: crate::models::console::HistoryWindow::AllTime,
+        };
+        let history = svc.console_history(&all).await.expect("reads");
+        let texts: Vec<&str> = history.iter().map(|h| h.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            ["CREATE USER bob WITH PASSWORD '********' ROLE readonly;"]
+        );
+    }
+
+    /// A page change reuses the buffered rows only for the same bound
+    /// values. Other values run the statement again.
+    #[tokio::test]
+    async fn a_page_of_the_last_run_with_other_values_runs_again() {
+        let svc = offline();
+        let sql = "SELECT id FROM t WHERE c = :c";
+        if let Some(s) = svc.session.borrow_mut().as_mut() {
+            s.last_run = Some(LastRun {
+                database: String::new(),
+                sql: sql.into(),
+                values: vec![Value::String("alice".into())],
+                result: result(3),
+                elapsed_ms: 1,
+            });
+        }
+        let page = |name: &str| {
+            let mut request = q(sql, 1, 2);
+            request.params = vec![ParamBinding::new("c", ParamType::Text, name)];
+            request
+        };
+        let same = svc.run_query(&page("alice")).await.expect("buffered");
+        assert_eq!(same.result.rows()[0].cells, ["2"]);
+        // No server answers here: running again is the only way to fail.
+        assert!(
+            svc.run_query(&page("bob")).await.is_err(),
+            "bob's page is not alice's rows"
+        );
     }
 
     /// A session that never reached a server: everything Studio keeps

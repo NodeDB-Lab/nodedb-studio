@@ -92,6 +92,10 @@ impl ConnectionService for MockConnectionService {
         if creds.username.trim().is_empty() {
             return Err(StudioError::MissingUsername);
         }
+        // As on a server: a new session would drop the open transaction.
+        if self.workbench.borrow().transaction().is_open() {
+            return Err(StudioError::TransactionOpen);
+        }
         let entry = self.saved.borrow().iter().find(|c| c.name == name).cloned();
         let entry = apply_one(self.behavior, move || entry)
             .await?
@@ -338,6 +342,28 @@ mod tests {
         // `staging-cluster` is a connectable Online mock connection (data/mock/connections.rs).
         let session = svc.connect("staging-cluster", &creds).await;
         assert!(session.is_ok());
+    }
+
+    /// As on a server: a connect would drop the open transaction, so the
+    /// user ends it first.
+    #[tokio::test]
+    async fn mock_connect_waits_for_the_transaction_to_end() {
+        use crate::models::workbench::TxAccess;
+        use crate::services::workbench_data::WorkbenchData;
+        let svc = MockConnectionService::ready();
+        let creds = Credentials {
+            username: "alice".into(),
+            password: None,
+        };
+        svc.begin_transaction(TxAccess::ReadWrite)
+            .await
+            .expect("begins");
+        assert!(matches!(
+            svc.connect("staging-cluster", &creds).await,
+            Err(StudioError::TransactionOpen)
+        ));
+        svc.rollback_transaction().await.expect("rolls back");
+        assert!(svc.connect("staging-cluster", &creds).await.is_ok());
     }
 
     #[tokio::test]

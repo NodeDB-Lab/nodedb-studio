@@ -61,6 +61,9 @@ pub struct Capabilities {
     /// The server lists credentials: the Admin Credentials tab.
     #[serde(default = "yes")]
     pub credentials: bool,
+    /// The server runs EXPLAIN ANALYZE: the Plan view's Analyze mode.
+    #[serde(default = "yes")]
+    pub explain_analyze: bool,
 }
 
 fn yes() -> bool {
@@ -196,6 +199,7 @@ mod tests {
             backups: true,
             config: true,
             credentials: true,
+            explain_analyze: true,
         }
     }
 
@@ -209,6 +213,15 @@ mod tests {
             capabilities: caps(),
             current_database: "main".into(),
         }
+    }
+
+    /// A profile saved before the newer flags existed came from the mock,
+    /// which offers everything.
+    #[test]
+    fn a_profile_saved_before_the_newer_flags_offers_them() {
+        let old = r#"{"graph":true,"vector":true,"events":true,"timeseries":true,"spatial":true,"search":true,"sync":true,"cluster":true,"readonly":false}"#;
+        let caps: Capabilities = sonic_rs::from_str(old).expect("loads");
+        assert!(caps.record_revisions && caps.credentials && caps.explain_analyze);
     }
 
     #[test]

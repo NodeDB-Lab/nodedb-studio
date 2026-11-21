@@ -139,6 +139,7 @@ mod tests {
             backups: true,
             config: true,
             credentials: true,
+            explain_analyze: true,
         }
     }
 
