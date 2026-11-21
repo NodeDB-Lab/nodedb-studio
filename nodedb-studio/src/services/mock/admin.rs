@@ -3,14 +3,14 @@
 
 use async_trait::async_trait;
 
+use crate::models::admin::access::{AccessDirectory, AccessSubject, SubjectAccess};
+use crate::models::admin::audit::{AuditEvent, AuditFacets, AuditPage, AuditQuery};
+use crate::models::admin::backup::BackupOverview;
+use crate::models::admin::config::{ConfigProposal, ConfigRequest, ConfigTarget, ConfigView};
+use crate::models::admin::credential::{CredentialList, CredentialTest};
+use crate::models::admin::policy::{PolicySet, PolicyTest, PolicyTestResult};
 use crate::models::admin::{AdminChange, AdminReview};
-use crate::models::admin_access::{AccessDirectory, AccessSubject, SubjectAccess};
-use crate::models::admin_audit::{AuditEvent, AuditFacets, AuditPage, AuditQuery};
-use crate::models::admin_backup::BackupOverview;
-use crate::models::admin_config::{ConfigProposal, ConfigRequest, ConfigTarget, ConfigView};
-use crate::models::admin_credential::{CredentialList, CredentialTest};
-use crate::models::admin_policy::{PolicySet, PolicyTest, PolicyTestResult};
-use crate::models::cluster_op::OpResult;
+use crate::models::cluster::op::OpResult;
 use crate::services::admin_data::AdminData;
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;

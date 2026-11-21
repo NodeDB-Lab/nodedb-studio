@@ -9,7 +9,7 @@ use crate::components::async_view::AsyncView;
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::Panel;
 use crate::components::tabs::TabBar;
-use crate::models::saved_query::QueryLibrary;
+use crate::models::workbench::saved_query::QueryLibrary;
 use crate::models::workbench::{SchemaField, SchemaTable, SchemaTree};
 use crate::services::async_state::AsyncState;
 use crate::state::query::{QueryWorkspace, SidePane};

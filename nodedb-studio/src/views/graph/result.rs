@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 
 use crate::components::async_view::AsyncView;
 use crate::models::graph::GraphResult;
-use crate::models::graph_layout::LayoutKind;
+use crate::models::graph::layout::LayoutKind;
 use crate::services::async_state::AsyncState;
 use crate::state::graph::{CanvasState, Pick};
 use crate::views::graph::canvas::GraphCanvas;

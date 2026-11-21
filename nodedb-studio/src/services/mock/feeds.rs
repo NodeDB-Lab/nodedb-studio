@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 
 use crate::data::mock;
-use crate::models::feed_draft::{FeedDraft, FeedPreview};
+use crate::models::feeds::draft::{FeedDraft, FeedPreview};
 use crate::models::feeds::{ChangeFeed, DeliveryAttempt, FeedConsumer, FeedEvent, FeedSession};
 use crate::services::error::StudioError;
 use crate::services::feed_data::FeedData;

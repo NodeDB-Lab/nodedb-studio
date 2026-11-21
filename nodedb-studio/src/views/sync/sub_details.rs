@@ -13,7 +13,7 @@ use crate::components::icon::{Ico, Icon};
 use crate::components::json_view::JsonView;
 use crate::components::tabs::TabBar;
 use crate::models::format::thousands;
-use crate::models::sync_sub::{ChangePreview, SubChange, SubState, Subscription, size_text};
+use crate::models::sync::sub::{ChangePreview, SubChange, SubState, Subscription, size_text};
 use crate::services::backend::Backend;
 use crate::state::sync::{SubDraft, SubTab, SubsUi, SyncUi};
 use crate::views::events::common::{FormField, InfoTip};

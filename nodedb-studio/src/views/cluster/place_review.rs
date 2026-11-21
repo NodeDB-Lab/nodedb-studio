@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
-use crate::models::cluster_place::{Placement, size_text};
+use crate::models::cluster::place::{Placement, size_text};
 use crate::services::backend::Backend;
 use crate::state::cluster::{ClusterUi, PlanReview};
 use crate::views::cluster::place_tasks;

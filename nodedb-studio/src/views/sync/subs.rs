@@ -14,7 +14,7 @@ use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::format::clock_second;
-use crate::models::sync_sub::Subscription;
+use crate::models::sync::sub::Subscription;
 use crate::routes::tabs::SyncTab;
 use crate::services::backend::Backend;
 use crate::state::sync::{SyncUi, matching_subs, pick_sub};

@@ -5,9 +5,9 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::models::record_json::{parse_object, pretty};
+use crate::models::records::json::{parse_object, pretty};
 use crate::models::schema::SchemaField;
-use crate::models::sync_reject::Rejection;
+use crate::models::sync::reject::Rejection;
 use crate::services::backend::Backend;
 use crate::state::events::feeds::Notice;
 use crate::state::sync::{RejectUi, RepairSheet};

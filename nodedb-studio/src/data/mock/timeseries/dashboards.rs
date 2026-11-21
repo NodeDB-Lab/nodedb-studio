@@ -2,10 +2,10 @@
 
 use crate::models::format::epoch;
 use crate::models::records::Filter;
+use crate::models::timeseries::dashboard::{Dashboard, DashboardSummary, PanelDef, Refresh};
 use crate::models::timeseries::{
     Aggregate, Bucket, ChartKind, ExploreQuery, GapPolicy, Measure, TimeSpan,
 };
-use crate::models::ts_dashboard::{Dashboard, DashboardSummary, PanelDef, Refresh};
 
 /// Why a document write did not apply.
 #[derive(Debug, Clone, PartialEq, Eq)]

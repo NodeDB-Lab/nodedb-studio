@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::vector::VectorTarget;
-use crate::models::vector_projection::ProjectionRequest;
+use crate::models::vector::projection::ProjectionRequest;
 use crate::routes::tabs::VectorTab;
 use crate::services::backend::Backend;
 use crate::state::vector::{MapView, VectorUi};

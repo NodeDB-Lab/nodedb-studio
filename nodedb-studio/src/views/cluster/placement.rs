@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side, region_style};
-use crate::models::cluster_place::size_text;
+use crate::models::cluster::place::size_text;
 use crate::models::format::clock_second;
 use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;

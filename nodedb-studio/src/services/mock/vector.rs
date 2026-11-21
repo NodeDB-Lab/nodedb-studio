@@ -10,9 +10,9 @@ use std::time::Duration;
 use async_trait::async_trait;
 
 use crate::data::mock;
+use crate::models::vector::index::IndexStatus;
+use crate::models::vector::projection::{Projection, ProjectionRequest};
 use crate::models::vector::{NeighborRequest, NeighborResult, VectorRecord, VectorSetup};
-use crate::models::vector_index::IndexStatus;
-use crate::models::vector_projection::{Projection, ProjectionRequest};
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;
 use crate::services::mock_behavior::{MockBehavior, apply_one_result};

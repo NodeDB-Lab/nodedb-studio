@@ -6,8 +6,8 @@
 
 use std::collections::BTreeSet;
 
-use crate::models::designer_form::{IndexForm, ReferenceForm};
-use crate::models::designer_new::{ConstraintKind, NewCollection};
+use crate::models::designer::form::{IndexForm, ReferenceForm};
+use crate::models::designer::new::{ConstraintKind, NewCollection};
 
 /// What the canvas selects.
 #[derive(Debug, Clone, PartialEq, Eq)]

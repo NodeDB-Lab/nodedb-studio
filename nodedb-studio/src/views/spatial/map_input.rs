@@ -3,8 +3,8 @@
 
 use dioxus::prelude::*;
 
-use crate::models::geo_ops::Shape;
-use crate::models::geo_proj::map;
+use crate::models::spatial::geo_ops::Shape;
+use crate::models::spatial::geo_proj::map;
 use crate::models::spatial::{FeatureRef, LayerPage, SourceRef};
 use crate::state::spatial::{Draft, MapUi};
 use crate::views::spatial::map_draw::{Item, SPLIT_RES, layout, pick};

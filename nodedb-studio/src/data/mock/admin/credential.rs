@@ -2,12 +2,12 @@
 //! holds a reference to each secret and never its value.
 
 use crate::data::mock::admin::store::{AdminStore, DATABASE, missing};
-use crate::models::admin::{AdminReview, ReviewLine};
-use crate::models::admin_audit::TargetType;
-use crate::models::admin_credential::{
+use crate::models::admin::audit::TargetType;
+use crate::models::admin::credential::{
     Credential, CredentialChange, CredentialKind, CredentialList, CredentialStatus, CredentialTest,
     IndexDimension,
 };
+use crate::models::admin::{AdminReview, ReviewLine};
 use crate::models::format::epoch;
 use crate::services::error::StudioError;
 
@@ -207,7 +207,7 @@ impl AdminStore {
     /// The review of a credential that does not exist yet.
     fn preview_new_credential(
         &self,
-        d: &crate::models::admin_credential::CredentialDraft,
+        d: &crate::models::admin::credential::CredentialDraft,
         exists: bool,
     ) -> AdminReview {
         let taken: Vec<String> = if exists {

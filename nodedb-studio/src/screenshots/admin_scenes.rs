@@ -3,10 +3,10 @@
 
 use crate::data::mock::AdminStore;
 use crate::models::admin::AdminChange;
-use crate::models::admin_access::AccessChange;
-use crate::models::admin_backup::{BackupChange, RestoreRequest};
-use crate::models::admin_config::{ConfigScope, ConfigTarget};
-use crate::models::admin_policy::PolicyTest;
+use crate::models::admin::access::AccessChange;
+use crate::models::admin::backup::{BackupChange, RestoreRequest};
+use crate::models::admin::config::{ConfigScope, ConfigTarget};
+use crate::models::admin::policy::PolicyTest;
 use crate::models::format::epoch;
 use crate::state::admin::{
     AccessUi, AdminSeed, BackupsUi, ConfigUi, CredUi, PolicyUi, Proposed, ReviewState, TestRun,

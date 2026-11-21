@@ -7,8 +7,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::designer::DesignSchema;
-use crate::models::designer_change::{ChangeKind, PendingChange};
-use crate::models::designer_ddl;
+use crate::models::designer::change::{ChangeKind, PendingChange};
+use crate::models::designer::ddl;
 use crate::models::format::thousands;
 use crate::routes::Route;
 use crate::services::backend::Backend;
@@ -37,7 +37,7 @@ pub fn CollectionInspector(name: String, schema: DesignSchema) -> Element {
         .collection
         .rows
         .map_or("Not reported".to_string(), thousands);
-    let lines = designer_ddl::describe(&c);
+    let lines = ddl::describe(&c);
     let (s1, s2, owner, owner2) = (schema.clone(), schema.clone(), name.clone(), name.clone());
     rsx! {
         div { class: "inspector",

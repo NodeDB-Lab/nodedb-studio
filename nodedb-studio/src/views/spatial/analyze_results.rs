@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::thousands;
 use crate::models::spatial::FeatureRef;
-use crate::models::spatial_analyze::AnalysisResult;
+use crate::models::spatial::analyze::AnalysisResult;
 use crate::state::spatial::SpatialUi;
 
 #[component]

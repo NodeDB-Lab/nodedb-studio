@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 use nodedb_types::Value;
 
-use crate::models::record_check::{input_text, set_field};
-use crate::models::record_json::parse_object;
+use crate::models::records::check::{input_text, set_field};
+use crate::models::records::json::parse_object;
 use crate::models::schema::FieldType;
 use crate::state::record_editor::{EditorMode, EditorTab, RecordEditor, Stage};
 
@@ -24,7 +24,7 @@ pub fn JsonEditor(text: String, locked: bool, on_input: EventHandler<String>) ->
                 pre { class: "highlight", "aria-hidden": "true",
                     for (i, line) in text.lines().enumerate() {
                         div { key: "{i}",
-                            for (j, (kind, part)) in crate::models::record_json::tokens(line).into_iter().enumerate() {
+                            for (j, (kind, part)) in crate::models::records::json::tokens(line).into_iter().enumerate() {
                                 span { key: "{j}", class: "{kind.class()}", "{part}" }
                             }
                             if line.is_empty() { " " }

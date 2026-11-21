@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 
+use crate::models::vector::index::IndexStatus;
+use crate::models::vector::projection::{Projection, ProjectionRequest};
 use crate::models::vector::{NeighborRequest, NeighborResult, VectorRecord, VectorSetup};
-use crate::models::vector_index::IndexStatus;
-use crate::models::vector_projection::{Projection, ProjectionRequest};
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::vector_data::VectorData;

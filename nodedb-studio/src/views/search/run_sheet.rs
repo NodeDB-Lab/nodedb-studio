@@ -8,7 +8,7 @@ use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
 use crate::models::format::{date_second, duration, thousands};
-use crate::models::search_index::RunState;
+use crate::models::search::index::RunState;
 use crate::services::backend::Backend;
 use crate::state::search::SearchUi;
 use crate::views::search::index_history::run_dot;

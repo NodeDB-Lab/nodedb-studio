@@ -3,8 +3,8 @@
 
 use crate::data::mock::sync::devices::origin;
 use crate::data::mock::sync::store::{SyncStore, missing};
-use crate::models::sync_activity::SyncEventKind;
-use crate::models::sync_enroll::{EnrollOptions, EnrollRequest, Enrollment, Preset};
+use crate::models::sync::activity::SyncEventKind;
+use crate::models::sync::enroll::{EnrollOptions, EnrollRequest, Enrollment, Preset};
 use crate::services::error::StudioError;
 
 /// How long a token lives, in seconds.

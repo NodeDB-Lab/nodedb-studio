@@ -9,7 +9,7 @@
 use nodedb_types::Value;
 
 use crate::data::mock::graph::store::StoredGraph;
-use crate::models::cypher::{Cmp, Condition, Hop, Literal, NodePattern, Pattern, Way};
+use crate::models::graph::cypher::{Cmp, Condition, Hop, Literal, NodePattern, Pattern, Way};
 use crate::models::graph::{GraphNode, GraphResult, NodeKind, Relation};
 use crate::services::error::StudioError;
 
@@ -268,7 +268,7 @@ pub fn run(graph: &StoredGraph, p: &Pattern, cap: usize) -> Result<GraphResult, 
 mod tests {
     use super::*;
     use crate::data::mock::graph::{commerce, social};
-    use crate::models::cypher::parse;
+    use crate::models::graph::cypher::parse;
 
     const DESIGN: &str = "MATCH (u:User)-[:POSTED]->(p:Post)-[:TAGGED]->(t:Topic {name: \"databases\"})\nWHERE u.country = \"MY\"\nRETURN u, p, t\nLIMIT 50";
 

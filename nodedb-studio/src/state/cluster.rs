@@ -5,11 +5,11 @@
 
 use dioxus::prelude::*;
 
-use crate::models::cluster_activity::{ActivityQuery, ActivityRange, ClusterEvent, Severity};
-use crate::models::cluster_monitor::TelemetryRange;
-use crate::models::cluster_place::{MoveRequest, Placement, RebalancePlan, ShardStatus, VShard};
-use crate::models::cluster_raft::TransferPreview;
-use crate::models::ts_dashboard::Refresh;
+use crate::models::cluster::activity::{ActivityQuery, ActivityRange, ClusterEvent, Severity};
+use crate::models::cluster::monitor::TelemetryRange;
+use crate::models::cluster::place::{MoveRequest, Placement, RebalancePlan, ShardStatus, VShard};
+use crate::models::cluster::raft::TransferPreview;
+use crate::models::timeseries::dashboard::Refresh;
 use crate::state::events::feeds::Notice;
 
 /// Nodes: the chosen member and group. `None` falls back to the first.

@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::admin_access::{
+use crate::models::admin::access::{
     AccessChange, AccessDirectory, PrincipalDraft, PrincipalKind, RoleDraft,
 };
 use crate::models::format::date;

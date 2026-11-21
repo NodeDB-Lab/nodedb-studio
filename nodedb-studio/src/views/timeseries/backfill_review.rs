@@ -11,7 +11,7 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
 use crate::models::format::{date_minute, thousands};
-use crate::models::ts_backfill::{BackfillPreview, BackfillRun};
+use crate::models::timeseries::backfill::{BackfillPreview, BackfillRun};
 use crate::services::backend::Backend;
 use crate::state::timeseries::{BackfillUi, ReviewKind, TimeseriesUi};
 use crate::views::timeseries::backfill_ops::valid_preview;

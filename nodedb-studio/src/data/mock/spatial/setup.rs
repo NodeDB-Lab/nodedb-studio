@@ -4,13 +4,13 @@
 use crate::data::mock::explorer::{all_records, array_schema, collection_schema, collections};
 use crate::data::mock::{Overlay, spatial::features::shape_of};
 use crate::models::collection::Profile;
-use crate::models::geo_ops::Bbox;
-use crate::models::geo_raster::{Affine, BandMeta};
 use crate::models::schema::{FieldType, IndexKind};
+use crate::models::spatial::analyze::{Availability, Operation, OperationSupport};
+use crate::models::spatial::geo_ops::Bbox;
+use crate::models::spatial::geo_raster::{Affine, BandMeta};
 use crate::models::spatial::{
     GeoSource, RasterDim, RasterSource, SliceAxis, SourceIndex, SourceRef, SpatialSetup,
 };
-use crate::models::spatial_analyze::{Availability, Operation, OperationSupport};
 
 /// The GEOREF of `climate_cube`: the grid's pixel corners, so a cell centre
 /// sits on the whole tenth of a degree the Explorer lists as its coordinate.

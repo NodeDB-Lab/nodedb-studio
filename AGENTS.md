@@ -109,8 +109,8 @@ nodedb-studio/src/
   views/         one module per routed screen (explorer, query, events, cluster, admin, …)
   modals/        modal bodies + the ModalHost
   state/         live UI state as Dioxus signals; workspace panel layout + persistence
-  models/        typed domain data
-  services/      Backend seam: per-domain traits, mock/ impl, nodedb/ stub
+  models/        typed domain data (prefix groups are subdirectories, e.g. models/admin/)
+  services/      Backend seam: per-domain traits, mock/ impl, nodedb/ client-backed impl (explorer/, admin/, workbench/ are subdirectories)
   data/mock/     ALL hardcoded mock data, in one place
   screenshots/   scene runner + WebKitGTK capture (`screenshots` feature, Linux only)
 assets/             tokens.css (design tokens, light + dark), shared sheets, one sheet per area

@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::admin_access::{
+use crate::models::admin::access::{
     AccessChange, AccessDirectory, AccessSubject, NOT_REPORTED, SubjectAccess, scope_text,
 };
 use crate::state::admin::{AccessMode, AccessSheet, AdminUi};

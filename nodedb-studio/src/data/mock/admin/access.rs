@@ -2,7 +2,7 @@
 //! that resolve what a principal or role holds.
 
 use crate::data::mock::admin::store::{ADMIN, AdminStore, DATABASE, missing};
-use crate::models::admin_access::{
+use crate::models::admin::access::{
     AccessDirectory, AccessSubject, EffectiveGrant, Member, Membership, Mfa, Principal,
     PrincipalKind, PrincipalStatus, Privilege, Role, RoleGrant, SubjectAccess, sort_effective,
 };

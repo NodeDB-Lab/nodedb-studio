@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::json_text::json_issue;
-use crate::models::record_json::tokens;
+use crate::models::records::json::tokens;
 
 #[component]
 pub fn JsonEditor(

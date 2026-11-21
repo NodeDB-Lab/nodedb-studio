@@ -14,7 +14,7 @@ use crate::components::json_editor::{JsonEditor, JsonState};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
 use crate::models::format::clock_second;
 use crate::models::json_text::json_issue;
-use crate::models::sync_reject::Rejection;
+use crate::models::sync::reject::Rejection;
 use crate::services::backend::Backend;
 use crate::state::sync::{RejectUi, RepairSheet, SyncUi};
 use crate::views::events::common::StatusText;

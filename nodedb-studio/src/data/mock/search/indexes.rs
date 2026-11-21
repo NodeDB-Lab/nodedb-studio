@@ -2,7 +2,7 @@
 //! A rebuild job a person creates joins the history in memory.
 
 use crate::models::format::epoch;
-use crate::models::search_index::{
+use crate::models::search::index::{
     BuildRun, Definition, IndexKind, IndexOverview, IndexState, Observed, RebuildPlan, RunHistory,
     RunState, SearchIndex,
 };

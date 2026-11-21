@@ -6,8 +6,8 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::components::clipboard::copy_text;
-use crate::models::designer_change::{ChangeKind, PendingChange};
-use crate::models::designer_form::IndexForm;
+use crate::models::designer::change::{ChangeKind, PendingChange};
+use crate::models::designer::form::IndexForm;
 use crate::services::backend::Backend;
 use crate::services::error::StudioError;
 use crate::state::designer::{ApplyResult, DesignerState, Inspector, ReviewState, Target};

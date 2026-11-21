@@ -6,9 +6,9 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::date_minute;
+use crate::models::timeseries::backfill::BackfillRun;
+use crate::models::timeseries::lifecycle::Lifecycle;
 use crate::models::timeseries::parse_utc;
-use crate::models::ts_backfill::BackfillRun;
-use crate::models::ts_lifecycle::Lifecycle;
 use crate::state::timeseries::QuickBackfill;
 
 /// Why the quick backfill cannot be previewed, if it cannot.

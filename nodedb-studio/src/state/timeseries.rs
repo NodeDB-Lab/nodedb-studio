@@ -11,12 +11,12 @@ use std::collections::BTreeSet;
 
 use dioxus::prelude::*;
 
-use crate::models::timeseries::{ExploreQuery, ExploreResult, TimeSpan};
-use crate::models::ts_backfill::{BackfillPreview, BackfillSpec, RunMode};
-use crate::models::ts_dashboard::{Dashboard, PanelDef, Refresh};
-use crate::models::ts_lifecycle::{
+use crate::models::timeseries::backfill::{BackfillPreview, BackfillSpec, RunMode};
+use crate::models::timeseries::dashboard::{Dashboard, PanelDef, Refresh};
+use crate::models::timeseries::lifecycle::{
     ChangeReview, LatePolicy, LifecycleChange, RetentionDraft, RollupDraft,
 };
+use crate::models::timeseries::{ExploreQuery, ExploreResult, TimeSpan};
 pub use crate::state::events::feeds::Notice;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

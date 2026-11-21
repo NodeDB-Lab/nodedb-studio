@@ -5,9 +5,9 @@
 use crate::data::mock::workbench::console::{self, bare};
 use crate::data::mock::workbench::library::{self, OWNER};
 use crate::data::mock::workbench::results::{affected, result_set};
-use crate::models::console::{ConsoleOutput, ConsoleReply, Protocol};
 use crate::models::format::epoch;
-use crate::models::sql_text::{TokenKind, parameters, tokenize};
+use crate::models::workbench::console::{ConsoleOutput, ConsoleReply, Protocol};
+use crate::models::workbench::sql_text::{TokenKind, parameters, tokenize};
 use crate::models::workbench::{
     MessageLevel, QueryMessage, QueryRequest, QueryRun, TxAccess, TxState,
 };

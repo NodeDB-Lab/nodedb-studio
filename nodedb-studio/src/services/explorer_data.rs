@@ -10,7 +10,7 @@ use nodedb_types::Value;
 
 use crate::models::array_data::{ArraySchema, SliceRequest, SliceResult};
 use crate::models::collection::Collection;
-use crate::models::graph_records::{EdgePage, EdgeQuery};
+use crate::models::graph::records::{EdgePage, EdgeQuery};
 use crate::models::records::{CollectionAccess, Record, RecordPage, RecordQuery};
 use crate::models::schema::CollectionSchema;
 use crate::services::error::StudioError;
@@ -86,8 +86,8 @@ pub trait ExplorerData {
 mod tests {
     use super::*;
     use crate::models::collection::Profile;
-    use crate::models::record_json::{normalize, pretty};
     use crate::models::records::Filter;
+    use crate::models::records::json::{normalize, pretty};
     use crate::services::async_state::AsyncState;
     use crate::services::connection_service::ConnectionService;
     use crate::services::mock::MockConnectionService;
@@ -362,8 +362,8 @@ mod tests {
             let record = svc.record(collection, id).await.expect("record");
             let text = pretty(&record.value, &schema.fields);
             let back =
-                crate::models::record_json::parse_object(&text, &schema.fields).expect("parses");
-            let diff = crate::models::record_check::changes(&record.value, &back, &schema.fields);
+                crate::models::records::json::parse_object(&text, &schema.fields).expect("parses");
+            let diff = crate::models::records::check::changes(&record.value, &back, &schema.fields);
             assert!(diff.is_empty(), "{collection}/{id}: {diff:?}");
         }
     }

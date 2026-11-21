@@ -1,8 +1,8 @@
 //! What the server reports for a feed draft: checks, the change-event
 //! schema, and a sample payload.
 
-use crate::models::feed_draft::{CheckStatus, FeedDraft, FeedPreview, PreviewCheck, SchemaNode};
-use crate::models::feed_grammar::parse_projection;
+use crate::models::feeds::draft::{CheckStatus, FeedDraft, FeedPreview, PreviewCheck, SchemaNode};
+use crate::models::feeds::grammar::parse_projection;
 use crate::models::feeds::{ChangeOp, DeliveryKind, StartPosition};
 
 /// Fields the mock catalog knows for any collection it previews.

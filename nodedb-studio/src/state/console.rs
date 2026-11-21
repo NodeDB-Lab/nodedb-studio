@@ -5,7 +5,7 @@
 //! the page. The transaction is not here: it belongs to the server session,
 //! which the Query page shares.
 
-use crate::models::console::{ConsoleReply, HistoryEntry, HistoryWindow, Protocol};
+use crate::models::workbench::console::{ConsoleReply, HistoryEntry, HistoryWindow, Protocol};
 
 /// One command and what it answered, in transcript order.
 #[derive(Debug, Clone, PartialEq)]
@@ -116,8 +116,8 @@ impl ConsoleState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::console::ConsoleOutput;
     use crate::models::workbench::TxState;
+    use crate::models::workbench::console::ConsoleOutput;
 
     fn entry(n: i64, protocol: Protocol, text: &str) -> HistoryEntry {
         HistoryEntry {

@@ -2,10 +2,10 @@
 //! fixtures the mock backend serves.
 
 use crate::data::mock::{self, CUSTOMER_SPEND_ID, ORDERS_SQL, WorkbenchStore};
-use crate::models::console::Protocol;
-use crate::models::query_plan::ExplainMode;
-use crate::models::saved_query::SavedQuery;
 use crate::models::workbench::QueryDraft;
+use crate::models::workbench::console::Protocol;
+use crate::models::workbench::query_plan::ExplainMode;
+use crate::models::workbench::saved_query::SavedQuery;
 use crate::state::console::ConsoleState;
 use crate::state::query::{PlanState, QueryWorkspace, ResultsView, RunState, SidePane};
 

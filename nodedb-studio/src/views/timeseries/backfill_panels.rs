@@ -5,10 +5,10 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::{date_minute, thousands};
-use crate::models::ts_backfill::{
+use crate::models::timeseries::backfill::{
     BackfillPreview, BackfillRun, ConflictPolicy, RunMode, WriteMode,
 };
-use crate::models::ts_lifecycle::{LateWrites, Lifecycle};
+use crate::models::timeseries::lifecycle::{LateWrites, Lifecycle};
 use crate::state::timeseries::{BackfillUi, PreviewState, ReviewKind, TimeseriesUi};
 use crate::views::events::common::{FormField, InfoTip};
 use crate::views::timeseries::backfill_ops::{

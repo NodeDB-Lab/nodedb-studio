@@ -53,8 +53,8 @@ pub fn plain_text(value: &Value) -> String {
         Value::Integer(i) => i.to_string(),
         Value::Float(f) => f.to_string(),
         Value::String(s) => s.clone(),
-        Value::DateTime(t) | Value::NaiveDateTime(t) => crate::models::record_json::iso(t),
-        other => crate::models::record_json::compact(other, &[]),
+        Value::DateTime(t) | Value::NaiveDateTime(t) => crate::models::records::json::iso(t),
+        other => crate::models::records::json::compact(other, &[]),
     }
 }
 

@@ -8,9 +8,9 @@
 
 use async_trait::async_trait;
 
+use crate::models::vector::index::IndexStatus;
+use crate::models::vector::projection::{Projection, ProjectionRequest};
 use crate::models::vector::{NeighborRequest, NeighborResult, VectorRecord, VectorSetup};
-use crate::models::vector_index::IndexStatus;
-use crate::models::vector_projection::{Projection, ProjectionRequest};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
@@ -47,8 +47,8 @@ pub trait VectorData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::vector::projection::{Method, ProjectionRequest};
     use crate::models::vector::{NeighborRequest, QuerySource};
-    use crate::models::vector_projection::{Method, ProjectionRequest};
     use crate::services::async_state::AsyncState;
     use crate::services::mock::MockConnectionService;
 

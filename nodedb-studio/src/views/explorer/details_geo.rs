@@ -8,7 +8,7 @@ use nodedb_types::geometry::Geometry;
 use crate::components::clipboard::use_copier;
 use crate::components::icon::{Ico, Icon};
 use crate::models::collection::Collection;
-use crate::models::record_json::pretty;
+use crate::models::records::json::pretty;
 use crate::models::records::{CollectionAccess, Record};
 use crate::models::schema::CollectionSchema;
 use crate::models::spatial::SourceRef;

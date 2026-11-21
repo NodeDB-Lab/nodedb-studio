@@ -8,10 +8,12 @@
 
 use async_trait::async_trait;
 
+use crate::models::timeseries::backfill::{BackfillPreview, BackfillRun, BackfillSpec};
+use crate::models::timeseries::dashboard::{Dashboard, DashboardSummary};
+use crate::models::timeseries::lifecycle::{
+    ChangeReview, Lifecycle, LifecycleChange, Receipt, RollupRun,
+};
 use crate::models::timeseries::{ExploreQuery, ExploreResult, TimeCatalog};
-use crate::models::ts_backfill::{BackfillPreview, BackfillRun, BackfillSpec};
-use crate::models::ts_dashboard::{Dashboard, DashboardSummary};
-use crate::models::ts_lifecycle::{ChangeReview, Lifecycle, LifecycleChange, Receipt, RollupRun};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
@@ -103,11 +105,11 @@ mod tests {
     use super::*;
     use crate::models::format::epoch;
     use crate::models::records::Filter;
-    use crate::models::timeseries::{Aggregate, Bucket, GapPolicy, Measure, TimeSpan};
-    use crate::models::ts_backfill::{ConflictPolicy, RunState, WriteMode};
-    use crate::models::ts_lifecycle::{
+    use crate::models::timeseries::backfill::{ConflictPolicy, RunState, WriteMode};
+    use crate::models::timeseries::lifecycle::{
         LateWrites, Retention, RetentionDraft, RollupFn, RollupOutput,
     };
+    use crate::models::timeseries::{Aggregate, Bucket, GapPolicy, Measure, TimeSpan};
     use crate::services::async_state::AsyncState;
     use crate::services::mock::MockConnectionService;
 

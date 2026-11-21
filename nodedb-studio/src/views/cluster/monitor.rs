@@ -14,13 +14,13 @@ use dioxus::prelude::*;
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
-use crate::models::cluster_monitor::{
+use crate::models::cluster::monitor::{
     Freshness, Metric, NodeTelemetry, Telemetry, TelemetryRange, capacity_text,
 };
 use crate::models::feeds::Tone;
 use crate::models::format::{ago, clock_second};
-use crate::models::timeseries_axis::fixed;
-use crate::models::ts_dashboard::Refresh;
+use crate::models::timeseries::axis::fixed;
+use crate::models::timeseries::dashboard::Refresh;
 use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
 use crate::state::cluster::ClusterUi;

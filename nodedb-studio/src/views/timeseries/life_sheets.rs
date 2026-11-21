@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
 use crate::models::timeseries::Bucket;
-use crate::models::ts_lifecycle::{
+use crate::models::timeseries::lifecycle::{
     BeyondHorizon, DraftField, LatePolicy, LateWrites, Lifecycle, LifecycleChange, RefreshPolicy,
     Retention, RetentionDraft, RollupDraft,
 };

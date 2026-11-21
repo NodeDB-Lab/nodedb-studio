@@ -6,10 +6,10 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 use dioxus::router::Navigator;
 
-use crate::models::saved_query::SaveQuery;
 use crate::models::timeseries::ChartKind;
+use crate::models::timeseries::dashboard::PanelDef;
 use crate::models::timeseries::{ExploreQuery, TimeCatalog, TimeSource, TimeSpan};
-use crate::models::ts_dashboard::PanelDef;
+use crate::models::workbench::saved_query::SaveQuery;
 use crate::routes::Route;
 use crate::routes::tabs::TimeseriesTab;
 use crate::services::backend::Backend;

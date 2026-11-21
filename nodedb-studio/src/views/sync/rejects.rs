@@ -11,7 +11,7 @@ use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::format::{clock, clock_second};
-use crate::models::sync_reject::{RejectReason, RejectState, Rejection};
+use crate::models::sync::reject::{RejectReason, RejectState, Rejection};
 use crate::routes::tabs::SyncTab;
 use crate::services::backend::Backend;
 use crate::state::sync::{RepairSheet, SyncUi, matching_rejects, pick_reject};

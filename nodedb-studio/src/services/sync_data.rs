@@ -7,12 +7,12 @@
 use async_trait::async_trait;
 use nodedb_types::Value;
 
-use crate::models::cluster_op::OpResult;
+use crate::models::cluster::op::OpResult;
 use crate::models::sync::SyncDevices;
-use crate::models::sync_activity::{SyncLog, SyncQuery};
-use crate::models::sync_enroll::{EnrollOptions, EnrollRequest, Enrollment};
-use crate::models::sync_reject::{CompensationState, RejectedWrites, RepairResult};
-use crate::models::sync_sub::{ChangePreview, SubChange, Subscriptions};
+use crate::models::sync::activity::{SyncLog, SyncQuery};
+use crate::models::sync::enroll::{EnrollOptions, EnrollRequest, Enrollment};
+use crate::models::sync::reject::{CompensationState, RejectedWrites, RepairResult};
+use crate::models::sync::sub::{ChangePreview, SubChange, Subscriptions};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
@@ -99,7 +99,7 @@ pub trait SyncData {
 mod tests {
     use super::*;
     use crate::models::sync::DeviceState;
-    use crate::models::sync_reject::RejectState;
+    use crate::models::sync::reject::RejectState;
     use crate::services::async_state::AsyncState;
     use crate::services::mock::MockConnectionService;
 
@@ -193,7 +193,7 @@ mod tests {
         let log = svc.sync_activity(&SyncQuery::default()).await.expect("log");
         assert_eq!(
             log.events[0].kind,
-            crate::models::sync_activity::SyncEventKind::DevicePaused
+            crate::models::sync::activity::SyncEventKind::DevicePaused
         );
         // The old revision no longer applies.
         let err = svc.set_device_paused("d17", false, d.revision).await;

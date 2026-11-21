@@ -6,7 +6,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::models::timeseries::TimeSpan;
-use crate::models::ts_dashboard::Dashboard;
+use crate::models::timeseries::dashboard::Dashboard;
 use crate::services::backend::Backend;
 use crate::services::error::StudioError;
 use crate::state::timeseries::{After, DashDialog, DashUi, Notice, SaveState};

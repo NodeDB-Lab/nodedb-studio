@@ -4,9 +4,11 @@
 use async_trait::async_trait;
 
 use crate::data::mock;
-use crate::models::console::{ConsoleReply, HistoryEntry, HistoryQuery, Protocol};
-use crate::models::query_plan::{ExplainMode, QueryPlan};
-use crate::models::saved_query::{QueryLibrary, SaveQuery, SavedQuery, SavedQueryVersion};
+use crate::models::workbench::console::{ConsoleReply, HistoryEntry, HistoryQuery, Protocol};
+use crate::models::workbench::query_plan::{ExplainMode, QueryPlan};
+use crate::models::workbench::saved_query::{
+    QueryLibrary, SaveQuery, SavedQuery, SavedQueryVersion,
+};
 use crate::models::workbench::{QueryDraft, QueryRequest, QueryRun, SchemaTree, TxAccess, TxState};
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;

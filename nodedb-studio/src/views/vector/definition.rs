@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::thousands;
-use crate::models::vector_index::IndexDefinition;
+use crate::models::vector::index::IndexDefinition;
 
 #[component]
 pub fn DefinitionBody(

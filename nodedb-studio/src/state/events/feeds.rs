@@ -3,7 +3,7 @@
 //! The tail is a Studio observation session. Its controls change what this
 //! window shows and never what the server delivers.
 
-use crate::models::feed_draft::FeedDraft;
+use crate::models::feeds::draft::FeedDraft;
 use crate::models::feeds::{FeedEvent, FeedSession};
 
 /// The most events the tail holds on screen. The oldest drop first.

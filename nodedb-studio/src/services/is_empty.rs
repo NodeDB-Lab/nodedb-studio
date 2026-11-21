@@ -2,43 +2,43 @@
 //! `AsyncState::from_value` when a loaded value maps to the Empty state.
 
 use crate::models::admin::AdminReview;
-use crate::models::admin_access::{AccessDirectory, SubjectAccess};
-use crate::models::admin_audit::{AuditEvent, AuditFacets, AuditPage};
-use crate::models::admin_backup::BackupOverview;
-use crate::models::admin_config::{ConfigProposal, ConfigView};
-use crate::models::admin_credential::{CredentialList, CredentialTest};
-use crate::models::admin_policy::{PolicySet, PolicyTestResult};
+use crate::models::admin::access::{AccessDirectory, SubjectAccess};
+use crate::models::admin::audit::{AuditEvent, AuditFacets, AuditPage};
+use crate::models::admin::backup::BackupOverview;
+use crate::models::admin::config::{ConfigProposal, ConfigView};
+use crate::models::admin::credential::{CredentialList, CredentialTest};
+use crate::models::admin::policy::{PolicySet, PolicyTestResult};
 use crate::models::array_data::{ArraySchema, SliceResult};
 use crate::models::cluster::ClusterMembers;
-use crate::models::cluster_activity::ActivityLog;
-use crate::models::cluster_monitor::Telemetry;
-use crate::models::cluster_place::Placement;
-use crate::models::cluster_raft::RaftGroups;
+use crate::models::cluster::activity::ActivityLog;
+use crate::models::cluster::monitor::Telemetry;
+use crate::models::cluster::place::Placement;
+use crate::models::cluster::raft::RaftGroups;
 use crate::models::designer::DesignSchema;
-use crate::models::designer_change::ChangeReview;
-use crate::models::feed_draft::FeedPreview;
-use crate::models::geo_ops::Validity;
-use crate::models::graph_records::EdgePage;
+use crate::models::designer::change::ChangeReview;
+use crate::models::feeds::draft::FeedPreview;
+use crate::models::graph::records::EdgePage;
 use crate::models::jobs::JobList;
 use crate::models::matviews::ViewRows;
-use crate::models::query_plan::QueryPlan;
 use crate::models::records::{CollectionAccess, Record, RecordPage};
-use crate::models::saved_query::QueryLibrary;
 use crate::models::schema::CollectionSchema;
 use crate::models::shell::{NavBadges, SessionInfo};
+use crate::models::spatial::analyze::AnalysisResult;
+use crate::models::spatial::geo_ops::Validity;
 use crate::models::spatial::{Feature, RasterSlice, SpatialSetup, Viewport};
-use crate::models::spatial_analyze::AnalysisResult;
 use crate::models::sync::SyncDevices;
-use crate::models::sync_activity::SyncLog;
-use crate::models::sync_enroll::EnrollOptions;
-use crate::models::sync_reject::{CompensationState, RejectedWrites};
-use crate::models::sync_sub::{ChangePreview, Subscriptions};
+use crate::models::sync::activity::SyncLog;
+use crate::models::sync::enroll::EnrollOptions;
+use crate::models::sync::reject::{CompensationState, RejectedWrites};
+use crate::models::sync::sub::{ChangePreview, Subscriptions};
+use crate::models::timeseries::backfill::BackfillPreview;
+use crate::models::timeseries::dashboard::Dashboard;
+use crate::models::timeseries::lifecycle::Lifecycle;
 use crate::models::timeseries::{ExploreResult, TimeCatalog};
 use crate::models::topics::{MessageRange, ResetPreview};
 use crate::models::transfer::ExportPreview;
-use crate::models::ts_backfill::BackfillPreview;
-use crate::models::ts_dashboard::Dashboard;
-use crate::models::ts_lifecycle::Lifecycle;
+use crate::models::workbench::query_plan::QueryPlan;
+use crate::models::workbench::saved_query::QueryLibrary;
 use crate::models::workbench::{QueryRun, ResultSet, SchemaTree};
 
 /// Anything that can report emptiness, so `from_value` can distinguish a
@@ -480,7 +480,7 @@ mod tests {
         assert!(matches!(page, AsyncState::Loaded(_)));
 
         let query_plan = AsyncState::from_value(Some(Ok(QueryPlan {
-            mode: crate::models::query_plan::ExplainMode::Explain,
+            mode: crate::models::workbench::query_plan::ExplainMode::Explain,
             operators: Vec::new(),
             elapsed_ms: None,
             text: None,

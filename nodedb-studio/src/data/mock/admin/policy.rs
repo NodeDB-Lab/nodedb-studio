@@ -1,12 +1,12 @@
 //! Row policies and the read-only test of one.
 
 use crate::data::mock::admin::store::{AdminStore, DATABASE, missing};
-use crate::models::admin::{AdminReview, ReviewLine};
-use crate::models::admin_audit::TargetType;
-use crate::models::admin_policy::{
+use crate::models::admin::audit::TargetType;
+use crate::models::admin::policy::{
     Policy, PolicyChange, PolicyDraft, PolicyOperation, PolicySet, PolicyTest, PolicyTestResult,
     TestUser,
 };
+use crate::models::admin::{AdminReview, ReviewLine};
 use crate::services::error::StudioError;
 
 const POLICY_WRITE: &str = "auth.policy.write";

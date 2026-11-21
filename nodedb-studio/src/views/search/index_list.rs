@@ -7,7 +7,7 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::search_index::{IndexState, SearchIndex};
+use crate::models::search::index::{IndexState, SearchIndex};
 use crate::services::backend::Backend;
 use crate::state::designer::DesignerState;
 use crate::state::search::SearchUi;

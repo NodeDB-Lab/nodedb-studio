@@ -11,13 +11,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use dioxus::prelude::*;
 
-use crate::models::geo_ops::{Bbox, Ring, Shape, Validity};
-use crate::models::geo_proj::PlaneView;
-use crate::models::geo_raster::{Palette, RasterCrs, ValueMode};
-use crate::models::spatial::{FeatureRef, SourceRef, Viewport, ViewportRequest};
-use crate::models::spatial_analyze::{
+use crate::models::spatial::analyze::{
     AnalysisForm, AnalysisRequest, AnalysisResult, AreaKind, Operation,
 };
+use crate::models::spatial::geo_ops::{Bbox, Ring, Shape, Validity};
+use crate::models::spatial::geo_proj::PlaneView;
+use crate::models::spatial::geo_raster::{Palette, RasterCrs, ValueMode};
+use crate::models::spatial::{FeatureRef, SourceRef, Viewport, ViewportRequest};
 
 /// What a pointer does on the map.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

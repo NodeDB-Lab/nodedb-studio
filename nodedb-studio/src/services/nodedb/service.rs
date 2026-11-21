@@ -17,8 +17,8 @@ use nodedb_types::protocol::AuthMethod as WireAuth;
 use crate::models::connections::{AuthMethod, ConnectionTarget, TlsConfig};
 use crate::services::decode::Table;
 use crate::services::error::StudioError;
-use crate::services::nodedb::workbench_conn::StmtConn;
-use crate::services::nodedb::workbench_tx::Tx;
+use crate::services::nodedb::workbench::conn::StmtConn;
+use crate::services::nodedb::workbench::tx::Tx;
 use crate::state::connections_registry::SavedConnection;
 use crate::state::workbench_records::WorkbenchRecords;
 
@@ -596,8 +596,11 @@ mod tests {
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
-            svc.explain(&request, crate::models::query_plan::ExplainMode::Explain)
-                .await,
+            svc.explain(
+                &request,
+                crate::models::workbench::query_plan::ExplainMode::Explain
+            )
+            .await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(

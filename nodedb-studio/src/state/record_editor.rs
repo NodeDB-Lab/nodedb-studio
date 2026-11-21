@@ -9,9 +9,9 @@
 use nodedb_types::Value;
 
 use crate::models::collection::Profile;
-use crate::models::record_check::{FieldChange, Violation, changes, violations};
-use crate::models::record_json::{JsonError, parse_object, pretty};
 use crate::models::records::Record;
+use crate::models::records::check::{FieldChange, Violation, changes, violations};
+use crate::models::records::json::{JsonError, parse_object, pretty};
 use crate::models::schema::{CollectionSchema, FieldType};
 use crate::services::error::StudioError;
 

@@ -7,11 +7,11 @@ use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize};
 use crate::components::tabs::TabBar;
 use crate::models::format::thousands;
-use crate::models::geo_raster::BandMeta;
-use crate::models::spatial::{RasterSlice, RasterSource};
-use crate::models::spatial_text::{
+use crate::models::spatial::geo_raster::BandMeta;
+use crate::models::spatial::text::{
     crs_unit, factor_text, physical_text, raw_text, trimmed, unit_mark,
 };
+use crate::models::spatial::{RasterSlice, RasterSource};
 use crate::routes::Route;
 use crate::routes::tabs::SpatialTab;
 use crate::state::explorer::{CollectionTab, RecordView, Selected, select_collection};

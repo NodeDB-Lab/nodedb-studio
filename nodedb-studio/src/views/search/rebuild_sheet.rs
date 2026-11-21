@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
-use crate::models::search_index::RebuildPlan;
+use crate::models::search::index::RebuildPlan;
 use crate::services::backend::Backend;
 use crate::state::search::{IndexesUi, SearchUi};
 use crate::views::search::indexes::edit;

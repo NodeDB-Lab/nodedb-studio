@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 use crate::models::collection::Collection;
 use crate::models::format::compact;
 use crate::models::graph::GraphBinding;
-use crate::models::graph_layout::LayoutKind;
+use crate::models::graph::layout::LayoutKind;
 use crate::services::backend::Backend;
 
 /// A number out of a `<select>` value.

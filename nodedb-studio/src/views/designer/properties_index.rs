@@ -6,10 +6,10 @@ use std::rc::Rc;
 use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
+use crate::models::designer::change::PendingChange;
+use crate::models::designer::ddl;
+use crate::models::designer::form::{IndexForm, ReferenceForm};
 use crate::models::designer::{DesignSchema, IndexChoice, VectorMetric};
-use crate::models::designer_change::PendingChange;
-use crate::models::designer_ddl;
-use crate::models::designer_form::{IndexForm, ReferenceForm};
 use crate::services::backend::Backend;
 use crate::state::designer::{DesignerState, Inspector, InspectorTab};
 use crate::views::designer::card::index_icon;
@@ -154,7 +154,7 @@ fn IndexFields(
 }
 
 fn preview(form: &IndexForm, schema: &DesignSchema) -> Vec<String> {
-    designer_ddl::index_statement(&form.to_index(schema)).unwrap_or_default()
+    ddl::index_statement(&form.to_index(schema)).unwrap_or_default()
 }
 
 /// The New index form.

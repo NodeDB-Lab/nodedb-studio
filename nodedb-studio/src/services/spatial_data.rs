@@ -8,11 +8,11 @@
 
 use async_trait::async_trait;
 
-use crate::models::geo_ops::Validity;
+use crate::models::spatial::analyze::{AnalysisRequest, AnalysisResult};
+use crate::models::spatial::geo_ops::Validity;
 use crate::models::spatial::{
     Feature, FeatureRef, RasterRequest, RasterSlice, SpatialSetup, Viewport, ViewportRequest,
 };
-use crate::models::spatial_analyze::{AnalysisRequest, AnalysisResult};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
@@ -46,9 +46,9 @@ pub trait SpatialData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::geo_ops::Bbox;
     use crate::models::spatial::SourceRef;
-    use crate::models::spatial_analyze::{AnalysisForm, Availability};
+    use crate::models::spatial::analyze::{AnalysisForm, Availability};
+    use crate::models::spatial::geo_ops::Bbox;
     use crate::services::async_state::AsyncState;
     use crate::services::mock::MockConnectionService;
 

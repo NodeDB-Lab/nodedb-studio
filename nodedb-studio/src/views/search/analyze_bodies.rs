@@ -4,8 +4,8 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
+use crate::models::search::analyze::{Analysis, InputRole};
 use crate::models::search::{SearchCollection, SearchMode, SearchText, VectorInput};
-use crate::models::search_analyze::{Analysis, InputRole};
 use crate::routes::Route;
 use crate::routes::tabs::SearchTab;
 use crate::state::search::{AnalyzeUi, SearchUi};

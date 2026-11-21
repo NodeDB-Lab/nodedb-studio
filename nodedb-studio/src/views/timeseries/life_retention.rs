@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use crate::models::ts_lifecycle::Retention;
+use crate::models::timeseries::lifecycle::Retention;
 use crate::views::events::common::FormField;
 
 /// Parse a retention typed as a number and a unit.

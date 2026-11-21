@@ -12,8 +12,8 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
+use crate::models::vector::projection::{Projection, ProjectionForm, ProjectionRequest};
 use crate::models::vector::{NeighborRequest, NeighborResult, SearchForm};
-use crate::models::vector_projection::{Projection, ProjectionForm, ProjectionRequest};
 
 /// A target as a map key: `articles.embedding`.
 pub fn target_key(collection: &str, field: &str) -> String {

@@ -3,15 +3,15 @@
 
 use super::schema::{DATABASE, design_schema, seed_references};
 use crate::models::collection::Collection;
+use crate::models::designer::change::{
+    ApplyReport, ChangeKind, ChangeReview, DryRun, PendingChange,
+};
+use crate::models::designer::ddl;
+use crate::models::designer::new_check::is_identifier;
 use crate::models::designer::{
     DesignCollection, DesignIndex, DesignSchema, LogicalReference, ObjectState, VectorMetric,
     VectorParams,
 };
-use crate::models::designer_change::{
-    ApplyReport, ChangeKind, ChangeReview, DryRun, PendingChange,
-};
-use crate::models::designer_ddl;
-use crate::models::designer_new_check::is_identifier;
 use crate::models::schema::{FieldType, IndexKind};
 use crate::services::error::StudioError;
 
@@ -278,7 +278,7 @@ impl DesignerStore {
     /// What reviewing the staged changes reports, for a session running as
     /// `role`. A read-only session cannot apply.
     pub fn review(&self, role: &str, read_only: bool) -> ChangeReview {
-        let (blocks, unsupported) = designer_ddl::blocks(&self.pending);
+        let (blocks, unsupported) = ddl::blocks(&self.pending);
         ChangeReview {
             revision: self.revision,
             blocks,
@@ -360,7 +360,7 @@ impl DesignerStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::designer_new::{ConstraintKind, NewCollection, SchemaMode};
+    use crate::models::designer::new::{ConstraintKind, NewCollection, SchemaMode};
 
     fn index(name: &str, collection: &str, field: &str, kind: IndexKind) -> ChangeKind {
         ChangeKind::CreateIndex(DesignIndex {
@@ -380,7 +380,7 @@ mod tests {
         f.schema = SchemaMode::Strict;
         f.add_field("order_id", FieldType::Uuid, true, false);
         f.add_constraint(ConstraintKind::ForeignKey);
-        if let Some(crate::models::designer_new::Constraint::ForeignKey {
+        if let Some(crate::models::designer::new::Constraint::ForeignKey {
             field,
             to_collection,
             to_field,

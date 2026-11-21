@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::sync_activity::{Cursor, SyncEvent, SyncEventKind, utc};
+use crate::models::sync::activity::{Cursor, SyncEvent, SyncEventKind, utc};
 use crate::routes::Route;
 use crate::routes::tabs::SyncTab;
 use crate::state::sync::SyncUi;

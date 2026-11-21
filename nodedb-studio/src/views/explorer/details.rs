@@ -11,7 +11,7 @@ use crate::components::clipboard::use_copier;
 use crate::components::icon::{Ico, Icon};
 use crate::components::json_view::JsonView;
 use crate::models::collection::{Attached, Collection, Profile};
-use crate::models::record_json::{compact, pretty};
+use crate::models::records::json::{compact, pretty};
 use crate::models::records::{CollectionAccess, Record};
 use crate::models::schema::CollectionSchema;
 use crate::models::search::{SearchMode, VectorInput};

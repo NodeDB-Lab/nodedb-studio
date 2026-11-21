@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
-use crate::models::ts_lifecycle::ChangeReview;
+use crate::models::timeseries::lifecycle::ChangeReview;
 use crate::services::backend::Backend;
 use crate::state::timeseries::TimeseriesUi;
 use crate::views::events::common::SqlBlock;

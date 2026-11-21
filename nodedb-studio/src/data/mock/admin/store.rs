@@ -5,13 +5,13 @@
 
 use crate::data::mock::cluster::members::OBSERVED;
 use crate::data::mock::connections::staging_databases;
+use crate::models::admin::access::{Principal, Role, RoleGrant};
+use crate::models::admin::audit::{AuditEvent, AuditResult, RequestOrigin, TargetType};
+use crate::models::admin::backup::{RestoreJob, Schedule, Snapshot};
+use crate::models::admin::config::ConfigSetting;
+use crate::models::admin::policy::Policy;
 use crate::models::admin::{AdminChange, AdminReview};
-use crate::models::admin_access::{Principal, Role, RoleGrant};
-use crate::models::admin_audit::{AuditEvent, AuditResult, RequestOrigin, TargetType};
-use crate::models::admin_backup::{RestoreJob, Schedule, Snapshot};
-use crate::models::admin_config::ConfigSetting;
-use crate::models::admin_policy::Policy;
-use crate::models::cluster_op::{OpResult, PermissionCheck};
+use crate::models::cluster::op::{OpResult, PermissionCheck};
 use crate::services::error::StudioError;
 
 pub(super) const ADMIN: &str = "admin";
@@ -46,7 +46,7 @@ pub struct AdminStore {
     pub(super) cluster_config: Vec<ConfigSetting>,
     /// `(node id, key, value)`.
     pub(super) overrides: Vec<(String, String, String)>,
-    pub(super) credentials: Vec<crate::models::admin_credential::Credential>,
+    pub(super) credentials: Vec<crate::models::admin::credential::Credential>,
     pub(super) next_audit: u32,
     pub(super) next_operation: u32,
     pub(super) next_principal: u32,

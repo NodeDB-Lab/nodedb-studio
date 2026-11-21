@@ -12,7 +12,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::vector::VectorTarget;
-use crate::models::vector_projection::{NO_CATEGORY, Projection, ProjectionRequest};
+use crate::models::vector::projection::{NO_CATEGORY, Projection, ProjectionRequest};
 use crate::state::vector::{Drafts, MapTool, MapView, ProjectionUi, Selection, VectorUi, ZOOM_MAX};
 use crate::views::vector::proj_tools::{GoTo, Legend, MapTools};
 
@@ -344,7 +344,7 @@ pub fn ProjMap(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::vector_projection::{Method, ProjectionPoint};
+    use crate::models::vector::projection::{Method, ProjectionPoint};
 
     fn projection(points: Vec<(f32, f32, u8)>) -> Projection {
         Projection {

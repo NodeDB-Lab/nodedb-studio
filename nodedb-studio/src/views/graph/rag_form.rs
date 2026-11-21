@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::graph_rag::{MAX_HOPS, RagSetup};
+use crate::models::graph::rag::{MAX_HOPS, RagSetup};
 use crate::state::graph::RagUi;
 
 #[component]

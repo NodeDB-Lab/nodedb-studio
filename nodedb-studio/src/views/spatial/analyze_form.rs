@@ -4,11 +4,11 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::geo_ops::{Bbox, Ring, Shape};
-use crate::models::spatial::{GeoSource, SpatialSetup};
-use crate::models::spatial_analyze::{
+use crate::models::spatial::analyze::{
     AnalysisForm, AreaKind, Availability, DistanceUnit, Issue, Operation,
 };
+use crate::models::spatial::geo_ops::{Bbox, Ring, Shape};
+use crate::models::spatial::{GeoSource, SpatialSetup};
 use crate::state::spatial::{AnalyzeDraft, AnalyzeUi, Draft, SpatialUi};
 
 /// An area the Map holds: its ring, and its box when it is a rectangle.

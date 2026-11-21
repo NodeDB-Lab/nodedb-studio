@@ -7,8 +7,8 @@
 
 use async_trait::async_trait;
 
+use crate::models::graph::rag::{RagRequest, RagResult, RagSetup};
 use crate::models::graph::{GraphBinding, GraphResult, NodeKind, PathSet};
-use crate::models::graph_rag::{RagRequest, RagResult, RagSetup};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]

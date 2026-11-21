@@ -5,8 +5,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize};
+use crate::models::designer::change::{ChangeKind, PendingChange};
 use crate::models::designer::{DesignSchema, ObjectState};
-use crate::models::designer_change::{ChangeKind, PendingChange};
 use crate::state::designer::{DesignerState, Inspector, InspectorTab, Target};
 use crate::views::designer::properties_collection::{CollectionInspector, ReferenceInspector};
 use crate::views::designer::properties_index::{IndexInspector, NewIndexForm, NewReferenceForm};

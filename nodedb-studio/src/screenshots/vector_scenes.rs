@@ -5,8 +5,8 @@
 //! it through the backend, so the screen shows computed values.
 
 use crate::models::records::Filter;
+use crate::models::vector::projection::{Method, ProjectionForm, ProjectionRequest};
 use crate::models::vector::{NeighborRequest, QuerySource, SearchForm};
-use crate::models::vector_projection::{Method, ProjectionForm, ProjectionRequest};
 use crate::state::vector::{ProjectionUi, SearchUi, Selection, VectorSeed};
 
 pub const TARGET: &str = "articles.embedding";

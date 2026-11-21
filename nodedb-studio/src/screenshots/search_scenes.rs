@@ -6,9 +6,9 @@
 
 use crate::data::mock;
 use crate::models::records::Filter;
+use crate::models::search::analyze::{AnalyzeRequest, InputRole};
+use crate::models::search::form::SearchForm;
 use crate::models::search::{SearchMode, VectorInput};
-use crate::models::search_analyze::{AnalyzeRequest, InputRole};
-use crate::models::search_form::SearchForm;
 use crate::state::search::{AnalyzeUi, IndexTab, IndexesUi, ResultsUi, SearchSeed};
 
 const COLLECTION: &str = "articles";

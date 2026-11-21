@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::tx_badge::TxBadge;
-use crate::models::saved_query::{QueryLibrary, SaveQuery};
+use crate::models::workbench::saved_query::{QueryLibrary, SaveQuery};
 use crate::models::workbench::{TxAccess, TxState};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;

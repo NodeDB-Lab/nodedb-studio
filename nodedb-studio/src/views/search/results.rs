@@ -10,8 +10,8 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
+use crate::models::search::form::{Issue, SearchForm};
 use crate::models::search::{SearchCollection, SearchMode, SearchSetup};
-use crate::models::search_form::{Issue, SearchForm};
 use crate::routes::tabs::SearchTab;
 use crate::services::backend::Backend;
 use crate::state::search::{ResultsUi, SearchUi};

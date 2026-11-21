@@ -4,7 +4,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
-use crate::models::admin_access::NOT_REPORTED;
+use crate::models::admin::access::NOT_REPORTED;
 use crate::models::feeds::Tone;
 use crate::state::admin::ReviewState;
 use crate::views::events::common::StatusText;

@@ -5,8 +5,8 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::models::console::{ConsoleOutput, Protocol};
-use crate::models::sql_text::tokenize;
+use crate::models::workbench::console::{ConsoleOutput, Protocol};
+use crate::models::workbench::sql_text::tokenize;
 use crate::state::console::ConsoleEntry;
 
 pub const PROMPT: &str = "nodedb> ";
@@ -161,8 +161,8 @@ pub fn Transcript(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::console::ConsoleReply;
     use crate::models::workbench::TxState;
+    use crate::models::workbench::console::ConsoleReply;
 
     fn entry(text: &str, outcome: Result<ConsoleReply, String>) -> ConsoleEntry {
         ConsoleEntry {

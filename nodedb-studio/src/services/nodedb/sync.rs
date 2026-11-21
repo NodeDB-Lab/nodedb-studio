@@ -3,12 +3,12 @@
 use async_trait::async_trait;
 use nodedb_types::Value;
 
-use crate::models::cluster_op::OpResult;
+use crate::models::cluster::op::OpResult;
 use crate::models::sync::SyncDevices;
-use crate::models::sync_activity::{SyncLog, SyncQuery};
-use crate::models::sync_enroll::{EnrollOptions, EnrollRequest, Enrollment};
-use crate::models::sync_reject::{CompensationState, RejectedWrites, RepairResult};
-use crate::models::sync_sub::{ChangePreview, SubChange, Subscriptions};
+use crate::models::sync::activity::{SyncLog, SyncQuery};
+use crate::models::sync::enroll::{EnrollOptions, EnrollRequest, Enrollment};
+use crate::models::sync::reject::{CompensationState, RejectedWrites, RepairResult};
+use crate::models::sync::sub::{ChangePreview, SubChange, Subscriptions};
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::sync_data::SyncData;

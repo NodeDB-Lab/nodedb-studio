@@ -6,7 +6,7 @@
 use crate::data::mock::vector::corpus::{COLLECTION, FIELD, INDEX, REVISION};
 use crate::data::mock::vector::search::check_target;
 use crate::models::format::epoch;
-use crate::models::vector_index::{
+use crate::models::vector::index::{
     BuildCounters, BuildState, Coverage, HnswParams, IndexDefinition, IndexKind, IndexStatus,
     Quantization, RawPrecision, Reported, VectorCounts,
 };
@@ -54,7 +54,7 @@ pub fn index_status(collection: &str, field: &str) -> Result<IndexStatus, Studio
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::vector_index::{estimate, percent};
+    use crate::models::vector::index::{estimate, percent};
 
     #[test]
     fn the_snapshot_adds_up() {

@@ -6,7 +6,7 @@ use nodedb_types::Value;
 
 use crate::data::mock::explorer::build::{at, ts, unit};
 use crate::models::format::epoch;
-use crate::models::graph_records::{Edge, EdgePage, EdgeQuery, NodeRef};
+use crate::models::graph::records::{Edge, EdgePage, EdgeQuery, NodeRef};
 
 /// The graph binding of `users`.
 pub const GRAPH: &str = "social_graph";

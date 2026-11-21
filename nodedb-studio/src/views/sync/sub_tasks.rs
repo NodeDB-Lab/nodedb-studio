@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::*;
 
-use crate::models::sync_sub::ChangePreview;
+use crate::models::sync::sub::ChangePreview;
 use crate::services::backend::Backend;
 use crate::state::events::feeds::Notice;
 use crate::state::sync::{SubTab, SubsUi};

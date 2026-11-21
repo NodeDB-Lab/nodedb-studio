@@ -2,7 +2,7 @@
 //! generated from a fixed pattern, and the read that filters and pages them.
 
 use crate::data::mock::admin::store::{AdminStore, missing};
-use crate::models::admin_audit::{
+use crate::models::admin::audit::{
     AuditEvent, AuditFacets, AuditPage, AuditQuery, AuditResult, RequestOrigin, TargetType,
 };
 use crate::models::format::epoch;
@@ -343,7 +343,7 @@ impl AdminStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::admin_audit::AuditRange;
+    use crate::models::admin::audit::AuditRange;
 
     /// The oldest id. Ids rise with time up to `audit104`.
     const FIRST_ID: u32 = 53;

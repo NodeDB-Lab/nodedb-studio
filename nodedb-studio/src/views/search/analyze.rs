@@ -12,7 +12,7 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::search::SearchSetup;
-use crate::models::search_analyze::AnalyzeRequest;
+use crate::models::search::analyze::AnalyzeRequest;
 use crate::routes::tabs::SearchTab;
 use crate::services::backend::Backend;
 use crate::state::designer::DesignerState;

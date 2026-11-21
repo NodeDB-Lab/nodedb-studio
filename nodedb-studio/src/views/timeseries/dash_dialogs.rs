@@ -11,7 +11,7 @@ use dioxus::prelude::*;
 use crate::components::sheet::{Sheet, SheetFooter};
 use crate::models::format::date_minute;
 use crate::models::timeseries::TimeSpan;
-use crate::models::ts_dashboard::{Dashboard, DashboardSummary, WORKSPACE_LOCATION};
+use crate::models::timeseries::dashboard::{Dashboard, DashboardSummary, WORKSPACE_LOCATION};
 use crate::services::backend::Backend;
 use crate::state::timeseries::{After, DashDialog, DashUi, SaveState, TimeseriesUi};
 use crate::views::events::common::{FormField, SqlBlock};

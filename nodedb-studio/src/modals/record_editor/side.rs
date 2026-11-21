@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::record_check::ChangeKind;
+use crate::models::records::check::ChangeKind;
 use crate::state::gates::{shows_revisions, use_caps};
 use crate::state::record_editor::{EditorError, EditorMode, RecordEditor};
 

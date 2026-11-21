@@ -7,11 +7,11 @@
 
 use dioxus::prelude::*;
 
-use crate::models::cluster_chart::{nearest, time_ticks, value_axis};
-use crate::models::cluster_monitor::{MetricSeries, STALE_AFTER_SECS};
+use crate::models::cluster::chart::{nearest, time_ticks, value_axis};
+use crate::models::cluster::monitor::{MetricSeries, STALE_AFTER_SECS};
 use crate::models::format::clock_second;
-use crate::models::timeseries_axis::{axis_number, fixed};
-use crate::models::timeseries_chart::Frame;
+use crate::models::timeseries::axis::{axis_number, fixed};
+use crate::models::timeseries::chart::Frame;
 
 #[derive(Clone, PartialEq, Props)]
 pub struct MetricChartProps {

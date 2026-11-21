@@ -5,10 +5,10 @@ use dioxus::prelude::*;
 
 use crate::components::clipboard::use_copier;
 use crate::components::icon::{Ico, Icon};
-use crate::models::console::Protocol;
+use crate::models::graph::builder::{Direction, Field, MAX_DEPTH, MAX_LIMIT};
 use crate::models::graph::{NodeKind, Relation};
-use crate::models::graph_builder::{Direction, Field, MAX_DEPTH, MAX_LIMIT};
-use crate::models::sql_text::tokenize;
+use crate::models::workbench::console::Protocol;
+use crate::models::workbench::sql_text::tokenize;
 use crate::state::graph::{BuilderUi, CanvasState};
 use crate::views::graph::toolbar::bindings_resource;
 

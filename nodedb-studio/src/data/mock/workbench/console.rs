@@ -1,9 +1,9 @@
 //! Console fixtures: command history and the replies each protocol gives.
 
 use crate::data::mock::workbench::results::result_set;
-use crate::models::console::{ConsoleOutput, HistoryEntry, Protocol};
 use crate::models::format::epoch;
 use crate::models::workbench::QueryRequest;
+use crate::models::workbench::console::{ConsoleOutput, HistoryEntry, Protocol};
 use crate::services::error::StudioError;
 
 fn entry(n: u32, at: i64, protocol: Protocol, text: &str) -> HistoryEntry {

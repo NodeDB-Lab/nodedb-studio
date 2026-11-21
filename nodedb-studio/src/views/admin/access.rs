@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side, region_style};
-use crate::models::admin_access::{AccessDirectory, AccessSubject};
+use crate::models::admin::access::{AccessDirectory, AccessSubject};
 use crate::routes::tabs::AdminTab;
 use crate::services::backend::Backend;
 use crate::state::admin::{AccessMode, AccessUi, AdminUi, pick};

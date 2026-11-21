@@ -7,8 +7,8 @@ use nodedb_types::Value;
 use nodedb_types::geometry::Geometry;
 
 use crate::models::format::date_second;
-use crate::models::record_json::compact;
 use crate::models::records::Record;
+use crate::models::records::json::compact;
 use crate::models::schema::{CellFormat, CollectionSchema, ColumnSpec};
 
 /// A byte count: `5 B`, `2.1 KB`, `18 KB`, `1.4 MB`.
@@ -79,7 +79,7 @@ pub fn time_label(v: &Value, offset_min: i16) -> String {
     match v {
         Value::DateTime(t) | Value::NaiveDateTime(t) => date_second(t.unix_secs(), offset_min),
         Value::Null => String::new(),
-        other => crate::models::record_json::compact(other, &[]),
+        other => crate::models::records::json::compact(other, &[]),
     }
 }
 

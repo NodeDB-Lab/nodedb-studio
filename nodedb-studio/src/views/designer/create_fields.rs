@@ -3,8 +3,8 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::designer_new::{FIELD_TYPES, NewCollection, Storage};
-use crate::models::designer_new_check::{Issue, Target as IssueAt};
+use crate::models::designer::new::{FIELD_TYPES, NewCollection, Storage};
+use crate::models::designer::new_check::{Issue, Target as IssueAt};
 use crate::models::schema::FieldType;
 use crate::state::designer::DesignerState;
 use crate::views::designer::create::{edit, issue_at};
@@ -25,7 +25,7 @@ pub fn FieldsEditor(form: NewCollection, issues: Vec<Issue>, show: bool) -> Elem
         Storage::Document | Storage::Columnar => "Primary",
     };
     let heading = if form.schema_choice()
-        && form.schema == crate::models::designer_new::SchemaMode::Flexible
+        && form.schema == crate::models::designer::new::SchemaMode::Flexible
     {
         "Declared fields"
     } else {

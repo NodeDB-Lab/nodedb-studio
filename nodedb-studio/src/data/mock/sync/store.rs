@@ -8,14 +8,14 @@ use crate::data::mock::sync::activity::seeded_events;
 use crate::data::mock::sync::devices::{origin, seeded_devices};
 use crate::data::mock::sync::rejects::seeded_rejects;
 use crate::data::mock::sync::subs::{seeded_subs, store_rows};
-use crate::models::cluster_op::{OpResult, PermissionCheck};
-use crate::models::sync::{Device, DeviceState, SyncDevices};
-use crate::models::sync_activity::{SyncEvent, SyncEventKind, SyncLog, SyncQuery};
-use crate::models::sync_reject::{CompensationStep, RejectedWrites, Rejection};
-use crate::models::sync_sub::{
+use crate::models::cluster::op::{OpResult, PermissionCheck};
+use crate::models::sync::activity::{SyncEvent, SyncEventKind, SyncLog, SyncQuery};
+use crate::models::sync::reject::{CompensationStep, RejectedWrites, Rejection};
+use crate::models::sync::sub::{
     ChangePreview, Scope, Snapshot, SubChange, SubEvent, SubEventKind, SubState, Subscription,
     Subscriptions,
 };
+use crate::models::sync::{Device, DeviceState, SyncDevices};
 use crate::services::error::StudioError;
 
 /// The privilege a subscription change needs.

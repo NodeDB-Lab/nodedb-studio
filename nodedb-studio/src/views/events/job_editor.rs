@@ -8,12 +8,12 @@ use dioxus::prelude::*;
 
 use crate::components::code_editor::CodeEditor;
 use crate::components::icon::{Ico, Icon};
-use crate::models::console::Protocol;
 use crate::models::feeds::Tone;
 use crate::models::format::date_second;
 use crate::models::jobs::{
     BACKOFFS, JobField, JobForm, JobIssue, OverlapPolicy, ScheduledJob, TIMEOUTS, secs_label,
 };
+use crate::models::workbench::console::Protocol;
 use crate::models::zone::Zone;
 use crate::services::backend::Backend;
 use crate::state::events::EventsUi;

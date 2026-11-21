@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::date_minute;
-use crate::models::ts_dashboard::{DashboardSummary, WORKSPACE_LOCATION};
+use crate::models::timeseries::dashboard::{DashboardSummary, WORKSPACE_LOCATION};
 use crate::state::timeseries::{DashDialog, DashUi};
 use crate::views::timeseries::dash_ops::request_open;
 

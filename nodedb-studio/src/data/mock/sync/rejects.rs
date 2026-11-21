@@ -6,7 +6,7 @@ use nodedb_types::Value;
 
 use crate::data::mock::explorer::build::{dec, s, ts};
 use crate::data::mock::sync::devices::t;
-use crate::models::sync_reject::{Hint, RejectReason, RejectState, Rejection};
+use crate::models::sync::reject::{Hint, RejectReason, RejectState, Rejection};
 
 fn object(fields: Vec<(&str, Value)>) -> Value {
     Value::Object(

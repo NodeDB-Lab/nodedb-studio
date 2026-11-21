@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use crate::components::clipboard::use_copier;
 use crate::components::icon::{Ico, Icon};
 use crate::models::admin::AdminChange;
-use crate::models::admin_policy::{PolicyChange, PolicyDraft, PolicyOperation, PolicySet};
+use crate::models::admin::policy::{PolicyChange, PolicyDraft, PolicyOperation, PolicySet};
 use crate::services::backend::Backend;
 use crate::state::admin::{AdminUi, PolicyUi};
 use crate::views::admin::policies::Editing;
@@ -266,7 +266,7 @@ pub fn PolicyEditor(editing: Editing, set: PolicySet) -> Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::admin_policy::Policy;
+    use crate::models::admin::policy::Policy;
     use crate::services::nodedb::NodeDbConnectionService;
 
     fn render(policy: Policy) -> String {

@@ -4,8 +4,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::cluster::NodeState;
-use crate::models::cluster_place::{Placement, VShard, size_text};
-use crate::models::cluster_raft::PeerRole;
+use crate::models::cluster::place::{Placement, VShard, size_text};
+use crate::models::cluster::raft::PeerRole;
 use crate::models::feeds::Tone;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;

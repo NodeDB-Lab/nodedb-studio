@@ -8,8 +8,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::tabs::TabBar;
-use crate::models::cluster_place::size_text;
-use crate::models::cluster_raft::{PeerRole, RaftGroup};
+use crate::models::cluster::place::size_text;
+use crate::models::cluster::raft::{PeerRole, RaftGroup};
 use crate::models::format::{date_second, thousands};
 use crate::services::backend::Backend;
 use crate::state::cluster::{ClusterUi, RaftTab};
