@@ -101,7 +101,7 @@ pub fn CommandPalette() -> Element {
         Rc::new(move |action: PaletteAction| {
             // Local copies of the signals: the runner is `Fn`, shared by every
             // row, and writing needs a mutable handle.
-            let (mut open, mut active, mut modal, mut form) = (open, active, modal, form);
+            let (mut open, mut modal, mut form) = (open, modal, form);
             let (mut manager, mut selection, mut prefs) = (manager, selection, prefs);
             let mut workspace = workspace;
             open.set(false);
@@ -117,7 +117,7 @@ pub fn CommandPalette() -> Element {
                     selection.set(ManagerSelection(Some(current.clone())));
                     manager.set(ManagerOpen(true));
                 }
-                PaletteAction::Disconnect => active.set(None),
+                PaletteAction::Disconnect => connector.disconnect(),
                 PaletteAction::OpenPreferences(pane) => {
                     modal.set(Some(ModalKind::Preferences(pane)));
                 }

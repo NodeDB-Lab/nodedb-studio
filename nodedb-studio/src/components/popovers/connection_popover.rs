@@ -40,7 +40,7 @@ fn rows<'a>(
 
 #[component]
 pub fn ConnectionPopover() -> Element {
-    let mut active = use_context::<Signal<Option<ActiveConnection>>>();
+    let active = use_context::<Signal<Option<ActiveConnection>>>();
     let mut popover = use_context::<Signal<Option<Popover>>>();
     let mut modal = use_context::<Signal<Option<ModalKind>>>();
     let mut form = use_context::<Signal<ConnectionForm>>();
@@ -165,7 +165,7 @@ pub fn ConnectionPopover() -> Element {
             button {
                 class: "menu-item",
                 role: "menuitem",
-                onclick: move |_| { popover.set(None); active.set(None); },
+                onclick: { let connector = connector.clone(); move |_| { popover.set(None); connector.disconnect(); } },
                 Ico { icon: Icon::Unplug, size: 18 }
                 span { "Disconnect" }
             }

@@ -41,6 +41,33 @@ pub struct Capabilities {
     pub cluster: bool,
     /// Current credentials cannot write.
     pub readonly: bool,
+    // The flags below default to true on load: a saved profile written before
+    // they existed came from the mock, which offers everything.
+    /// The server numbers each record's revisions, so a user can read them.
+    #[serde(default = "yes")]
+    pub record_revisions: bool,
+    /// `BEGIN READ ONLY` really refuses writes.
+    #[serde(default = "yes")]
+    pub read_only_transactions: bool,
+    /// The server can describe and slice an array.
+    #[serde(default = "yes")]
+    pub arrays: bool,
+    /// The server lists backups: the Admin Backups tab.
+    #[serde(default = "yes")]
+    pub backups: bool,
+    /// The server lists its config: the Admin Config tab.
+    #[serde(default = "yes")]
+    pub config: bool,
+    /// The server lists credentials: the Admin Credentials tab.
+    #[serde(default = "yes")]
+    pub credentials: bool,
+    /// The server runs EXPLAIN ANALYZE: the Plan view's Analyze mode.
+    #[serde(default = "yes")]
+    pub explain_analyze: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 impl Capabilities {
@@ -110,6 +137,20 @@ impl ActiveConnection {
 /// this one instead of its own, silently.
 pub struct ConnectError(pub Option<StudioError>);
 
+/// Whether the session may close, given what `transaction()` answered.
+///
+/// A session with an open transaction stays: closing it rolls the
+/// transaction back with no word, and the backend refuses the next connect
+/// until that transaction ends. A read that failed does not hold the session.
+pub fn may_disconnect(
+    transaction: Result<crate::models::workbench::TxState, StudioError>,
+) -> Result<(), StudioError> {
+    match transaction {
+        Ok(tx) if tx.is_open() => Err(StudioError::TransactionOpen),
+        Ok(_) | Err(_) => Ok(()),
+    }
+}
+
 /// Reconcile the active-connection slot with the result of a `connect()`.
 ///
 /// On `Ok` the session becomes active. On `Err` the existing session is left
@@ -155,6 +196,25 @@ pub fn apply_database_switch(
 mod tests {
     use super::*;
 
+    #[test]
+    fn a_session_with_an_open_transaction_does_not_close() {
+        use crate::models::workbench::{TxAccess, TxState};
+        let open = TxState::Active {
+            access: TxAccess::ReadWrite,
+            statements: 1,
+        };
+        assert!(matches!(
+            may_disconnect(Ok(open)),
+            Err(StudioError::TransactionOpen)
+        ));
+        assert!(matches!(
+            may_disconnect(Ok(TxState::Failed)),
+            Err(StudioError::TransactionOpen)
+        ));
+        assert!(may_disconnect(Ok(TxState::Idle)).is_ok());
+        assert!(may_disconnect(Err(StudioError::NotConnected)).is_ok());
+    }
+
     fn caps() -> Capabilities {
         Capabilities {
             graph: false,
@@ -166,6 +226,13 @@ mod tests {
             sync: false,
             cluster: false,
             readonly: false,
+            record_revisions: true,
+            read_only_transactions: true,
+            arrays: true,
+            backups: true,
+            config: true,
+            credentials: true,
+            explain_analyze: true,
         }
     }
 
@@ -179,6 +246,15 @@ mod tests {
             capabilities: caps(),
             current_database: "main".into(),
         }
+    }
+
+    /// A profile saved before the newer flags existed came from the mock,
+    /// which offers everything.
+    #[test]
+    fn a_profile_saved_before_the_newer_flags_offers_them() {
+        let old = r#"{"graph":true,"vector":true,"events":true,"timeseries":true,"spatial":true,"search":true,"sync":true,"cluster":true,"readonly":false}"#;
+        let caps: Capabilities = sonic_rs::from_str(old).expect("loads");
+        assert!(caps.record_revisions && caps.credentials && caps.explain_analyze);
     }
 
     #[test]

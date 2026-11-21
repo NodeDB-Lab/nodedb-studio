@@ -13,7 +13,7 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::services::backend::Backend;
-use crate::state::connection::{ActiveConnection, ConnectError, apply_connect};
+use crate::state::connection::{ActiveConnection, ConnectError, apply_connect, may_disconnect};
 use crate::state::connections_registry::Credentials;
 use crate::state::ui::ManagerOpen;
 
@@ -59,6 +59,21 @@ impl Connector {
         let me = self.clone();
         spawn_forever(async move {
             me.run(&name, &creds).await;
+        });
+    }
+
+    /// Close the session, unless it holds an open transaction. Then it
+    /// stays, and the error bar says to commit or roll back first.
+    pub fn disconnect(&self) {
+        let me = self.clone();
+        spawn_forever(async move {
+            let (mut active, mut error) = (me.active, me.error);
+            let verdict = may_disconnect(me.backend.transaction().await);
+            let refused = verdict.is_err();
+            error.set(ConnectError(verdict.err()));
+            if !refused {
+                active.set(None);
+            }
         });
     }
 }

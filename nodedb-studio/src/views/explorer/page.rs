@@ -14,6 +14,7 @@ use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::collection::{Collection, Profile};
 use crate::services::backend::Backend;
 use crate::state::explorer::{RecordView, Selected, select_collection};
+use crate::state::gates::{describes_arrays, use_caps};
 use crate::state::workspace::Surface;
 use crate::views::explorer::array_workspace::ArrayWorkspace;
 use crate::views::explorer::catalog::CatalogBody;
@@ -29,6 +30,7 @@ pub fn ExplorerPage() -> Element {
     let conn = use_context::<Memo<Option<String>>>();
     let mut selected = use_context::<Signal<Option<Selected>>>();
     let mut view = use_context::<Signal<RecordView>>();
+    let arrays = describes_arrays(use_caps().as_ref());
 
     let mut catalog = use_resource(move || {
         let backend = backend.clone();
@@ -82,6 +84,9 @@ pub fn ExplorerPage() -> Element {
                 }
                 ResizeHandle { surface: SURFACE, target: "catalog", size: CATALOG_SIZE, side: Side::Before }
                 match current {
+                    Some(c) if c.profile == Profile::Array && !arrays => rsx! {
+                        ArrayUnsupported {}
+                    },
                     Some(c) if c.profile == Profile::Array => rsx! {
                         ArrayWorkspace { key: "{c.name}", collection: c }
                     },
@@ -97,6 +102,21 @@ pub fn ExplorerPage() -> Element {
                     },
                 }
             }
+        }
+    }
+}
+
+/// An array on a server that cannot describe arrays: a notice in place of the
+/// viewer, so no request is made.
+#[component]
+fn ArrayUnsupported() -> Element {
+    rsx! {
+        Panel { surface: SURFACE, id: "records", title: "Records", class: "fill",
+            div { class: "async-empty", "This server cannot describe arrays yet, so this array cannot be shown." }
+        }
+        ResizeHandle { surface: SURFACE, target: "details", size: DETAILS_SIZE, side: Side::After }
+        Panel { surface: SURFACE, id: "details", title: "Array details", size: DETAILS_SIZE,
+            div { class: "async-empty", "Array details are not available on this server." }
         }
     }
 }

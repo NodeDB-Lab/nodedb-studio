@@ -12,6 +12,7 @@ use crate::models::schema::{CollectionSchema, FieldType};
 use crate::routes::Route;
 use crate::routes::tabs::{AdminTab, TimeseriesTab};
 use crate::state::explorer::{DetailsTab, RecordView, Selected, select_record};
+use crate::state::gates::{shows_revisions, use_caps};
 use crate::state::preferences::Preferences;
 use crate::state::timeseries::TimeseriesUi;
 use crate::views::explorer::cells::{status_tone, text_label, time_label};
@@ -31,6 +32,17 @@ fn value_text(record: &Record, field: &str, offset: i16) -> String {
 /// `customers` → `customer`.
 fn singular(name: &str) -> String {
     name.strip_suffix('s').unwrap_or(name).to_string()
+}
+
+/// The record's revision, when this server numbers them.
+#[component]
+pub fn RevisionLabel(revision: u64) -> Element {
+    if !shows_revisions(use_caps().as_ref()) {
+        return rsx! {};
+    }
+    rsx! {
+        span { class: "fields-revision", "Revision {revision}" }
+    }
 }
 
 #[component]
@@ -120,7 +132,7 @@ pub fn StrictDetails(
             }
             div { class: "fields-head",
                 h4 { class: "inspector-section", "Fields" }
-                span { class: "fields-revision", "Revision {record.revision}" }
+                RevisionLabel { revision: record.revision }
             }
             div { class: "field-list",
                 for f in schema.fields.iter() {
@@ -175,6 +187,7 @@ pub fn ColumnarDetails(
         .map(|v| time_label(v, offset))
         .unwrap_or_default();
     let json = crate::models::record_json::pretty(&record.value, &schema.fields);
+    let show_revision = shows_revisions(use_caps().as_ref());
     rsx! {
         div { class: "inspector",
             div { class: "inspector-head",
@@ -226,18 +239,20 @@ pub fn ColumnarDetails(
                 },
             }
             div { class: "kv kv-compact",
-                div { class: "kv-row",
-                    span { "Revision" }
-                    span { class: "with-icon", "{record.revision}"
-                        button {
-                            class: "icon-btn sm",
-                            title: "Copy revision",
-                            "aria-label": "Copy revision",
-                            onclick: {
-                                let rev = record.revision.to_string();
-                                move |_| copier.copy(rev.clone())
-                            },
-                            Ico { icon: Icon::Copy, size: 14 }
+                if show_revision {
+                    div { class: "kv-row",
+                        span { "Revision" }
+                        span { class: "with-icon", "{record.revision}"
+                            button {
+                                class: "icon-btn sm",
+                                title: "Copy revision",
+                                "aria-label": "Copy revision",
+                                onclick: {
+                                    let rev = record.revision.to_string();
+                                    move |_| copier.copy(rev.clone())
+                                },
+                                Ico { icon: Icon::Copy, size: 14 }
+                            }
                         }
                     }
                 }
@@ -398,5 +413,45 @@ mod tests {
             ),
             "Not allowed"
         );
+    }
+
+    use crate::state::connection::{ActiveConnection, Capabilities};
+
+    fn label(record_revisions: bool) -> String {
+        #[derive(Props, Clone, PartialEq)]
+        struct P {
+            revisions: bool,
+        }
+        let mut dom = VirtualDom::new_with_props(
+            |p: P| {
+                let mut caps = crate::state::gates::test_caps();
+                caps.record_revisions = p.revisions;
+                use_context_provider(|| Signal::new(Some(session(caps))));
+                rsx! { RevisionLabel { revision: 4242 } }
+            },
+            P {
+                revisions: record_revisions,
+            },
+        );
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    fn session(capabilities: Capabilities) -> ActiveConnection {
+        ActiveConnection {
+            name: "s".into(),
+            sub: String::new(),
+            display_name: "A".into(),
+            user: "a".into(),
+            role: "r".into(),
+            capabilities,
+            current_database: "d".into(),
+        }
+    }
+
+    #[test]
+    fn revision_label_follows_the_flag() {
+        assert!(label(true).contains("Revision 4242"));
+        assert!(!label(false).contains("4242"));
     }
 }

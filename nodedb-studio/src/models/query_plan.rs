@@ -70,7 +70,8 @@ pub struct PlanOperator {
     pub kind: OperatorKind,
     /// What it works on, shown under the name when the estimate is not.
     pub target: Option<String>,
-    pub est_rows: u64,
+    /// Absent when the server reports no estimate. Never zero for unknown.
+    pub est_rows: Option<u64>,
     /// Rows the operator produced. Only ANALYZE measures it.
     pub actual_rows: Option<u64>,
     /// Time in the operator, in microseconds. Only ANALYZE measures it.
@@ -88,9 +89,22 @@ pub struct QueryPlan {
     pub operators: Vec<PlanOperator>,
     /// Wall time of the whole statement. Only ANALYZE measures it.
     pub elapsed_ms: Option<u32>,
+    /// The plan as the server wrote it, when it gives no operator tree.
+    /// `operators` is empty then.
+    pub text: Option<String>,
 }
 
 impl QueryPlan {
+    /// A plan the server reports only as text.
+    pub fn from_text(mode: ExplainMode, text: String) -> Self {
+        Self {
+            mode,
+            operators: Vec::new(),
+            elapsed_ms: None,
+            text: Some(text),
+        }
+    }
+
     pub fn operator(&self, id: u32) -> Option<&PlanOperator> {
         self.operators.iter().find(|o| o.id == id)
     }

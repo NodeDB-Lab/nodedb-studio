@@ -91,7 +91,7 @@ impl WorkbenchData for MockConnectionService {
     }
 
     async fn query_library(&self) -> Result<QueryLibrary, StudioError> {
-        let lib = self.wb(|s| Ok(s.library())).await?;
+        let lib = self.wb(|s| Ok(s.records.library())).await?;
         Ok(if self.is_empty_mode() {
             QueryLibrary::default()
         } else {
@@ -100,19 +100,19 @@ impl WorkbenchData for MockConnectionService {
     }
 
     async fn saved_query_versions(&self, id: &str) -> Result<Vec<SavedQueryVersion>, StudioError> {
-        self.wb(|s| s.versions(id)).await
+        self.wb(|s| s.records.versions(id)).await
     }
 
     async fn save_query(&self, save: &SaveQuery) -> Result<SavedQuery, StudioError> {
-        self.wb(|s| s.save(save)).await
+        self.wb(|s| s.records.save(save)).await
     }
 
     async fn delete_saved_query(&self, id: &str) -> Result<(), StudioError> {
-        self.wb(|s| s.delete(id)).await
+        self.wb(|s| s.records.delete(id)).await
     }
 
     async fn create_query_folder(&self, name: &str) -> Result<(), StudioError> {
-        self.wb(|s| s.create_folder(name)).await
+        self.wb(|s| s.records.create_folder(name)).await
     }
 
     async fn console_run(
@@ -128,7 +128,7 @@ impl WorkbenchData for MockConnectionService {
         &self,
         query: &HistoryQuery,
     ) -> Result<Vec<HistoryEntry>, StudioError> {
-        let out = self.wb(|s| Ok(s.history(query))).await?;
+        let out = self.wb(|s| Ok(s.records.history(query))).await?;
         Ok(if self.is_empty_mode() {
             Vec::new()
         } else {

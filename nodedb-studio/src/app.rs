@@ -154,7 +154,7 @@ pub fn App() -> Element {
             BackendKind::Native => Rc::new(NodeDbConnectionService::default()) as Rc<dyn Backend>,
         }
     });
-    let mut active = use_context_provider(|| Signal::new(None::<ActiveConnection>));
+    let active = use_context_provider(|| Signal::new(None::<ActiveConnection>));
     // The active connection's name. Per-connection reads subscribe to this,
     // not to `active`: a database pick or a failed switch also writes
     // `active`, and neither changes what the connection's server answers.
@@ -233,6 +233,8 @@ pub fn App() -> Element {
     // the command palette and the switch popover both close on click, so an
     // error they owned would be dropped before it could render.
     let connect_error = use_context_provider(|| Signal::new(ConnectError(None)));
+    // After the providers above: the connector reads all four from context.
+    let connector = crate::components::connector::use_connector();
 
     // Seed the registry + notification feed asynchronously, at the seam. The
     // mock resolves instantly; the real client awaits the network. The guard
@@ -285,7 +287,7 @@ pub fn App() -> Element {
             }
             Key::Character(c) if meta && c == "d" && connected => {
                 e.prevent_default();
-                active.set(None);
+                connector.disconnect();
             }
             // Not over an open modal: replacing it discards what was typed there.
             Key::Character(c) if meta && c == "," && modal.peek().is_none() => {

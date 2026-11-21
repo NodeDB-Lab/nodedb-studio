@@ -133,6 +133,7 @@ mod tests {
             output: ConsoleOutput::Text(vec!["ok".into()]),
             elapsed_ms: 1,
             tx: TxState::Idle,
+            notes: Vec::new(),
         }
     }
 

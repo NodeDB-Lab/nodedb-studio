@@ -79,15 +79,18 @@ pub fn lines(entries: &[ConsoleEntry]) -> Vec<Line> {
         ));
         out.extend(parts.map(|p| Line::Continued(e.protocol, p.to_string())));
         match &e.outcome {
-            Ok(reply) => match &reply.output {
-                ConsoleOutput::Table { columns, rows } => {
-                    out.extend(draw_table(columns, rows).into_iter().map(Line::Table));
-                    out.push(Line::Note(footer(rows.len(), reply.elapsed_ms)));
+            Ok(reply) => {
+                match &reply.output {
+                    ConsoleOutput::Table { columns, rows } => {
+                        out.extend(draw_table(columns, rows).into_iter().map(Line::Table));
+                        out.push(Line::Note(footer(rows.len(), reply.elapsed_ms)));
+                    }
+                    ConsoleOutput::Text(text) => {
+                        out.extend(text.iter().cloned().map(Line::Note));
+                    }
                 }
-                ConsoleOutput::Text(text) => {
-                    out.extend(text.iter().cloned().map(Line::Note));
-                }
-            },
+                out.extend(reply.notes.iter().cloned().map(Line::Note));
+            }
             Err(msg) => out.push(Line::Error(format!("ERROR: {msg}"))),
         }
         out.push(Line::Blank);
@@ -181,6 +184,7 @@ mod tests {
             },
             elapsed_ms: ms,
             tx: TxState::Idle,
+            notes: Vec::new(),
         }
     }
 
@@ -205,6 +209,15 @@ mod tests {
         assert_eq!(l[l.len() - 1], Line::Blank);
         let two = lines(&[entry("q", Ok(table(&["a"], &[&["1"], &["2"]], 3)))]);
         assert!(two.contains(&Line::Note("(2 rows, 3 ms)".into())));
+    }
+
+    #[test]
+    fn notes_follow_the_output() {
+        let mut reply = table(&["a"], &[&["1"]], 2);
+        reply.notes = vec!["settings reset".into()];
+        let l = lines(&[entry("SELECT 1", Ok(reply))]);
+        assert_eq!(l[l.len() - 3], Line::Note("(1 row, 2 ms)".into()));
+        assert_eq!(l[l.len() - 2], Line::Note("settings reset".into()));
     }
 
     #[test]

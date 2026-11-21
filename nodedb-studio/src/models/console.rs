@@ -51,6 +51,8 @@ pub struct ConsoleReply {
     pub output: ConsoleOutput,
     pub elapsed_ms: u32,
     pub tx: TxState,
+    /// Lines the user must read with the output, such as a warning.
+    pub notes: Vec<String>,
 }
 
 /// One command the session ran, newest first in the history list.
