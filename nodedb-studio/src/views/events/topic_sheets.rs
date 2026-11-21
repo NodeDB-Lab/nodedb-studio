@@ -28,9 +28,7 @@ pub fn CreateTopicSheet(sheet: TopicSheet, topics: Vec<Topic>) -> Element {
             .iter()
             .find(|(f, _)| *f == field)
             .map(|(_, m)| m.clone())
-            .filter(|_| {
-                sheet.tried || (field == "name" && !form.name.is_empty()) || field != "name"
-            })
+            .filter(|_| sheet.tried || field != "name" || !form.name.is_empty())
     };
     let (name_e, parts_e, ret_e) = (show("name"), show("partitions"), show("retention"));
     let name = form.name.trim().to_string();
