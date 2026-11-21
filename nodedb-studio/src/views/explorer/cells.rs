@@ -107,7 +107,9 @@ pub fn cell_text(
     match (column.format, value) {
         (CellFormat::Srid, _) => schema
             .geometry()
-            .map(|(_, srid)| format!("EPSG:{srid}"))
+            .map(|(_, srid)| {
+                srid.map_or_else(|| "Not reported".to_string(), |s| format!("EPSG:{s}"))
+            })
             .unwrap_or_default(),
         (_, None) => String::new(),
         (CellFormat::Timestamp, Some(v)) => time_label(v, offset_min),
@@ -222,6 +224,14 @@ mod tests {
             .find(|c| c.header == "SRID")
             .expect("column");
         assert_eq!(cell_text(col, &record, &schema, 0), "EPSG:4326");
+        // a server that reports no SRID: the cell says so, never a guess
+        let mut unreported = schema.clone();
+        for f in unreported.fields.iter_mut() {
+            if let crate::models::schema::FieldType::Geometry { srid } = &mut f.ty {
+                *srid = None;
+            }
+        }
+        assert_eq!(cell_text(col, &record, &unreported, 0), "Not reported");
     }
 
     #[test]

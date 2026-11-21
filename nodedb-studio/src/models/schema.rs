@@ -16,9 +16,11 @@ pub enum FieldType {
     },
     Int64,
     Float64,
+    /// Both `None` for a bare `DECIMAL` or `NUMERIC`: the server then stores
+    /// any precision and scale. Both set otherwise.
     Decimal {
-        precision: u8,
-        scale: u8,
+        precision: Option<u8>,
+        scale: Option<u8>,
     },
     Bool,
     Timestamp,
@@ -32,8 +34,9 @@ pub enum FieldType {
     Vector {
         dimensions: u32,
     },
+    /// `srid` is `None` when the server does not report it.
     Geometry {
-        srid: u32,
+        srid: Option<u32>,
     },
     Bytes,
 }
@@ -45,7 +48,11 @@ impl FieldType {
             FieldType::String { max: Some(n) } => format!("string({n})"),
             FieldType::Int64 => "int64".to_string(),
             FieldType::Float64 => "float64".to_string(),
-            FieldType::Decimal { precision, scale } => format!("decimal({precision},{scale})"),
+            FieldType::Decimal {
+                precision: Some(p),
+                scale: Some(s),
+            } => format!("decimal({p},{s})"),
+            FieldType::Decimal { .. } => "decimal".to_string(),
             FieldType::Bool => "bool".to_string(),
             FieldType::Timestamp => "timestamp".to_string(),
             FieldType::Datetime => "datetime".to_string(),
@@ -54,7 +61,8 @@ impl FieldType {
             FieldType::Array => "array".to_string(),
             FieldType::Json => "json".to_string(),
             FieldType::Vector { dimensions } => format!("vector({dimensions})"),
-            FieldType::Geometry { srid } => format!("geometry(EPSG:{srid})"),
+            FieldType::Geometry { srid: Some(srid) } => format!("geometry(EPSG:{srid})"),
+            FieldType::Geometry { srid: None } => "geometry".to_string(),
             FieldType::Bytes => "bytes".to_string(),
         }
     }
@@ -101,8 +109,12 @@ impl FieldType {
     pub fn ddl(self) -> String {
         match self {
             FieldType::String { max: Some(n) } => format!("VARCHAR({n})"),
-            FieldType::Decimal { precision, scale } => format!("DECIMAL({precision},{scale})"),
+            FieldType::Decimal {
+                precision: Some(p),
+                scale: Some(s),
+            } => format!("DECIMAL({p},{s})"),
             FieldType::String { max: None }
+            | FieldType::Decimal { .. }
             | FieldType::Int64
             | FieldType::Float64
             | FieldType::Bool
@@ -195,7 +207,9 @@ pub struct IndexDef {
     pub name: String,
     pub kind: IndexKind,
     pub fields: Vec<String>,
-    pub ready: bool,
+    /// Whether the index finished building. `None` when the server does not
+    /// report it.
+    pub ready: Option<bool>,
 }
 
 /// The full-text index over a collection's text fields.
@@ -204,7 +218,9 @@ pub struct TextIndex {
     pub name: String,
     /// `(field, analyzer)` per indexed field.
     pub fields: Vec<(String, String)>,
-    pub ready: bool,
+    /// Whether the index finished building. `None` when the server does not
+    /// report it.
+    pub ready: Option<bool>,
     /// Share of source records the index covers. `None` when the server
     /// does not report it: Ready alone never proves full coverage.
     pub coverage_percent: Option<u8>,
@@ -272,8 +288,9 @@ impl CollectionSchema {
         self.fields.iter().find(|f| f.time_key)
     }
 
-    /// The geometry field, for a spatial collection.
-    pub fn geometry(&self) -> Option<(&SchemaField, u32)> {
+    /// The geometry field and its SRID, for a spatial collection. The SRID
+    /// is `None` when the server does not report it.
+    pub fn geometry(&self) -> Option<(&SchemaField, Option<u32>)> {
         self.fields.iter().find_map(|f| match f.ty {
             FieldType::Geometry { srid } => Some((f, srid)),
             FieldType::String { .. }
@@ -299,19 +316,26 @@ mod tests {
 
     #[test]
     fn type_labels_carry_their_parameters() {
+        let fixed = FieldType::Decimal {
+            precision: Some(10),
+            scale: Some(2),
+        };
+        assert_eq!(fixed.label(), "decimal(10,2)");
+        assert_eq!(fixed.ddl(), "DECIMAL(10,2)");
+        let free = FieldType::Decimal {
+            precision: None,
+            scale: None,
+        };
         assert_eq!(
-            FieldType::Decimal {
-                precision: 10,
-                scale: 2
-            }
-            .label(),
-            "decimal(10,2)"
+            (free.label().as_str(), free.ddl().as_str()),
+            ("decimal", "DECIMAL")
         );
         assert_eq!(FieldType::String { max: Some(3) }.label(), "string(3)");
         assert_eq!(
-            FieldType::Geometry { srid: 4326 }.label(),
+            FieldType::Geometry { srid: Some(4326) }.label(),
             "geometry(EPSG:4326)"
         );
+        assert_eq!(FieldType::Geometry { srid: None }.label(), "geometry");
     }
 
     #[test]
@@ -319,8 +343,8 @@ mod tests {
         assert!(FieldType::Int64.numeric());
         assert!(
             FieldType::Decimal {
-                precision: 10,
-                scale: 2
+                precision: Some(10),
+                scale: Some(2)
             }
             .numeric()
         );
