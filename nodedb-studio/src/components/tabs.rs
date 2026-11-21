@@ -27,6 +27,24 @@ pub fn RouteTabs(
 ) -> Element {
     let nav = use_navigator();
     rsx! {
+        PageTabStrip {
+            items,
+            current,
+            actions,
+            on_select: move |route: Route| { nav.push(route); },
+        }
+    }
+}
+
+/// The strip `RouteTabs` draws: separate so it renders without a router.
+#[component]
+fn PageTabStrip(
+    items: Vec<(&'static str, Route)>,
+    current: Route,
+    actions: Element,
+    on_select: EventHandler<Route>,
+) -> Element {
+    rsx! {
         nav { class: "page-tabs", role: "tablist",
             for (label, route) in items {
                 {
@@ -37,7 +55,7 @@ pub fn RouteTabs(
                             class: if selected { "tab active" } else { "tab" },
                             role: "tab",
                             "aria-selected": "{selected}",
-                            onclick: move |_| { nav.push(route.clone()); },
+                            onclick: move |_| on_select.call(route.clone()),
                             "{label}"
                         }
                     }
@@ -69,5 +87,54 @@ pub fn TabBar(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::routes::tabs::AdminTab;
+    use crate::state::connection::Capabilities;
+    use crate::state::gates::admin_tabs;
+
+    fn strip(caps: Option<Capabilities>) -> String {
+        #[derive(Props, Clone, PartialEq)]
+        struct P {
+            caps: Option<Capabilities>,
+        }
+        let mut dom = VirtualDom::new_with_props(
+            |p: P| {
+                let items = tab_items(
+                    &admin_tabs(p.caps.as_ref()),
+                    |t| t.label(),
+                    |tab| Route::Admin { tab },
+                );
+                rsx! {
+                    PageTabStrip {
+                        items,
+                        current: Route::Admin { tab: AdminTab::Access },
+                        actions: VNode::empty(),
+                        on_select: |_| {},
+                    }
+                }
+            },
+            P { caps },
+        );
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    #[test]
+    fn admin_strip_hides_tabs_the_server_cannot_serve() {
+        let mut caps = crate::state::gates::test_caps();
+        assert!(strip(Some(caps)).contains("Backups"));
+        caps.backups = false;
+        caps.config = false;
+        caps.credentials = false;
+        let html = strip(Some(caps));
+        for gone in ["Backups", "Config", "Credentials"] {
+            assert!(!html.contains(gone), "{gone} still shown: {html}");
+        }
+        assert!(html.contains("Access") && html.contains("Audit"), "{html}");
     }
 }

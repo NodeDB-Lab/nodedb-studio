@@ -21,6 +21,12 @@ fn all_capabilities(readonly: bool) -> Capabilities {
         sync: true,
         cluster: true,
         readonly,
+        record_revisions: true,
+        read_only_transactions: true,
+        arrays: true,
+        backups: true,
+        config: true,
+        credentials: true,
     }
 }
 

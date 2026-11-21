@@ -12,11 +12,13 @@ use dioxus::prelude::*;
 use crate::components::modal::Modal;
 use crate::services::backend::Backend;
 use crate::state::explorer::RecordsEpoch;
+use crate::state::gates::{shows_revisions, use_caps};
 use crate::state::record_editor::{DeleteRequest, DeleteTarget, EditorError};
 use crate::state::ui::ModalKind;
 
-fn error_text(error: &EditorError) -> String {
+fn error_text(error: &EditorError, show_revisions: bool) -> String {
     match error {
+        EditorError::Conflict { .. } if !show_revisions => "This record changed since you opened it. Nothing was removed. Close this dialog and review the record.".to_string(),
         EditorError::Conflict { expected, stored } => format!(
             "The record changed after you opened it: you read revision {expected}, the server holds revision {stored}. Nothing was removed. Close this dialog and review the record."
         ),
@@ -32,6 +34,7 @@ pub fn ConfirmDelete() -> Element {
     let backend = use_context::<Rc<dyn Backend>>();
     let epoch = use_context::<RecordsEpoch>();
     use_drop(move || request.set(None));
+    let show_revisions = shows_revisions(use_caps().as_ref());
 
     let Some(r) = request.read().clone() else {
         return rsx! {};
@@ -89,7 +92,7 @@ pub fn ConfirmDelete() -> Element {
                     }
                 }
                 if let Some(e) = &r.error {
-                    div { class: "callout err", role: "alert", "{error_text(e)}" }
+                    div { class: "callout err", role: "alert", "{error_text(e, show_revisions)}" }
                 }
                 div { class: "danger-zone", "Type " strong { "delete" } " to confirm." }
                 input {
@@ -124,14 +127,28 @@ mod tests {
 
     #[test]
     fn a_conflict_says_nothing_was_removed() {
-        let text = error_text(&EditorError::Conflict {
+        let conflict = EditorError::Conflict {
             expected: 18,
             stored: 19,
-        });
+        };
+        let text = error_text(&conflict, true);
         assert!(
             text.contains("revision 18") && text.contains("revision 19"),
             "{text}"
         );
         assert!(text.contains("Nothing was removed"), "{text}");
+    }
+
+    #[test]
+    fn a_conflict_hides_the_numbers_when_revisions_are_hidden() {
+        let text = error_text(
+            &EditorError::Conflict {
+                expected: 18,
+                stored: 19,
+            },
+            false,
+        );
+        assert!(text.contains("changed since you opened it"), "{text}");
+        assert!(!text.contains("18") && !text.contains("19"), "{text}");
     }
 }

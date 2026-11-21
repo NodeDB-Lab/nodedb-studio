@@ -13,6 +13,7 @@ use crate::models::workbench::{TxAccess, TxState};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
+use crate::state::gates::{tx_accesses, use_caps};
 use crate::state::query::{QueryTab, QueryWorkspace, TxEpoch};
 use crate::views::query::tasks::{self, Env, TxOp};
 
@@ -92,6 +93,7 @@ pub fn Toolbar(
 
     let tab_title = tab.as_ref().map(|t| t.title.clone()).unwrap_or_default();
 
+    let caps = use_caps();
     let begin = {
         let backend = backend.clone();
         move |access: TxAccess| {
@@ -134,14 +136,16 @@ pub fn Toolbar(
                         "aria-label": "Run",
                         onclick: move |e| e.stop_propagation(),
                         div { class: "menu-title", "Transaction" }
-                        button {
-                            class: "menu-item",
-                            role: "menuitem",
-                            disabled: tx_state.is_open(),
-                            title: if tx_state.is_open() { "A transaction is already open" } else { "Begin a transaction that cannot write" },
-                            onclick: { let mut begin = begin.clone(); move |_| begin(TxAccess::ReadOnly) },
-                            Ico { icon: Icon::Eye, size: 16 }
-                            "Begin read-only transaction"
+                        if tx_accesses(caps.as_ref()).contains(&TxAccess::ReadOnly) {
+                            button {
+                                class: "menu-item",
+                                role: "menuitem",
+                                disabled: tx_state.is_open(),
+                                title: if tx_state.is_open() { "A transaction is already open" } else { "Begin a transaction that cannot write" },
+                                onclick: { let mut begin = begin.clone(); move |_| begin(TxAccess::ReadOnly) },
+                                Ico { icon: Icon::Eye, size: 16 }
+                                "Begin read-only transaction"
+                            }
                         }
                         button {
                             class: "menu-item",

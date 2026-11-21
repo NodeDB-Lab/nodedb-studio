@@ -12,6 +12,7 @@ pub mod console;
 pub mod designer;
 pub mod events;
 pub mod explorer;
+pub mod gates;
 pub mod graph;
 pub mod notifications;
 pub mod palette;
