@@ -85,8 +85,8 @@ fn orders() -> CollectionSchema {
             field(
                 "total",
                 FieldType::Decimal {
-                    precision: 10,
-                    scale: 2,
+                    precision: Some(10),
+                    scale: Some(2),
                 },
                 true,
             ),
@@ -132,8 +132,8 @@ fn sales() -> CollectionSchema {
             field(
                 "revenue",
                 FieldType::Decimal {
-                    precision: 12,
-                    scale: 2,
+                    precision: Some(12),
+                    scale: Some(2),
                 },
                 true,
             ),
@@ -266,8 +266,8 @@ fn inventory() -> CollectionSchema {
             field(
                 "price",
                 FieldType::Decimal {
-                    precision: 10,
-                    scale: 2,
+                    precision: Some(10),
+                    scale: Some(2),
                 },
                 true,
             ),

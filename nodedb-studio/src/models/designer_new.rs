@@ -55,8 +55,8 @@ pub const FIELD_TYPES: [FieldType; 11] = [
     FieldType::Int64,
     FieldType::Float64,
     FieldType::Decimal {
-        precision: 10,
-        scale: 2,
+        precision: Some(10),
+        scale: Some(2),
     },
     FieldType::Bool,
     FieldType::Timestamp,

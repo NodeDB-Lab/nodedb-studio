@@ -3,8 +3,9 @@
 //! An update writes only the fields the editor's review shows as changed,
 //! decided the way the review decides it. An update and a delete also carry
 //! in their `WHERE` the stored value of each field they depend on, so a
-//! change another writer makes after the read matches no row. No function
-//! here touches the network.
+//! change another writer makes after the read matches no row. Every value
+//! written passes `check_written`: no bytes, and no display placeholder. No
+//! function here touches the network.
 
 use std::collections::HashMap;
 
@@ -28,6 +29,83 @@ pub(super) fn bindable(value: &Value) -> Value {
     }
 }
 
+/// A write that lands only while the fields in `guards` still read as the
+/// caller read them.
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct Guarded {
+    pub statement: Statement,
+    /// The fields the `WHERE` compares, the key aside.
+    pub guards: Vec<String>,
+}
+
+/// Why Studio writes no bytes. Checked live on 0.6.2: 16 bytes bound over
+/// the native protocol read back as 34 bytes of `\x..` text from a BYTES
+/// column, and as text from a schemaless field or a key-value entry.
+// ponytail: lift this refusal when `live_explorer_bytes_do_not_round_trip`
+// fails, which means the server stores bytes as written.
+const NO_BYTES: &str = "NodeDB 0.6.2 does not store bytes correctly over this protocol: \
+     they read back as different bytes or as text. Studio does not write bytes to this server.";
+
+/// The first value in `value`, itself included, that `hit` picks, searched
+/// through arrays, sets and object fields.
+fn find<'a>(value: &'a Value, hit: &dyn Fn(&Value) -> bool) -> Option<&'a Value> {
+    if hit(value) {
+        return Some(value);
+    }
+    match value {
+        Value::Array(items) | Value::Set(items) => items.iter().find_map(|v| find(v, hit)),
+        Value::Object(map) => map.values().find_map(|v| find(v, hit)),
+        // Value is foreign and non-exhaustive: the arm is required.
+        _ => None,
+    }
+}
+
+/// Text that stands for a value the display cannot show in full
+/// (`record_json::write`): bytes as `<N bytes>`, a vector as its first
+/// components and its length. Written back, the text would replace the value.
+/// The display's other forms read back whole: a decimal an `f64` cannot hold
+/// shows quoted, and a NaN or infinite float shows as `null`, which writes
+/// NULL as shown.
+fn placeholder(value: &Value) -> bool {
+    let Value::String(s) = value else {
+        return false;
+    };
+    let bytes = s
+        .strip_prefix('<')
+        .and_then(|r| r.strip_suffix(" bytes>"))
+        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+    let vector = s.starts_with('[') && s.ends_with(" values]") && s.contains('…');
+    bytes || vector
+}
+
+/// Refuses `value` for field `name` when the server would not store it as
+/// the editor shows it: bytes anywhere in it, a non-NULL value for a field
+/// declared as bytes, or a display placeholder anywhere in it. `fix` tells
+/// the user what to do instead.
+fn check_written(meta: &Meta, name: &str, value: &Value, fix: &str) -> Result<(), StudioError> {
+    let declared_bytes = matches!(
+        meta.schema.field(name).map(|f| f.ty),
+        Some(FieldType::Bytes)
+    );
+    if find(value, &|v| matches!(v, Value::Bytes(_))).is_some() {
+        return Err(rejected(format!("`{name}` holds bytes. {NO_BYTES} {fix}")));
+    }
+    if declared_bytes && *value != Value::Null {
+        return Err(rejected(format!(
+            "`{name}` is a BYTES field, so the server stores any value written to it as bytes. \
+             {NO_BYTES} {fix}"
+        )));
+    }
+    match find(value, &placeholder) {
+        Some(text) => Err(rejected(format!(
+            "`{name}` holds {}, the text Studio shows for a value it cannot display: \
+             Studio does not write it. {fix}",
+            compact(text, &[])
+        ))),
+        None => Ok(()),
+    }
+}
+
 /// The fields of a record value, in name order, each name checked.
 fn assignments(meta: &Meta, value: &Value) -> Result<Vec<(String, Value)>, StudioError> {
     let Value::Object(map) = value else {
@@ -42,12 +120,15 @@ fn assignments(meta: &Meta, value: &Value) -> Result<Vec<(String, Value)>, Studi
 }
 
 /// The key a record value carries must equal the key it is addressed by.
-fn same_key(pairs: &[(String, Value)], key: &str, id: &str) -> Result<(), StudioError> {
-    match pairs.iter().find(|(n, _)| n == key) {
-        Some((_, v)) if id_text(v).as_deref() != Some(id) => Err(rejected(format!(
+fn same_key(value: &Value, key: &str, id: &str) -> Result<(), StudioError> {
+    let Value::Object(map) = value else {
+        return Err(rejected("a record is an object of fields".to_string()));
+    };
+    match map.get(key) {
+        Some(v) if id_text(v).as_deref() != Some(id) => Err(rejected(format!(
             "the record names `{key}` differently from `{id}`: a key cannot change"
         ))),
-        _ => Ok(()),
+        Some(_) | None => Ok(()),
     }
 }
 
@@ -77,6 +158,7 @@ fn insert_like(verb: &str, meta: &Meta, pairs: Vec<(String, Value)>, returning: 
     }
 }
 
+/// Inserts every field of `value`, each one checked by `check_written`.
 pub(super) fn insert_statement(
     meta: &Meta,
     id: Option<&str>,
@@ -85,7 +167,7 @@ pub(super) fn insert_statement(
     let mut pairs = assignments(meta, value)?;
     if let Some(id) = id {
         let key = meta.key()?.to_string();
-        same_key(&pairs, &key, id)?;
+        same_key(value, &key, id)?;
         pairs.retain(|(n, _)| *n != key);
         pairs.push((key, meta.id_value(id)?));
         pairs.sort_by(|a, b| a.0.cmp(&b.0));
@@ -93,29 +175,24 @@ pub(super) fn insert_statement(
     if pairs.is_empty() {
         return Err(rejected("a record needs at least one field".to_string()));
     }
+    for (name, v) in &pairs {
+        check_written(
+            meta,
+            name,
+            v,
+            &format!("Remove `{name}` from the record, or give it a value."),
+        )?;
+    }
     Ok(insert_like("INSERT", meta, pairs, true))
-}
-
-/// Text that stands for a value the display cannot show in full
-/// (`record_json::write`): bytes as `<N bytes>`, a vector as its first
-/// components and its length. Written back, the text would replace the value.
-fn placeholder(value: &Value) -> bool {
-    let Value::String(s) = value else {
-        return false;
-    };
-    let bytes = s
-        .strip_prefix('<')
-        .and_then(|r| r.strip_suffix(" bytes>"))
-        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
-    let vector = s.starts_with('[') && s.ends_with(" values]") && s.contains('…');
-    bytes || vector
 }
 
 /// The fields `new` sets differently from `stored`, decided as the editor's
 /// review decides it (`record_check::changes`): both sides normalized against
 /// the schema, then compared as compact text. A value the display shortens
 /// equals its own display text, so an untouched bytes field is no change.
-/// `None` writes NULL. NULL over an absent field is no change.
+/// `None` writes NULL. NULL over an absent field is no change. Only these
+/// fields' names reach the statement, so a name Studio cannot write blocks
+/// only an edit of that field.
 fn changed(
     meta: &Meta,
     key: &str,
@@ -139,29 +216,27 @@ fn changed(
         if value.is_none() && was_null {
             continue;
         }
-        if let Some(v) = value.as_ref().filter(|v| placeholder(v)) {
-            return Err(rejected(format!(
-                "`{}` holds {}, the text Studio shows for a value it cannot display: \
-                 Studio does not write it. Undo the change to `{}`.",
-                change.field,
-                compact(v, &[]),
-                change.field
-            )));
+        let name = meta.field(&change.field)?;
+        if let Some(v) = &value {
+            check_written(meta, name, v, &format!("Undo the change to `{name}`."))?;
         }
-        out.push((meta.field(&change.field)?.to_string(), value));
+        out.push((name.to_string(), value));
     }
     Ok(out)
 }
 
 /// `value` as a `WHERE` operand the server compares exactly, or `None`.
-/// Checked live on 0.6.2: a scalar matches its stored value on every profile.
-/// An object, an array or bytes does not match even its own stored value, so
-/// it stays out of the condition.
+/// Checked live on 0.6.2 on strict, schemaless, key-value and columnar
+/// collections: text (quotes and non-ASCII included), integers, finite
+/// floats, booleans, decimals (they read back as text) and TIMESTAMP and
+/// TIMESTAMPTZ values each match their stored value. Left out: an object, an
+/// array or bytes (no match even with its own stored value), a NaN or
+/// infinite float, a UUID (a columnar UUID column does not match its own
+/// text), and every other variant.
 fn operand(value: &Value) -> Option<Value> {
     match value {
         Value::Bool(_) | Value::Integer(_) | Value::String(_) => Some(value.clone()),
         Value::Float(f) if f.is_finite() => Some(value.clone()),
-        Value::Uuid(s) | Value::Ulid(s) => Some(Value::String(s.clone())),
         Value::DateTime(t) | Value::NaiveDateTime(t) => Some(Value::DateTime(*t)),
         // Value is foreign and non-exhaustive: the arm is required.
         _ => None,
@@ -169,8 +244,9 @@ fn operand(value: &Value) -> Option<Value> {
 }
 
 /// Whether a field's declared type compares by value. A JSON field that holds
-/// an object never matches it (checked live), so such a field stays out of the
-/// condition whatever it holds.
+/// an object never matches it, and a columnar UUID field never matches its
+/// own text (both checked live), so such a field stays out of the condition
+/// whatever it holds.
 fn compares(meta: &Meta, name: &str) -> bool {
     match meta.schema.field(name).map(|f| f.ty) {
         Some(
@@ -179,7 +255,8 @@ fn compares(meta: &Meta, name: &str) -> bool {
             | FieldType::Json
             | FieldType::Vector { .. }
             | FieldType::Geometry { .. }
-            | FieldType::Bytes,
+            | FieldType::Bytes
+            | FieldType::Uuid,
         ) => false,
         Some(
             FieldType::String { .. }
@@ -188,8 +265,7 @@ fn compares(meta: &Meta, name: &str) -> bool {
             | FieldType::Decimal { .. }
             | FieldType::Bool
             | FieldType::Timestamp
-            | FieldType::Datetime
-            | FieldType::Uuid,
+            | FieldType::Datetime,
         )
         | None => true,
     }
@@ -198,21 +274,22 @@ fn compares(meta: &Meta, name: &str) -> bool {
 /// `"f" = $n` or `"f" IS NULL` for each of `names` as `stored` holds it, so
 /// the write lands only on a record whose fields still read that way. A value
 /// that does not compare exactly stays out: the fingerprint check the caller
-/// runs before the write still covers it.
+/// runs before the write still covers it. Returns the guarded names and
+/// their conditions.
 fn unchanged_since(
     meta: &Meta,
     stored: &HashMap<String, Value>,
     names: &[&str],
     binder: &mut Binder,
-) -> Vec<String> {
+) -> (Vec<String>, Vec<String>) {
     names
         .iter()
         .filter(|n| compares(meta, n))
         .filter_map(|n| match stored.get(*n) {
-            None | Some(Value::Null) => Some(format!("\"{n}\" IS NULL")),
-            Some(v) => operand(v).map(|o| format!("\"{n}\" = {}", binder.push(o))),
+            None | Some(Value::Null) => Some((n.to_string(), format!("\"{n}\" IS NULL"))),
+            Some(v) => operand(v).map(|o| (n.to_string(), format!("\"{n}\" = {}", binder.push(o)))),
         })
-        .collect()
+        .unzip()
 }
 
 /// Whether a key-value entry holds a bare value. The server stores a lone
@@ -232,9 +309,9 @@ pub(super) fn update_statement(
     id: &str,
     stored: &Value,
     new: &Value,
-) -> Result<Option<Statement>, StudioError> {
+) -> Result<Option<Guarded>, StudioError> {
     let key = meta.key()?;
-    same_key(&assignments(meta, new)?, key, id)?;
+    same_key(new, key, id)?;
     let Value::Object(old) = stored else {
         return Err(StudioError::MalformedRows {
             reason: "a stored record is not an object".to_string(),
@@ -266,7 +343,10 @@ pub(super) fn update_statement(
             .collect::<Result<Vec<_>, StudioError>>()?;
         pairs.push((key.to_string(), meta.id_value(id)?));
         pairs.sort_by(|a, b| a.0.cmp(&b.0));
-        return Ok(Some(insert_like("UPSERT", meta, pairs, false)));
+        return Ok(Some(Guarded {
+            statement: insert_like("UPSERT", meta, pairs, false),
+            guards: Vec::new(),
+        }));
     }
     let mut binder = Binder::default();
     let assigns: Vec<String> = set
@@ -278,15 +358,19 @@ pub(super) fn update_statement(
         .collect();
     let mut filter = vec![format!("\"{key}\" = {}", binder.push(meta.id_value(id)?))];
     let names: Vec<&str> = set.iter().map(|(n, _)| n.as_str()).collect();
-    filter.extend(unchanged_since(meta, old, &names, &mut binder));
-    Ok(Some(Statement {
-        sql: format!(
-            "UPDATE {} SET {} WHERE {}",
-            meta.collection,
-            assigns.join(", "),
-            filter.join(" AND ")
-        ),
-        params: binder.params,
+    let (guards, conditions) = unchanged_since(meta, old, &names, &mut binder);
+    filter.extend(conditions);
+    Ok(Some(Guarded {
+        statement: Statement {
+            sql: format!(
+                "UPDATE {} SET {} WHERE {}",
+                meta.collection,
+                assigns.join(", "),
+                filter.join(" AND ")
+            ),
+            params: binder.params,
+        },
+        guards,
     }))
 }
 
@@ -297,10 +381,11 @@ pub(super) fn delete_statement(
     meta: &Meta,
     id: &str,
     stored: &Value,
-) -> Result<Statement, StudioError> {
+) -> Result<Guarded, StudioError> {
     let key = meta.key()?;
     let mut binder = Binder::default();
     let mut filter = vec![format!("\"{key}\" = {}", binder.push(meta.id_value(id)?))];
+    let mut guards = Vec::new();
     if let Value::Object(old) = stored {
         let mut names: Vec<&str> = old
             .keys()
@@ -308,15 +393,20 @@ pub(super) fn delete_statement(
             .filter(|n| *n != key && meta.field(n).is_ok())
             .collect();
         names.sort_unstable();
-        filter.extend(unchanged_since(meta, old, &names, &mut binder));
+        let (names, conditions) = unchanged_since(meta, old, &names, &mut binder);
+        guards = names;
+        filter.extend(conditions);
     }
-    Ok(Statement {
-        sql: format!(
-            "DELETE FROM {} WHERE {}",
-            meta.collection,
-            filter.join(" AND ")
-        ),
-        params: binder.params,
+    Ok(Guarded {
+        statement: Statement {
+            sql: format!(
+                "DELETE FROM {} WHERE {}",
+                meta.collection,
+                filter.join(" AND ")
+            ),
+            params: binder.params,
+        },
+        guards,
     })
 }
 
@@ -343,7 +433,16 @@ mod tests {
     }
 
     fn update(meta: &Meta, stored: &Value, new: &Value) -> Option<Statement> {
-        update_statement(meta, "a", stored, new).expect("builds")
+        update_statement(meta, "a", stored, new)
+            .expect("builds")
+            .map(|g| g.statement)
+    }
+
+    fn refusal(result: Result<impl std::fmt::Debug, StudioError>) -> String {
+        match result {
+            Err(StudioError::Rejected { reason }) => reason,
+            other => panic!("expected a refusal, got {other:?}"),
+        }
     }
 
     #[test]
@@ -506,12 +605,13 @@ mod tests {
             ("meta", s("text in a JSON field")),
             ("f", Value::Float(f64::NAN)),
         ]);
-        let st = delete_statement(&meta, "a", &stored).expect("builds");
+        let g = delete_statement(&meta, "a", &stored).expect("builds");
         assert_eq!(
-            st.sql,
+            g.statement.sql,
             "DELETE FROM c WHERE \"id\" = $1 AND \"name\" = $2 AND \"qty\" IS NULL"
         );
-        assert_eq!(st.params, [s("a"), s("n")]);
+        assert_eq!(g.statement.params, [s("a"), s("n")]);
+        assert_eq!(g.guards, ["name", "qty"]);
 
         let doc = obj(&[
             ("id", s("a")),
@@ -519,20 +619,171 @@ mod tests {
             ("arr", Value::Array(vec![Value::Integer(1)])),
             ("at", Value::NaiveDateTime(NdbDateTime::from_micros(7))),
             ("u", Value::Uuid("u-1".into())),
-            ("bad name", s("x")),
+            ("e-mail", s("x")),
+            ("bad\"name", s("x")),
         ]);
-        let st = delete_statement(&schemaless(), "a", &doc).expect("builds");
+        let g = delete_statement(&schemaless(), "a", &doc).expect("builds");
         assert_eq!(
-            st.sql,
-            "DELETE FROM d WHERE \"id\" = $1 AND \"at\" = $2 AND \"u\" = $3"
+            g.statement.sql,
+            "DELETE FROM d WHERE \"id\" = $1 AND \"at\" = $2 AND \"e-mail\" = $3"
         );
         assert_eq!(
-            st.params,
-            [
-                s("a"),
-                Value::DateTime(NdbDateTime::from_micros(7)),
-                s("u-1")
-            ]
+            g.statement.params,
+            [s("a"), Value::DateTime(NdbDateTime::from_micros(7)), s("x")]
+        );
+
+        // a declared UUID never guards: a columnar UUID column does not
+        // match its own text on 0.6.2
+        let mut meta = strict();
+        meta.schema.fields.push(field("u", FieldType::Uuid));
+        let stored = obj(&[
+            ("id", s("a")),
+            ("u", s("6f1c2a3e-1b2c-4d5e-8f90-1234567890ab")),
+        ]);
+        let g = delete_statement(&meta, "a", &stored).expect("builds");
+        assert_eq!(g.statement.sql, "DELETE FROM c WHERE \"id\" = $1");
+        assert!(g.guards.is_empty());
+    }
+
+    /// An insert writes every field, so every field passes the checks, and
+    /// a placeholder inside an array or an object is found too.
+    #[test]
+    fn an_insert_never_writes_display_text_anywhere_in_a_field() {
+        let id = ("id", s("a2"));
+        let vector = s("[0.5, 0.25, 0.125, … 768 values]");
+        for (name, value) in [
+            ("b", s("<16 bytes>")),
+            (
+                "arr",
+                Value::Array(vec![Value::Integer(1), s("<16 bytes>")]),
+            ),
+            ("o", obj(&[("deep", obj(&[("b", s("<2 bytes>"))]))])),
+            ("e", vector),
+        ] {
+            let reason = refusal(insert_statement(
+                &schemaless(),
+                None,
+                &obj(&[id.clone(), (name, value)]),
+            ));
+            assert!(reason.contains(&format!("`{name}`")), "{reason}");
+            assert!(reason.contains("Remove"), "{reason}");
+        }
+        // text that only resembles a placeholder is written
+        assert!(insert_statement(&schemaless(), None, &obj(&[id, ("t", s("<x bytes>"))])).is_ok());
+    }
+
+    /// 0.6.2 corrupts bytes written over the native protocol, so no write
+    /// carries them: not as a value, not inside one, and not into a field
+    /// declared as bytes. NULL carries no bytes.
+    #[test]
+    fn no_write_carries_bytes() {
+        let bytes = Value::Bytes(vec![1; 16]);
+        for value in [
+            obj(&[("id", s("a")), ("b", bytes.clone())]),
+            obj(&[("id", s("a")), ("arr", Value::Array(vec![bytes.clone()]))]),
+        ] {
+            let reason = refusal(insert_statement(&schemaless(), None, &value));
+            assert!(
+                reason.contains("0.6.2") && reason.contains("bytes"),
+                "{reason}"
+            );
+        }
+        let mut meta = strict();
+        meta.schema.fields.push(field("b", FieldType::Bytes));
+        let reason = refusal(insert_statement(
+            &meta,
+            None,
+            &obj(&[("id", s("a")), ("b", s("AAEC"))]),
+        ));
+        assert!(
+            reason.contains("`b`") && reason.contains("0.6.2"),
+            "{reason}"
+        );
+        assert!(insert_statement(&meta, None, &obj(&[("id", s("a")), ("b", Value::Null)])).is_ok());
+
+        let stored = obj(&[("id", s("a")), ("b", bytes.clone()), ("name", s("n"))]);
+        let reason = refusal(update_statement(
+            &meta,
+            "a",
+            &stored,
+            &obj(&[("id", s("a")), ("b", s("AAEC")), ("name", s("n"))]),
+        ));
+        assert!(reason.contains("Undo the change to `b`"), "{reason}");
+        // removing the bytes writes NULL, which stores no bytes
+        let st =
+            update(&meta, &stored, &obj(&[("id", s("a")), ("name", s("n"))])).expect("changes");
+        assert!(
+            st.sql.starts_with("UPDATE c SET \"b\" = NULL WHERE"),
+            "{}",
+            st.sql
+        );
+    }
+
+    /// An array that held bytes shows them as `<N bytes>`. Changing another
+    /// element would write that text over the bytes.
+    #[test]
+    fn an_update_never_writes_display_text_inside_a_changed_field() {
+        let stored = obj(&[
+            ("id", s("a")),
+            (
+                "arr",
+                Value::Array(vec![Value::Bytes(vec![1, 2]), Value::Integer(1)]),
+            ),
+        ]);
+        let draft = obj(&[
+            ("id", s("a")),
+            ("arr", Value::Array(vec![s("<2 bytes>"), Value::Integer(2)])),
+        ]);
+        let reason = refusal(update_statement(&schemaless(), "a", &stored, &draft));
+        assert!(reason.contains("Undo the change to `arr`"), "{reason}");
+        // untouched, the same array is no change and is not written
+        let same = obj(&[
+            ("id", s("a")),
+            ("arr", Value::Array(vec![s("<2 bytes>"), Value::Integer(1)])),
+        ]);
+        assert_eq!(update(&schemaless(), &stored, &same), None);
+    }
+
+    /// Only the key and the fields an edit writes must be names Studio can
+    /// put in a statement. A quoted name with a dash works on 0.6.2. A name
+    /// holding `"` does not, and blocks only an edit of that field.
+    #[test]
+    fn an_edit_checks_only_the_names_it_writes() {
+        let stored = obj(&[
+            ("id", s("a")),
+            ("e-mail", s("x@y")),
+            ("a\"q", s("q")),
+            ("name", s("n")),
+        ]);
+        let with = |field: &str, value: &str| {
+            let mut draft = stored.clone();
+            if let Value::Object(m) = &mut draft {
+                m.insert(field.into(), s(value));
+            }
+            draft
+        };
+        let st = update(&schemaless(), &stored, &with("name", "n2")).expect("changes");
+        assert_eq!(
+            st.sql,
+            "UPDATE d SET \"name\" = $1 WHERE \"id\" = $2 AND \"name\" = $3"
+        );
+        let st = update(&schemaless(), &stored, &with("e-mail", "z@y")).expect("changes");
+        assert_eq!(
+            st.sql,
+            "UPDATE d SET \"e-mail\" = $1 WHERE \"id\" = $2 AND \"e-mail\" = $3"
+        );
+        let reason = refusal(update_statement(
+            &schemaless(),
+            "a",
+            &stored,
+            &with("a\"q", "q2"),
+        ));
+        assert!(reason.contains("a\"q"), "{reason}");
+        let g = delete_statement(&schemaless(), "a", &stored).expect("builds");
+        assert_eq!(
+            g.guards,
+            ["e-mail", "name"],
+            "the unwritable name stays out"
         );
     }
 
@@ -543,6 +794,7 @@ mod tests {
         assert_eq!(
             delete_statement(&meta, "20", &Value::Null)
                 .expect("builds")
+                .statement
                 .params,
             [Value::Integer(20)]
         );

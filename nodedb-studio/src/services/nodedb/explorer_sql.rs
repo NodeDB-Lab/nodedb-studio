@@ -3,8 +3,9 @@
 //!
 //! Values travel as `$n` parameters. Identifiers (collection, field names)
 //! cannot be bound, so each one passes `Meta::field` or `ident` before it
-//! reaches the text, a name the server reports included. No function here
-//! touches the network.
+//! reaches the text, a name the server reports included. A field name always
+//! reaches the text inside double quotes. No function here touches the
+//! network.
 
 use std::collections::HashMap;
 
@@ -49,22 +50,37 @@ pub(super) fn rejected(reason: String) -> StudioError {
 }
 
 impl Meta {
-    /// `name` as a field the server can be asked about. The name must be a
-    /// bare identifier, and a collection with declared fields must declare it.
-    /// A schemaless collection declares none, so any bare identifier passes
-    /// and the server answers an unknown one with no rows.
+    /// `name` as a field the server can be asked about, for the caller to
+    /// write as `"name"`. Checked live on 0.6.2: a quoted name with a dash, a
+    /// space, a `'`, `$1`, `--` or non-ASCII letters works in INSERT, UPDATE
+    /// SET and WHERE, and the server refuses a name holding `"`. So a name
+    /// passes unless it is empty or holds `"` or a control character, which
+    /// keeps it inside its quotes. A collection with declared fields must
+    /// declare it. A schemaless collection declares none, so any such name
+    /// passes and the server answers an unknown one with no rows.
     pub fn field<'a>(&self, name: &'a str) -> Result<&'a str, StudioError> {
-        let bare = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-        let known = !self.schema.typed_headers
-            || self.schema.field(name).is_some()
-            || self.schema.id_field.as_deref() == Some(name);
-        if bare && known {
-            Ok(name)
+        let why = if name.is_empty() {
+            Some("an empty field name cannot be used in a statement".to_string())
+        } else if name.contains('"') {
+            Some(format!(
+                "`{name}` holds a double quote, and NodeDB 0.6.2 refuses such a field name \
+                 in a statement: Studio cannot write or filter by it"
+            ))
+        } else if name.chars().any(char::is_control) {
+            Some(format!(
+                "{name:?} holds a control character, which Studio does not put in a statement"
+            ))
+        } else if self.schema.typed_headers
+            && self.schema.field(name).is_none()
+            && self.schema.id_field.as_deref() != Some(name)
+        {
+            Some(format!("`{name}` is not a field of {}", self.collection))
         } else {
-            Err(rejected(format!(
-                "`{name}` is not a field of {} that Studio can use in a statement",
-                self.collection
-            )))
+            None
+        };
+        match why {
+            None => Ok(name),
+            Some(reason) => Err(rejected(reason)),
         }
     }
 
@@ -518,16 +534,31 @@ pub(super) mod tests {
     }
 
     #[test]
-    fn a_field_must_be_bare_and_declared() {
+    fn a_field_must_stay_inside_its_quotes_and_be_declared() {
         let m = strict();
         assert_eq!(m.field("name").ok(), Some("name"));
         assert!(m.field("nope").is_err());
         assert!(m.field("name\" OR 1=1 --").is_err());
-        // a schemaless collection declares nothing: any bare name passes
+        // a schemaless collection declares nothing: any quotable name passes
         let d = schemaless();
-        assert!(d.field("anything_9").is_ok());
-        assert!(d.field("a b").is_err());
-        assert!(d.field("a;b").is_err());
+        for ok in [
+            "anything_9",
+            "e-mail",
+            "a b",
+            "a;b",
+            "o'k",
+            "名前",
+            "a$1",
+            "x--y",
+        ] {
+            assert_eq!(d.field(ok).ok(), Some(ok), "{ok}");
+        }
+        for bad in ["", "a\"b", "a\0b", "a\nb", "a\u{7f}"] {
+            assert!(
+                matches!(d.field(bad), Err(StudioError::Rejected { .. })),
+                "{bad:?}"
+            );
+        }
     }
 
     #[test]

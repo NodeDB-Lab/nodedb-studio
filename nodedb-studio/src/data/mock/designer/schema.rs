@@ -80,8 +80,8 @@ fn articles(collection: Collection) -> DesignCollection {
 
 fn orders(collection: Collection) -> DesignCollection {
     let decimal = FieldType::Decimal {
-        precision: 10,
-        scale: 2,
+        precision: Some(10),
+        scale: Some(2),
     };
     DesignCollection {
         collection,
@@ -100,8 +100,8 @@ fn orders(collection: Collection) -> DesignCollection {
 
 fn sales(collection: Collection) -> DesignCollection {
     let decimal = FieldType::Decimal {
-        precision: 12,
-        scale: 2,
+        precision: Some(12),
+        scale: Some(2),
     };
     DesignCollection {
         collection,

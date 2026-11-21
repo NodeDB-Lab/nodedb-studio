@@ -148,12 +148,14 @@ fn parse_type(raw: &str) -> FieldType {
         ColumnType::Int64 => FieldType::Int64,
         ColumnType::Float64 => FieldType::Float64,
         ColumnType::Decimal(Some(typmod)) => FieldType::Decimal {
-            precision: typmod.precision(),
-            scale: typmod.scale(),
+            precision: Some(typmod.precision()),
+            scale: Some(typmod.scale()),
         },
+        // Checked live on 0.6.2: a bare DECIMAL or NUMERIC stores `3.14159`
+        // as given, so it has no limit for the editor to enforce.
         ColumnType::Decimal(None) => FieldType::Decimal {
-            precision: 38,
-            scale: 0,
+            precision: None,
+            scale: None,
         },
         ColumnType::Bool => FieldType::Bool,
         ColumnType::Timestamp | ColumnType::Timestamptz | ColumnType::SystemTimestamp => {
@@ -470,8 +472,8 @@ mod tests {
         assert_eq!(
             parse_type("DECIMAL(10,2)"),
             FieldType::Decimal {
-                precision: 10,
-                scale: 2
+                precision: Some(10),
+                scale: Some(2)
             }
         );
         assert_eq!(parse_type("VECTOR(3)"), FieldType::Vector { dimensions: 3 });
@@ -509,8 +511,24 @@ mod tests {
             (
                 "NUMERIC(6, 3)",
                 FieldType::Decimal {
-                    precision: 6,
-                    scale: 3,
+                    precision: Some(6),
+                    scale: Some(3),
+                },
+            ),
+            // `DESCRIBE` prints a bare DECIMAL or NUMERIC as written (live,
+            // 0.6.2): no limit.
+            (
+                "DECIMAL",
+                FieldType::Decimal {
+                    precision: None,
+                    scale: None,
+                },
+            ),
+            (
+                "NUMERIC NOT NULL",
+                FieldType::Decimal {
+                    precision: None,
+                    scale: None,
                 },
             ),
         ] {

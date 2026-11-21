@@ -198,12 +198,16 @@ impl RecordEditor {
         }
     }
 
-    pub fn title(&self) -> String {
+    /// The dialog title. `revisions` is `gates::shows_revisions`: a server
+    /// without record revisions gets no number, since Studio's stand-in is a
+    /// content fingerprint that means nothing to read.
+    pub fn title(&self, revisions: bool) -> String {
         match (&self.mode, &self.stored) {
-            (EditorMode::Edit, Some(r)) => format!(
+            (EditorMode::Edit, Some(r)) if revisions => format!(
                 "Edit record {}/{}, revision {}",
                 self.collection, r.id, r.revision
             ),
+            (EditorMode::Edit, Some(r)) => format!("Edit record {}/{}", self.collection, r.id),
             (EditorMode::Edit, None) | (EditorMode::Insert, _) => {
                 format!("Insert record into {}", self.collection)
             }
@@ -286,8 +290,10 @@ impl RecordEditor {
     }
 
     /// Rebase on a record read after a conflict: the stored side moves, the
-    /// edit stays.
+    /// edit stays. Vectors are not in the text, so they move with the stored
+    /// side: a save then keeps the other writer's vector.
     pub fn rebase(&mut self, stored: Record) {
+        self.held = split_vectors(&stored.value, &self.schema).1;
         self.stored = Some(stored);
         self.error = None;
         self.stage = Stage::Editing;
@@ -360,7 +366,8 @@ mod tests {
         let e = edit("users", Profile::Document, "u44182");
         assert!(e.changes().is_empty());
         assert!(!e.can_review());
-        assert_eq!(e.title(), "Edit record users/u44182, revision 18");
+        assert_eq!(e.title(true), "Edit record users/u44182, revision 18");
+        assert_eq!(e.title(false), "Edit record users/u44182");
     }
 
     #[test]
@@ -443,6 +450,22 @@ mod tests {
             (e.stage, e.busy, e.error.clone()),
             (Stage::Editing, false, None)
         );
+    }
+
+    #[test]
+    fn a_reload_takes_the_other_writers_vector() {
+        let mut e = edit("articles", Profile::Document, "art104");
+        let mut newer = e.stored.clone().expect("stored");
+        let theirs = Value::Vector(vec![9.0, 9.0, 9.0].into());
+        if let Value::Object(m) = &mut newer.value {
+            m.insert("embedding".into(), theirs.clone());
+        }
+        e.rebase(newer);
+        match e.draft().expect("draft") {
+            Value::Object(m) => assert_eq!(m.get("embedding"), Some(&theirs)),
+            other => panic!("not an object: {other:?}"),
+        }
+        assert!(e.changes().is_empty(), "the held vector is no change");
     }
 
     #[test]

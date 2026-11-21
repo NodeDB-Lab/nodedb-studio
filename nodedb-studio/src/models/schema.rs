@@ -16,9 +16,11 @@ pub enum FieldType {
     },
     Int64,
     Float64,
+    /// Both `None` for a bare `DECIMAL` or `NUMERIC`: the server then stores
+    /// any precision and scale. Both set otherwise.
     Decimal {
-        precision: u8,
-        scale: u8,
+        precision: Option<u8>,
+        scale: Option<u8>,
     },
     Bool,
     Timestamp,
@@ -46,7 +48,11 @@ impl FieldType {
             FieldType::String { max: Some(n) } => format!("string({n})"),
             FieldType::Int64 => "int64".to_string(),
             FieldType::Float64 => "float64".to_string(),
-            FieldType::Decimal { precision, scale } => format!("decimal({precision},{scale})"),
+            FieldType::Decimal {
+                precision: Some(p),
+                scale: Some(s),
+            } => format!("decimal({p},{s})"),
+            FieldType::Decimal { .. } => "decimal".to_string(),
             FieldType::Bool => "bool".to_string(),
             FieldType::Timestamp => "timestamp".to_string(),
             FieldType::Datetime => "datetime".to_string(),
@@ -103,8 +109,12 @@ impl FieldType {
     pub fn ddl(self) -> String {
         match self {
             FieldType::String { max: Some(n) } => format!("VARCHAR({n})"),
-            FieldType::Decimal { precision, scale } => format!("DECIMAL({precision},{scale})"),
+            FieldType::Decimal {
+                precision: Some(p),
+                scale: Some(s),
+            } => format!("DECIMAL({p},{s})"),
             FieldType::String { max: None }
+            | FieldType::Decimal { .. }
             | FieldType::Int64
             | FieldType::Float64
             | FieldType::Bool
@@ -306,13 +316,19 @@ mod tests {
 
     #[test]
     fn type_labels_carry_their_parameters() {
+        let fixed = FieldType::Decimal {
+            precision: Some(10),
+            scale: Some(2),
+        };
+        assert_eq!(fixed.label(), "decimal(10,2)");
+        assert_eq!(fixed.ddl(), "DECIMAL(10,2)");
+        let free = FieldType::Decimal {
+            precision: None,
+            scale: None,
+        };
         assert_eq!(
-            FieldType::Decimal {
-                precision: 10,
-                scale: 2
-            }
-            .label(),
-            "decimal(10,2)"
+            (free.label().as_str(), free.ddl().as_str()),
+            ("decimal", "DECIMAL")
         );
         assert_eq!(FieldType::String { max: Some(3) }.label(), "string(3)");
         assert_eq!(
@@ -327,8 +343,8 @@ mod tests {
         assert!(FieldType::Int64.numeric());
         assert!(
             FieldType::Decimal {
-                precision: 10,
-                scale: 2
+                precision: Some(10),
+                scale: Some(2)
             }
             .numeric()
         );

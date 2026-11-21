@@ -211,6 +211,7 @@ impl NodeDbConnectionService {
     }
 
     pub(super) async fn remove_edge(&self, graph: &str, id: &str) -> Result<(), StudioError> {
+        self.outside_tx()?;
         let missing = || StudioError::RecordMissing {
             collection: graph.to_string(),
             id: id.to_string(),
