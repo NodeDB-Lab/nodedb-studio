@@ -483,6 +483,7 @@ mod tests {
             mode: crate::models::query_plan::ExplainMode::Explain,
             operators: Vec::new(),
             elapsed_ms: None,
+            text: None,
         })));
         assert!(matches!(query_plan, AsyncState::Loaded(_)));
     }

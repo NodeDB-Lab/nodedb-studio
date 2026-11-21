@@ -1,33 +1,25 @@
-//! The mock's workbench state: the transaction, the saved-query library,
-//! and the console history. Writes land here and every later read sees
+//! The mock's workbench state: the transaction, and the seeded saved-query
+//! library and console history. Writes land here and every later read sees
 //! them.
-
-use std::collections::BTreeMap;
 
 use crate::data::mock::workbench::console::{self, bare};
 use crate::data::mock::workbench::library::{self, OWNER};
 use crate::data::mock::workbench::results::{affected, result_set};
-use crate::models::console::{ConsoleOutput, ConsoleReply, HistoryEntry, HistoryQuery, Protocol};
+use crate::models::console::{ConsoleOutput, ConsoleReply, Protocol};
 use crate::models::format::epoch;
-use crate::models::saved_query::{
-    QueryLibrary, QueryScope, SaveQuery, SavedQuery, SavedQueryVersion,
-};
 use crate::models::sql_text::{TokenKind, parameters, tokenize};
 use crate::models::workbench::{
     MessageLevel, QueryMessage, QueryRequest, QueryRun, TxAccess, TxState,
 };
 use crate::services::error::StudioError;
+use crate::state::workbench_records::WorkbenchRecords;
 
 #[derive(Debug, Clone)]
 pub struct WorkbenchStore {
     tx: TxState,
-    library: QueryLibrary,
-    versions: BTreeMap<String, Vec<SavedQueryVersion>>,
-    history: Vec<HistoryEntry>,
-    /// The mock's clock. Every write advances it a minute, so timestamps
-    /// are deterministic.
-    clock: i64,
-    seq: u32,
+    /// The seeded library and history. The mock's clock advances a minute
+    /// per write, so timestamps are deterministic.
+    pub records: WorkbenchRecords,
 }
 
 impl WorkbenchStore {
@@ -36,22 +28,14 @@ impl WorkbenchStore {
         let versions = library::versions(&library);
         Self {
             tx: TxState::Idle,
-            library,
-            versions,
-            history: console::history(),
-            clock: epoch(2026, 6, 13, 13, 30, 0),
-            seq: 0,
+            records: WorkbenchRecords::ticking(
+                library,
+                versions,
+                console::history(),
+                epoch(2026, 6, 13, 13, 30, 0),
+                OWNER,
+            ),
         }
-    }
-
-    fn tick(&mut self) -> i64 {
-        self.clock += 60;
-        self.clock
-    }
-
-    fn next(&mut self) -> u32 {
-        self.seq += 1;
-        self.seq
     }
 
     pub fn transaction(&self) -> TxState {
@@ -222,128 +206,6 @@ impl WorkbenchStore {
         })
     }
 
-    pub fn library(&self) -> QueryLibrary {
-        self.library.clone()
-    }
-
-    pub fn versions(&self, id: &str) -> Result<Vec<SavedQueryVersion>, StudioError> {
-        self.versions
-            .get(id)
-            .cloned()
-            .ok_or_else(|| StudioError::UnknownQuery(id.to_string()))
-    }
-
-    pub fn save(&mut self, save: &SaveQuery) -> Result<SavedQuery, StudioError> {
-        let name = save.name.trim().to_string();
-        if name.is_empty() {
-            return Err(StudioError::Rejected {
-                reason: "a saved query needs a name".to_string(),
-            });
-        }
-        if self
-            .library
-            .queries
-            .iter()
-            .any(|q| q.name.eq_ignore_ascii_case(&name) && Some(&q.id) != save.id.as_ref())
-        {
-            return Err(StudioError::QueryNameTaken(name));
-        }
-        if let Some(folder) = &save.folder
-            && !self.library.folders.contains(folder)
-        {
-            return Err(StudioError::Rejected {
-                reason: format!("there is no folder named `{folder}`"),
-            });
-        }
-        let now = self.tick();
-        let saved = match &save.id {
-            Some(id) => {
-                let idx = self
-                    .library
-                    .queries
-                    .iter()
-                    .position(|q| &q.id == id)
-                    .ok_or_else(|| StudioError::UnknownQuery(id.clone()))?;
-                let q = &mut self.library.queries[idx];
-                if q.owner != OWNER {
-                    return Err(StudioError::Rejected {
-                        reason: format!("only {} can save a new version: use Save as", q.owner),
-                    });
-                }
-                q.name = name;
-                q.folder = save.folder.clone();
-                q.database = save.database.clone();
-                q.sql = save.sql.clone();
-                q.params = save.params.clone();
-                q.tags = save.tags.clone();
-                q.version += 1;
-                q.updated_at = now;
-                q.last_error = None;
-                q.clone()
-            }
-            None => {
-                let n = self.next();
-                let q = SavedQuery {
-                    id: format!("q-new-{n}"),
-                    name,
-                    folder: save.folder.clone(),
-                    scope: QueryScope::MyWorkspace,
-                    owner: OWNER.to_string(),
-                    database: save.database.clone(),
-                    sql: save.sql.clone(),
-                    params: save.params.clone(),
-                    tags: save.tags.clone(),
-                    version: 1,
-                    updated_at: now,
-                    last_error: None,
-                };
-                self.library.queries.push(q.clone());
-                q
-            }
-        };
-        self.versions.entry(saved.id.clone()).or_default().insert(
-            0,
-            SavedQueryVersion {
-                version: saved.version,
-                saved_at: now,
-                author: OWNER.to_string(),
-                sql: saved.sql.clone(),
-            },
-        );
-        Ok(saved)
-    }
-
-    pub fn delete(&mut self, id: &str) -> Result<(), StudioError> {
-        let before = self.library.queries.len();
-        self.library.queries.retain(|q| q.id != id);
-        if self.library.queries.len() == before {
-            return Err(StudioError::UnknownQuery(id.to_string()));
-        }
-        self.versions.remove(id);
-        Ok(())
-    }
-
-    pub fn create_folder(&mut self, name: &str) -> Result<(), StudioError> {
-        let name = name.trim();
-        if name.is_empty() {
-            return Err(StudioError::Rejected {
-                reason: "a folder needs a name".to_string(),
-            });
-        }
-        if self
-            .library
-            .folders
-            .iter()
-            .any(|f| f.eq_ignore_ascii_case(name))
-        {
-            return Err(StudioError::Rejected {
-                reason: format!("a folder named `{name}` already exists"),
-            });
-        }
-        self.library.folders.push(name.to_string());
-        Ok(())
-    }
-
     /// Run one console command. Transaction control moves the session's
     /// transaction, the same one the Query page shows.
     pub fn console(
@@ -352,17 +214,7 @@ impl WorkbenchStore {
         database: &str,
         text: &str,
     ) -> Result<ConsoleReply, StudioError> {
-        let at = self.tick();
-        let n = 100 + self.next();
-        self.history.insert(
-            0,
-            HistoryEntry {
-                id: format!("h-{n:03}"),
-                at,
-                protocol,
-                text: text.trim().to_string(),
-            },
-        );
+        self.records.record(protocol, text);
         let control = if protocol == Protocol::Sql {
             match bare(text).to_uppercase().as_str() {
                 "BEGIN" | "START TRANSACTION" => Some(("BEGIN", self.begin(TxAccess::ReadWrite))),
@@ -379,6 +231,7 @@ impl WorkbenchStore {
                 output: ConsoleOutput::Text(vec![tag.to_string()]),
                 elapsed_ms: 1,
                 tx,
+                notes: Vec::new(),
             });
         }
         if self.tx == TxState::Failed {
@@ -393,22 +246,10 @@ impl WorkbenchStore {
                     output,
                     elapsed_ms,
                     tx: self.tx,
+                    notes: Vec::new(),
                 })
             }
             Err(e) => self.fail(e),
         }
-    }
-
-    pub fn history(&self, query: &HistoryQuery) -> Vec<HistoryEntry> {
-        let since = query.window.seconds().map(|s| self.clock - s);
-        let mut out: Vec<HistoryEntry> = self
-            .history
-            .iter()
-            .filter(|h| query.protocol.is_none_or(|p| p == h.protocol))
-            .filter(|h| since.is_none_or(|s| h.at >= s))
-            .cloned()
-            .collect();
-        out.sort_by_key(|h| std::cmp::Reverse(h.at));
-        out
     }
 }

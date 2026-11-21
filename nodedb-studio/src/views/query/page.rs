@@ -72,7 +72,15 @@ pub fn QueryPage() -> Element {
         move || {
             let backend = backend.clone();
             let (_conn, _epoch) = (conn(), *tx_epoch.0.read());
-            async move { backend.transaction().await }
+            async move {
+                let out = backend.transaction().await;
+                // A transaction the server lost reads Idle from now on: say
+                // why, where the page shows its other errors.
+                if let Err(e) = &out {
+                    ws.write().notice = Some(e.to_string());
+                }
+                out
+            }
         }
     });
     let databases = use_resource({

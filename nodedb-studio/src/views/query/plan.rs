@@ -9,22 +9,26 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::thousands;
 use crate::models::query_plan::{ExplainMode, PlanOperator, QueryPlan, duration};
+use crate::state::gates::{explain_mode, explain_modes, use_caps};
 use crate::state::query::{PlanState, QueryTab, QueryWorkspace};
+
+/// An estimate, or a dash when the server reports none.
+fn est(op: &PlanOperator) -> String {
+    op.est_rows
+        .map_or_else(|| "\u{2014}".to_string(), thousands)
+}
 
 /// The second line of an operator card.
 fn card_line(op: &PlanOperator, plan: &QueryPlan) -> String {
     match plan.mode {
         ExplainMode::Explain => match &op.target {
             Some(t) => t.clone(),
-            None => format!("Est. rows: {}", thousands(op.est_rows)),
+            None => format!("Est. rows: {}", est(op)),
         },
         ExplainMode::Analyze => {
             let rows = op.actual_rows.map(thousands).unwrap_or_default();
             let time = op.time_us.map(duration).unwrap_or_default();
-            format!(
-                "Est. {} \u{b7} Actual {rows} \u{b7} {time}",
-                thousands(op.est_rows)
-            )
+            format!("Est. {} \u{b7} Actual {rows} \u{b7} {time}", est(op))
         }
     }
 }
@@ -32,7 +36,8 @@ fn card_line(op: &PlanOperator, plan: &QueryPlan) -> String {
 #[component]
 pub fn PlanView(tab: QueryTab) -> Element {
     let mut ws = use_context::<Signal<QueryWorkspace>>();
-    let mode = tab.mode;
+    let caps = use_caps();
+    let mode = explain_mode(tab.mode, caps.as_ref());
     let shown = match &tab.plan {
         PlanState::Ready(plan) => Some(plan.mode),
         PlanState::None | PlanState::Running | PlanState::Failed(_) => None,
@@ -41,7 +46,7 @@ pub fn PlanView(tab: QueryTab) -> Element {
         div { class: "plan",
             div { class: "plan-bar",
                 div { class: "choice-group", role: "radiogroup", "aria-label": "Plan mode",
-                    for m in [ExplainMode::Explain, ExplainMode::Analyze] {
+                    for &m in explain_modes(caps.as_ref()) {
                         label {
                             key: "{m.label()}",
                             class: if mode == m { "choice selected" } else { "choice" },
@@ -80,10 +85,24 @@ pub fn PlanView(tab: QueryTab) -> Element {
                     if shown.is_some_and(|s| s != mode) {
                         div { class: "plan-stale", "Showing the {plan.mode.label()} plan. Press {mode.label()} to plan again in the other mode." }
                     }
-                    PlanTree { plan: (**plan).clone(), selected: tab.selected_op }
+                    PlanBody { plan: (**plan).clone(), selected: tab.selected_op }
                 },
             }
         }
+    }
+}
+
+/// The operator tree, or the server's text when it gives no tree.
+#[component]
+fn PlanBody(plan: QueryPlan, selected: Option<u32>) -> Element {
+    match plan.text {
+        Some(text) => rsx! {
+            span { class: "plan-stale",
+                "This server reports the plan as text, without row estimates."
+            }
+            pre { class: "code-block plan-text", tabindex: "0", "{text}" }
+        },
+        None => rsx! { PlanTree { plan, selected } },
     }
 }
 
@@ -146,7 +165,7 @@ fn OperatorDetails(op: PlanOperator, plan: QueryPlan) -> Element {
             }
             div { class: "kv kv-compact",
                 div { class: "kv-row", span { "Operator type" } span { "{op.kind.label()}" } }
-                div { class: "kv-row", span { "Estimated rows" } span { class: "num", {thousands(op.est_rows)} } }
+                div { class: "kv-row", span { "Estimated rows" } span { class: "num", {est(&op)} } }
                 for (k, v) in op.facts.iter() {
                     div { key: "{k}", class: "kv-row", span { "{k}" } span { "{v}" } }
                 }
@@ -176,5 +195,97 @@ fn OperatorDetails(op: PlanOperator, plan: QueryPlan) -> Element {
                 None => rsx! { p { class: "muted", "Reads from storage." } },
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn render(app: fn() -> Element) -> String {
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    #[test]
+    fn a_text_plan_renders_its_text_and_no_estimate() {
+        fn app() -> Element {
+            let plan = QueryPlan::from_text(
+                ExplainMode::Explain,
+                "Query(Exchange(ExchangeOp { child: Document(Scan { collection: \"t\" }) }))"
+                    .into(),
+            );
+            rsx! { PlanBody { plan, selected: None } }
+        }
+        let html = render(app);
+        assert!(html.contains("plan-text"), "{html}");
+        assert!(html.contains("Document(Scan"), "{html}");
+        assert!(html.contains("without row estimates"), "{html}");
+        assert!(
+            !html.contains("Est. rows") && !html.contains("Estimated rows"),
+            "{html}"
+        );
+    }
+
+    /// The Plan view of a tab left in Analyze mode, on a server that does
+    /// or does not run EXPLAIN ANALYZE.
+    fn plan_view(analyze: bool) -> String {
+        use crate::state::connection::ActiveConnection;
+        #[derive(Props, Clone, PartialEq)]
+        struct P {
+            analyze: bool,
+        }
+        let mut dom = VirtualDom::new_with_props(
+            |p: P| {
+                let mut capabilities = crate::state::gates::test_caps();
+                capabilities.explain_analyze = p.analyze;
+                use_context_provider(|| {
+                    Signal::new(Some(ActiveConnection {
+                        name: "s".into(),
+                        sub: String::new(),
+                        display_name: "A".into(),
+                        user: "a".into(),
+                        role: "r".into(),
+                        capabilities,
+                        current_database: "d".into(),
+                    }))
+                });
+                let mut w = QueryWorkspace::default();
+                let id = w.new_tab("d");
+                let mut tab = w.tab_mut(id).cloned().expect("the new tab");
+                tab.mode = ExplainMode::Analyze;
+                use_context_provider(|| Signal::new(w));
+                rsx! { PlanView { tab } }
+            },
+            P { analyze },
+        );
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    #[test]
+    fn analyze_is_offered_only_where_the_server_runs_it() {
+        let offered = plan_view(true);
+        assert!(offered.contains("Analyze"), "{offered}");
+        let hidden = plan_view(false);
+        assert!(!hidden.contains("Analyze"), "{hidden}");
+        assert!(hidden.contains(ExplainMode::Explain.note()), "{hidden}");
+    }
+
+    #[test]
+    fn an_absent_estimate_is_a_dash_never_zero() {
+        let op = PlanOperator {
+            id: 1,
+            kind: crate::models::query_plan::OperatorKind::Sort,
+            target: None,
+            est_rows: None,
+            actual_rows: None,
+            time_us: None,
+            input: None,
+            description: String::new(),
+            facts: Vec::new(),
+        };
+        assert_eq!(est(&op), "\u{2014}");
     }
 }

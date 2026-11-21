@@ -263,8 +263,8 @@ mod tests {
             names,
             ["Projection", "HashAggregate", "Filter", "ColumnarScan"]
         );
-        let est: Vec<u64> = plan.operators.iter().map(|o| o.est_rows).collect();
-        assert_eq!(&est[..3], [1_024, 1_024, 12_480]);
+        let est: Vec<Option<u64>> = plan.operators.iter().map(|o| o.est_rows).collect();
+        assert_eq!(&est[..3], [Some(1_024), Some(1_024), Some(12_480)]);
         let filter = plan.operator(3).expect("filter");
         assert!(filter.facts.iter().any(|(_, v)| v == "currency = 'USD'"));
     }

@@ -91,7 +91,17 @@ pub fn ConsolePage() -> Element {
         move || {
             let backend = backend.clone();
             let (_conn, _epoch) = (conn(), *tx_epoch.0.read());
-            async move { backend.transaction().await }
+            async move {
+                let out = backend.transaction().await;
+                // A transaction the server lost reads Idle from now on: say
+                // why, in the transcript with the other errors.
+                if let Err(e) = &out {
+                    let mut s = state.write();
+                    let protocol = s.protocol;
+                    s.push(protocol, "(transaction check)", Err(e.to_string()));
+                }
+                out
+            }
         }
     });
     let databases = use_resource({
