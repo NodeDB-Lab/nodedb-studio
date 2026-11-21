@@ -46,7 +46,8 @@ pub enum EditorError {
     Denied(String),
     /// The server's validation refused the record.
     Rejected(String),
-    /// The server could not be reached.
+    /// Any other error: the server could not be reached, Studio refused the
+    /// write, or the server cannot do it. The text says which.
     Failed(String),
 }
 
@@ -86,7 +87,9 @@ impl From<&StudioError> for EditorError {
             | StudioError::MissingParameter(_)
             | StudioError::NoTransaction
             | StudioError::TransactionOpen
-            | StudioError::ReadOnlyTransaction => EditorError::Failed(e.to_string()),
+            | StudioError::ReadOnlyTransaction
+            | StudioError::Unsupported { .. }
+            | StudioError::Refused { .. } => EditorError::Failed(e.to_string()),
         }
     }
 }

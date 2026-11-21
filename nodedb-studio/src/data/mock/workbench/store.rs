@@ -145,8 +145,8 @@ impl WorkbenchStore {
     /// Run one statement in the session's transaction, if one is open.
     pub fn run(&mut self, request: &QueryRequest) -> Result<QueryRun, StudioError> {
         if self.tx == TxState::Failed {
-            return Err(StudioError::Rejected {
-                reason: "the transaction failed: roll it back before running more statements"
+            return Err(StudioError::Refused {
+                reason: "The transaction failed. Roll it back before running more statements."
                     .to_string(),
             });
         }
@@ -235,8 +235,9 @@ impl WorkbenchStore {
             });
         }
         if self.tx == TxState::Failed {
-            return Err(StudioError::Rejected {
-                reason: "the transaction failed: ROLLBACK before running more commands".to_string(),
+            return Err(StudioError::Refused {
+                reason: "The transaction failed. Run ROLLBACK before running more commands."
+                    .to_string(),
             });
         }
         match console::execute(protocol, database, text) {

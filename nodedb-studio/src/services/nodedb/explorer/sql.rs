@@ -2,10 +2,10 @@
 //! Writes are in `explorer::write`.
 //!
 //! Values travel as `$n` parameters. Identifiers (collection, field names)
-//! cannot be bound, so each one passes `Meta::field` or `ident` before it
-//! reaches the text, a name the server reports included. A field name always
-//! reaches the text inside double quotes. No function here touches the
-//! network.
+//! cannot be bound, so each one passes `Meta::field` or `sql::ident` before
+//! it reaches the text, a name the server reports included. A field name
+//! always reaches the text inside double quotes. No function here touches
+//! the network.
 
 use std::collections::HashMap;
 
@@ -16,6 +16,7 @@ use crate::models::collection::Profile;
 use crate::models::records::{Record, RecordQuery};
 use crate::models::schema::{CollectionSchema, FieldType};
 use crate::services::error::StudioError;
+use crate::services::nodedb::sql::quoted;
 
 /// What a write or read needs to know about one collection: its storage
 /// profile and its declared shape.
@@ -45,51 +46,37 @@ impl Binder {
     }
 }
 
-pub(in crate::services::nodedb) fn rejected(reason: String) -> StudioError {
-    StudioError::Rejected { reason }
+/// Studio declines to build the statement. `reason` is a full sentence.
+pub(in crate::services::nodedb) fn refused(reason: String) -> StudioError {
+    StudioError::Refused { reason }
 }
 
 impl Meta {
     /// `name` as a field the server can be asked about, for the caller to
-    /// write as `"name"`. Checked live on 0.6.2: a quoted name with a dash, a
-    /// space, a `'`, `$1`, `--` or non-ASCII letters works in INSERT, UPDATE
-    /// SET and WHERE, and the server refuses a name holding `"`. So a name
-    /// passes unless it is empty or holds `"` or a control character, which
-    /// keeps it inside its quotes. A collection with declared fields must
-    /// declare it. A schemaless collection declares none, so any such name
-    /// passes and the server answers an unknown one with no rows.
+    /// write as `"name"`: it passes `sql::quoted`. A collection with declared
+    /// fields must declare it. A schemaless collection declares none, so any
+    /// quotable name passes and the server answers an unknown one with no
+    /// rows.
     pub fn field<'a>(&self, name: &'a str) -> Result<&'a str, StudioError> {
-        let why = if name.is_empty() {
-            Some("an empty field name cannot be used in a statement".to_string())
-        } else if name.contains('"') {
-            Some(format!(
-                "`{name}` holds a double quote, and NodeDB 0.6.2 refuses such a field name \
-                 in a statement: Studio cannot write or filter by it"
-            ))
-        } else if name.chars().any(char::is_control) {
-            Some(format!(
-                "{name:?} holds a control character, which Studio does not put in a statement"
-            ))
-        } else if self.schema.typed_headers
+        quoted(name, "field")?;
+        if self.schema.typed_headers
             && self.schema.field(name).is_none()
             && self.schema.id_field.as_deref() != Some(name)
         {
-            Some(format!("`{name}` is not a field of {}", self.collection))
-        } else {
-            None
-        };
-        match why {
-            None => Ok(name),
-            Some(reason) => Err(rejected(reason)),
+            return Err(refused(format!(
+                "`{name}` is not a field of {}. Pick one of its declared fields.",
+                self.collection
+            )));
         }
+        Ok(name)
     }
 
     /// The field that addresses one record, checked like any field name.
     /// Timeseries has none.
     pub fn key(&self) -> Result<&str, StudioError> {
         let key = self.schema.id_field.as_deref().ok_or_else(|| {
-            rejected(format!(
-                "{} has no record key, so Studio cannot address one of its records",
+            refused(format!(
+                "{} has no record key, so Studio cannot address one of its records. Use the Query workbench instead.",
                 self.collection
             ))
         })?;
@@ -100,10 +87,11 @@ impl Meta {
     pub fn id_value(&self, id: &str) -> Result<Value, StudioError> {
         let key = self.key()?;
         match self.schema.field(key).map(|f| f.ty) {
-            Some(FieldType::Int64) => id
-                .parse::<i64>()
-                .map(Value::Integer)
-                .map_err(|_| rejected(format!("`{id}` is not a number, and {key} holds numbers"))),
+            Some(FieldType::Int64) => id.parse::<i64>().map(Value::Integer).map_err(|_| {
+                refused(format!(
+                    "`{id}` is not a number, and {key} holds numbers. Enter a whole number."
+                ))
+            }),
             Some(
                 FieldType::String { .. }
                 | FieldType::Float64
@@ -129,11 +117,13 @@ impl Meta {
     /// `text_match` needs a full-text index (checked live).
     fn text_fields(&self) -> Result<Vec<&str>, StudioError> {
         if !self.schema.typed_headers {
-            return Err(rejected(format!(
-                "text search on schemaless collection {} is not available on NodeDB 0.6.2: \
-                 filter by a field instead",
-                self.collection
-            )));
+            return Err(StudioError::Unsupported {
+                what: format!(
+                    "text search on schemaless collection {}: NodeDB 0.6.2 has no statement that \
+                     matches text anywhere in a document. Filter by a field instead.",
+                    self.collection
+                ),
+            });
         }
         let mut fields: Vec<&str> = Vec::new();
         if self.schema.id_field.is_some() {
@@ -186,8 +176,8 @@ fn where_clause(
     if !text.is_empty() {
         let fields = meta.text_fields()?;
         if fields.is_empty() {
-            return Err(rejected(format!(
-                "{} has no field Studio can search",
+            return Err(refused(format!(
+                "{} has no field Studio can search. Filter by a field instead.",
                 meta.collection
             )));
         }
@@ -207,8 +197,8 @@ fn where_clause(
     }
     if let Some(b) = &query.bbox {
         let (geometry, _) = meta.schema.geometry().ok_or_else(|| {
-            rejected(format!(
-                "{} has no geometry field to filter by area",
+            refused(format!(
+                "{} has no geometry field to filter by area. Clear the area filter.",
                 meta.collection
             ))
         })?;
@@ -441,8 +431,8 @@ pub(in crate::services::nodedb) fn select_one(
         });
     }
     let time = meta.schema.time_key().ok_or_else(|| {
-        rejected(format!(
-            "{} has no record key and no time key, so Studio cannot address one of its records",
+        refused(format!(
+            "{} has no record key and no time key, so Studio cannot address one of its records. Use the Query workbench instead.",
             meta.collection
         ))
     })?;
@@ -450,7 +440,12 @@ pub(in crate::services::nodedb) fn select_one(
         .strip_prefix('t')
         .and_then(|rest| rest.split('.').next())
         .and_then(|t| t.parse::<i64>().ok())
-        .ok_or_else(|| rejected(format!("`{id}` does not name a row of {}", meta.collection)))?;
+        .ok_or_else(|| {
+            refused(format!(
+                "`{id}` does not name a row of {}. Reload the list and pick the row again.",
+                meta.collection
+            ))
+        })?;
     Ok(Statement {
         sql: format!(
             "SELECT * FROM {} WHERE \"{}\" = $1",
@@ -561,7 +556,7 @@ pub(in crate::services::nodedb) mod tests {
         }
         for bad in ["", "a\"b", "a\0b", "a\nb", "a\u{7f}"] {
             assert!(
-                matches!(d.field(bad), Err(StudioError::Rejected { .. })),
+                matches!(d.field(bad), Err(StudioError::Refused { .. })),
                 "{bad:?}"
             );
         }
@@ -570,7 +565,7 @@ pub(in crate::services::nodedb) mod tests {
     #[test]
     fn a_name_the_server_reports_passes_the_same_check() {
         let reason = |e: StudioError| match e {
-            StudioError::Rejected { reason } => reason,
+            StudioError::Refused { reason } => reason,
             other => panic!("expected a refusal, got {other:?}"),
         };
         let mut m = strict();
@@ -593,13 +588,13 @@ pub(in crate::services::nodedb) mod tests {
     }
 
     #[test]
-    fn text_search_on_a_schemaless_collection_is_refused_not_empty() {
+    fn text_search_on_a_schemaless_collection_is_unsupported_not_empty() {
         let q = RecordQuery {
             text: "alice".into(),
             ..RecordQuery::new(5)
         };
         match page_statements(&schemaless(), &q, 0) {
-            Err(StudioError::Rejected { reason }) => assert!(reason.contains("0.6.2"), "{reason}"),
+            Err(StudioError::Unsupported { what }) => assert!(what.contains("0.6.2"), "{what}"),
             other => panic!("expected a refusal, got {other:?}"),
         }
         assert!(page_statements(&schemaless(), &RecordQuery::new(5), 0).is_ok());
@@ -799,7 +794,7 @@ pub(in crate::services::nodedb) mod tests {
             read.params,
             [Value::DateTime(NdbDateTime::from_micros(5_000))]
         );
-        assert!(matches!(meta.key(), Err(StudioError::Rejected { .. })));
+        assert!(matches!(meta.key(), Err(StudioError::Refused { .. })));
         for bad in ["row:0", "t", "tx.1", ""] {
             assert!(select_one(&meta, bad).is_err(), "{bad}");
         }

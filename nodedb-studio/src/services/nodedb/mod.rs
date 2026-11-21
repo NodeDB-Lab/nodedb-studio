@@ -13,6 +13,7 @@ pub mod matviews;
 pub mod search;
 pub mod service;
 pub mod spatial;
+pub mod sql;
 pub mod sync;
 pub mod timeseries;
 pub mod topics;

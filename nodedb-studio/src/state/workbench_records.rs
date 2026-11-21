@@ -87,8 +87,8 @@ impl WorkbenchRecords {
     pub fn save(&mut self, save: &SaveQuery) -> Result<SavedQuery, StudioError> {
         let name = save.name.trim().to_string();
         if name.is_empty() {
-            return Err(StudioError::Rejected {
-                reason: "a saved query needs a name".to_string(),
+            return Err(StudioError::Refused {
+                reason: "A saved query needs a name. Enter one.".to_string(),
             });
         }
         if self
@@ -102,8 +102,8 @@ impl WorkbenchRecords {
         if let Some(folder) = &save.folder
             && !self.library.folders.contains(folder)
         {
-            return Err(StudioError::Rejected {
-                reason: format!("there is no folder named `{folder}`"),
+            return Err(StudioError::Refused {
+                reason: format!("There is no folder named `{folder}`. Pick a folder that exists."),
             });
         }
         let now = self.tick();
@@ -117,8 +117,8 @@ impl WorkbenchRecords {
                     .ok_or_else(|| StudioError::UnknownQuery(id.clone()))?;
                 let q = &mut self.library.queries[idx];
                 if q.owner != self.owner {
-                    return Err(StudioError::Rejected {
-                        reason: format!("only {} can save a new version: use Save as", q.owner),
+                    return Err(StudioError::Refused {
+                        reason: format!("Only {} can save a new version. Use Save as.", q.owner),
                     });
                 }
                 q.name = name;
@@ -177,8 +177,8 @@ impl WorkbenchRecords {
     pub fn create_folder(&mut self, name: &str) -> Result<(), StudioError> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(StudioError::Rejected {
-                reason: "a folder needs a name".to_string(),
+            return Err(StudioError::Refused {
+                reason: "A folder needs a name. Enter one.".to_string(),
             });
         }
         if self
@@ -187,8 +187,8 @@ impl WorkbenchRecords {
             .iter()
             .any(|f| f.eq_ignore_ascii_case(name))
         {
-            return Err(StudioError::Rejected {
-                reason: format!("a folder named `{name}` already exists"),
+            return Err(StudioError::Refused {
+                reason: format!("A folder named `{name}` already exists. Choose another name."),
             });
         }
         self.library.folders.push(name.to_string());

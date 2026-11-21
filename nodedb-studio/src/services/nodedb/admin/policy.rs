@@ -14,9 +14,7 @@
 use crate::models::admin::policy::{Policy, PolicyChange, PolicyOperation};
 use crate::services::decode::{Table, decode_rows};
 use crate::services::error::StudioError;
-use crate::services::nodedb::admin::access::ident;
-
-use nodedb_client::NodeDbError;
+use crate::services::nodedb::sql::ident;
 
 pub(in crate::services::nodedb) fn policies(
     table: &Table,
@@ -29,9 +27,11 @@ pub(in crate::services::nodedb) fn policies(
             "Read" => PolicyOperation::Select,
             "All" => PolicyOperation::All,
             other => {
-                return Err(StudioError::from(NodeDbError::bad_request(format!(
-                    "policy `{name}` on `{collection}` has type `{other}`. Studio cannot show it: the server applies it to INSERT, UPDATE and DELETE together, and a policy operation has no such value."
-                ))));
+                return Err(StudioError::Refused {
+                    reason: format!(
+                        "Policy `{name}` on `{collection}` has type `{other}`. Studio cannot show it: the server applies it to INSERT, UPDATE and DELETE together, and a policy operation has no such value. Read it with SHOW RLS POLICIES in the Query workbench."
+                    ),
+                });
             }
         };
         Ok(Policy {

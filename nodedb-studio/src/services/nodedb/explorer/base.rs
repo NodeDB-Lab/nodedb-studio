@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use nodedb_client::NodeDbError;
 use nodedb_types::Value;
 use nodedb_types::columnar::ColumnType;
 
@@ -16,22 +15,10 @@ use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::nodedb::explorer::arrays::no_array_source;
+use crate::services::nodedb::sql::ident;
 
 /// `SHOW COLLECTIONS` reports an array with this `partition_strategy`.
 const ARRAY_STRATEGY: &str = "array";
-
-/// `name` as a bare SQL identifier, or the server's not-found error. A name
-/// outside `[A-Za-z0-9_]` never reaches the SQL text.
-pub(in crate::services::nodedb) fn ident(name: &str) -> Result<&str, StudioError> {
-    let ok = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-    if ok {
-        Ok(name)
-    } else {
-        Err(StudioError::NotFound(NodeDbError::collection_not_found(
-            name,
-        )))
-    }
-}
 
 fn malformed(reason: String) -> StudioError {
     StudioError::MalformedRows { reason }
@@ -348,7 +335,9 @@ impl ExplorerData for NodeDbConnectionService {
             } else {
                 profile_of_describe(
                     &name,
-                    &self.table(&format!("DESCRIBE {}", ident(&name)?)).await?,
+                    &self
+                        .table(&format!("DESCRIBE {}", ident(&name, "collection")?))
+                        .await?,
                 )?
             };
             out.push(Collection {
@@ -366,7 +355,7 @@ impl ExplorerData for NodeDbConnectionService {
     async fn collection_schema(&self, collection: &str) -> Result<CollectionSchema, StudioError> {
         // An unknown collection fails here with the server's not-found error.
         // `SHOW INDEXES ON` would answer an empty list instead.
-        let collection = ident(collection)?;
+        let collection = ident(collection, "collection")?;
         let describe = self.table(&format!("DESCRIBE {collection}")).await?;
         let profile = profile_of_describe(collection, &describe)?;
         let indexes = decode_indexes(&self.table(&format!("SHOW INDEXES ON {collection}")).await?)?;
@@ -635,11 +624,18 @@ mod tests {
         assert_eq!(decode_indexes(&t).expect("rows")[0].fields, ["name"]);
     }
 
-    #[test]
-    fn names_outside_the_identifier_set_are_not_found() {
-        assert!(ident("orders_2").is_ok());
-        assert!(matches!(ident("a; DROP"), Err(StudioError::NotFound(_))));
-        assert!(matches!(ident(""), Err(StudioError::NotFound(_))));
+    #[tokio::test]
+    async fn a_name_outside_the_identifier_set_is_refused_before_the_server() {
+        let svc = NodeDbConnectionService::default();
+        for bad in ["a; DROP", ""] {
+            assert!(
+                matches!(
+                    svc.collection_schema(bad).await,
+                    Err(StudioError::Refused { .. })
+                ),
+                "{bad:?}"
+            );
+        }
     }
 
     /// Idempotent: a collection that exists already makes the DDL error, which is fine.

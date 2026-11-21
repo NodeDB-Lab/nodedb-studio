@@ -17,8 +17,8 @@ use crate::models::graph::records::{Edge, EdgePage, EdgeQuery, NodeRef};
 use crate::models::records::json::parse_object;
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
-use crate::services::nodedb::explorer::ident;
 use crate::services::nodedb::explorer::records::write_error;
+use crate::services::nodedb::sql::ident;
 
 /// One listed edge, before its properties are read.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -146,7 +146,7 @@ impl NodeDbConnectionService {
         let result = client
             .execute_sql(
                 "MATCH (a)-[r]->(b) IN $1 RETURN a, r, b",
-                &[Value::String(ident(graph)?.to_string())],
+                &[Value::String(ident(graph, "graph")?.to_string())],
             )
             .await?;
         edge_keys(&result)

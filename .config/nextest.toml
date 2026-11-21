@@ -1,0 +1,11 @@
+# A live test (`live_*`, `#[ignore]`d) logs in to a real NodeDB server, and
+# the server limits login attempts per IP per minute. The `live-server` group
+# runs those tests one at a time. Every other test keeps running in parallel.
+# `::live_` anchors the match to the start of the test's own name, so a test
+# such as `saved_queries_outlive_a_reconnect` stays out.
+[test-groups]
+live-server = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'test(/::live_/)'
+test-group = 'live-server'

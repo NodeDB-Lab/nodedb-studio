@@ -118,9 +118,9 @@ impl Ran {
 /// writes inside it, then commits them. Studio does not claim a guarantee
 /// the server does not give.
 pub(in crate::services::nodedb) fn read_only_unsupported() -> StudioError {
-    StudioError::Setup(NodeDbError::config(
-        "NodeDB 0.6.2 runs and commits writes inside BEGIN READ ONLY, so Studio opens read-write transactions only",
-    ))
+    StudioError::Unsupported {
+        what: "read-only transactions: NodeDB 0.6.2 runs and commits writes inside BEGIN READ ONLY, so Studio opens read-write transactions only".to_string(),
+    }
 }
 
 /// Whether statement `sql` can run against `database` while `tx` is open.
@@ -146,8 +146,8 @@ fn may_run(
     // The server runs ROLLBACK TO in a failed block: it rewinds to the
     // savepoint and clears the failure.
     if tx.failed && !matches!(control, Some(Control::RollbackTo(_))) {
-        return Err(StudioError::Rejected {
-            reason: "the transaction failed: roll it back, or back to a savepoint, before running more statements"
+        return Err(StudioError::Refused {
+            reason: "The transaction failed. Roll it back, or back to a savepoint, before running more statements."
                 .to_string(),
         });
     }
@@ -218,10 +218,11 @@ impl NodeDbConnectionService {
         // `SET x = 'a';` stores `a';`.
         let sql = sql.trim_end().trim_end_matches(';').trim_end();
         if carries_mask(sql) {
-            return Err(StudioError::from(nodedb_client::NodeDbError::config(
-                "the password in this statement is the mask history shows in its place. \
-                 Type the password again, then run the statement",
-            )));
+            return Err(StudioError::Refused {
+                reason: "The password in this statement is the mask history shows in its place. \
+                         Type the password again, then run the statement."
+                    .to_string(),
+            });
         }
         let control = control_of(sql);
         match control {
@@ -331,9 +332,11 @@ impl NodeDbConnectionService {
         // server opened a block: closing the connection ends any it did.
         if status_of(&result) != Some("BEGIN") {
             lease.end();
-            return Err(StudioError::Setup(NodeDbError::bad_request(format!(
-                "the server did not open a transaction for `{sql}`"
-            ))));
+            return Err(StudioError::Unsupported {
+                what: format!(
+                    "`{sql}` as a transaction start: the server answered without the BEGIN tag, so Studio closed the connection to end any transaction it opened. Run BEGIN instead."
+                ),
+            });
         }
         let database = lease.database().to_string();
         let tx = lease.put_back(|tx| match tx {
@@ -512,7 +515,7 @@ mod tests {
             let svc = holding(tx, Instant::now());
             let refused = svc.execute("", "SELECT 1", &[]).await;
             assert!(
-                matches!(&refused, Err(StudioError::Setup(e)) if e.to_string().contains("still running")),
+                matches!(&refused, Err(StudioError::Refused { reason }) if reason.contains("still running")),
                 "{:?}",
                 refused.map(|r| r.result)
             );
@@ -715,7 +718,7 @@ mod tests {
             assert_eq!(svc.transaction().await.expect("state"), TxState::Failed);
             assert!(matches!(
                 svc.run_query(&q("SELECT 1")).await,
-                Err(StudioError::Rejected { .. })
+                Err(StudioError::Refused { .. })
             ));
             assert!(matches!(
                 svc.begin_transaction(TxAccess::ReadWrite).await,
@@ -805,7 +808,10 @@ mod tests {
                 svc.databases()
             );
             assert!(first.is_ok());
-            assert!(matches!(second, Err(StudioError::Setup(_))), "{second:?}");
+            assert!(
+                matches!(second, Err(StudioError::Refused { .. })),
+                "{second:?}"
+            );
             assert!(dbs.is_ok());
             assert_eq!(svc.transaction().await.expect("state"), active(13));
             svc.rollback_transaction().await.expect("rolls back");
@@ -818,12 +824,12 @@ mod tests {
             let svc = live().await;
             assert!(matches!(
                 svc.begin_transaction(TxAccess::ReadOnly).await,
-                Err(StudioError::Setup(_))
+                Err(StudioError::Unsupported { .. })
             ));
             assert!(matches!(
                 svc.console_run(Protocol::Sql, "", "START TRANSACTION READ ONLY;")
                     .await,
-                Err(StudioError::Setup(_))
+                Err(StudioError::Unsupported { .. })
             ));
             assert_eq!(svc.transaction().await.expect("state"), TxState::Idle);
         }
