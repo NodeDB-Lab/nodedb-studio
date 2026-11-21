@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
-use crate::models::admin_config::{ConfigScope, ConfigSetting, ConfigTarget};
+use crate::models::admin::config::{ConfigScope, ConfigSetting, ConfigTarget};
 use crate::models::format::clock_second;
 use crate::routes::tabs::AdminTab;
 use crate::services::backend::Backend;

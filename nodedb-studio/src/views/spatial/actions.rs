@@ -7,10 +7,10 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::geo_proj::map;
 use crate::models::spatial::SpatialSetup;
-use crate::models::spatial_analyze::Availability;
-use crate::models::spatial_text::{raster_sql, viewport_sql};
+use crate::models::spatial::analyze::Availability;
+use crate::models::spatial::geo_proj::map;
+use crate::models::spatial::text::{raster_sql, viewport_sql};
 use crate::routes::tabs::SpatialTab;
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;

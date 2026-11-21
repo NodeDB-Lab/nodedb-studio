@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::AsyncView;
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side, region_style};
-use crate::models::ts_lifecycle::Lifecycle;
+use crate::models::timeseries::lifecycle::Lifecycle;
 use crate::routes::Route;
 use crate::routes::tabs::TimeseriesTab;
 use crate::services::backend::Backend;

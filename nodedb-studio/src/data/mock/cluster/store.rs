@@ -8,14 +8,14 @@ use crate::data::mock::cluster::members::{OBSERVED, cluster_members, node_name};
 use crate::data::mock::cluster::placement::placement;
 use crate::data::mock::cluster::raft::{hosted_groups, seeded_groups};
 use crate::models::cluster::HostedGroup;
-use crate::models::cluster_activity::{
+use crate::models::cluster::activity::{
     ActivityLog, ActivityQuery, ClusterEvent, EventKind, Severity,
 };
-use crate::models::cluster_op::{Impact, OpResult, PermissionCheck};
-use crate::models::cluster_place::{
+use crate::models::cluster::op::{Impact, OpResult, PermissionCheck};
+use crate::models::cluster::place::{
     MoveRequest, Movement, Placement, PlannedMove, RebalancePlan, size_text,
 };
-use crate::models::cluster_raft::{
+use crate::models::cluster::raft::{
     Peer, PeerRole, RaftGroup, RaftGroups, SnapshotInfo, TransferPreview,
 };
 use crate::services::error::StudioError;
@@ -545,7 +545,7 @@ mod tests {
         assert_eq!(m.group, "data-12");
         assert_eq!(m.vshards, vec![14, 17, 21]);
         assert_eq!(m.impact, Impact::Unknown);
-        assert_eq!(m.estimated_bytes, 51 * crate::models::cluster_place::GIB);
+        assert_eq!(m.estimated_bytes, 51 * crate::models::cluster::place::GIB);
         let out = s.apply_rebalance(&plan).expect("applied");
         assert_eq!(out.operation, "op_73");
         let p = s.placement();
@@ -635,12 +635,12 @@ mod tests {
                 .all(|e| e.group.as_deref() == Some("data-12"))
         );
         let hour = s.activity(&ActivityQuery {
-            range: crate::models::cluster_activity::ActivityRange::Hour1,
+            range: crate::models::cluster::activity::ActivityRange::Hour1,
             ..ActivityQuery::default()
         });
         assert!(hour.events.len() < all.events.len());
         let week = s.activity(&ActivityQuery {
-            range: crate::models::cluster_activity::ActivityRange::Days7,
+            range: crate::models::cluster::activity::ActivityRange::Days7,
             ..ActivityQuery::default()
         });
         assert!(week.events.len() > all.events.len());

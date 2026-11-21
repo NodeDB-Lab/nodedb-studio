@@ -9,7 +9,7 @@
 use async_trait::async_trait;
 
 use crate::models::designer::DesignSchema;
-use crate::models::designer_change::{ApplyReport, ChangeKind, ChangeReview, PendingChange};
+use crate::models::designer::change::{ApplyReport, ChangeKind, ChangeReview, PendingChange};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
@@ -52,8 +52,8 @@ pub trait DesignerData {
 mod tests {
     use super::*;
     use crate::models::collection::Attached;
+    use crate::models::designer::new::NewCollection;
     use crate::models::designer::{DesignIndex, ObjectState};
-    use crate::models::designer_new::NewCollection;
     use crate::models::schema::IndexKind;
     use crate::services::mock::MockConnectionService;
 

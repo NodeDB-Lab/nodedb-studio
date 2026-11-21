@@ -7,8 +7,8 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
+use crate::models::search::form::{Issue, IssueField, SearchForm};
 use crate::models::search::{SearchCollection, SearchMode, SearchResult, SearchSetup};
-use crate::models::search_form::{Issue, IssueField, SearchForm};
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
 use crate::state::query::QueryWorkspace;

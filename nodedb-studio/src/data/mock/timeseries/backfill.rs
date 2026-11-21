@@ -3,10 +3,10 @@
 use crate::data::mock::explorer::build::unit;
 use crate::models::format::epoch;
 use crate::models::timeseries::TimeSpan;
-use crate::models::ts_backfill::{
+use crate::models::timeseries::backfill::{
     BackfillPreview, BackfillRun, BackfillSpec, BucketDelta, RunState,
 };
-use crate::models::ts_lifecycle::Lifecycle;
+use crate::models::timeseries::lifecycle::Lifecycle;
 
 /// Why a backfill did not start or resume.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -241,8 +241,8 @@ mod tests {
     use super::*;
     use crate::data::mock::timeseries::lifecycle::LifecycleStore;
     use crate::models::timeseries::Bucket;
-    use crate::models::ts_backfill::{ConflictPolicy, WriteMode};
-    use crate::models::ts_lifecycle::{LateWrites, RollupFn, RollupOutput};
+    use crate::models::timeseries::backfill::{ConflictPolicy, WriteMode};
+    use crate::models::timeseries::lifecycle::{LateWrites, RollupFn, RollupOutput};
 
     const NOW: i64 = epoch(2026, 6, 13, 13, 40, 0);
 

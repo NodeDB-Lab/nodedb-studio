@@ -4,9 +4,9 @@
 use async_trait::async_trait;
 
 use crate::data::mock;
+use crate::models::search::analyze::{Analysis, AnalyzeRequest};
+use crate::models::search::index::{BuildRun, IndexOverview, RebuildPlan, RunHistory};
 use crate::models::search::{SearchRequest, SearchResult, SearchSetup};
-use crate::models::search_analyze::{Analysis, AnalyzeRequest};
-use crate::models::search_index::{BuildRun, IndexOverview, RebuildPlan, RunHistory};
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;
 use crate::services::mock_behavior::{MockBehavior, apply_one, apply_one_result};

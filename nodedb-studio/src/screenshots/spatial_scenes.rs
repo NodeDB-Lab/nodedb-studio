@@ -5,8 +5,8 @@
 //! through the backend, so the screens show computed values.
 
 use crate::data::mock;
+use crate::models::spatial::analyze::{AnalysisForm, Availability};
 use crate::models::spatial::{FeatureRef, SourceRef};
-use crate::models::spatial_analyze::{AnalysisForm, Availability};
 use crate::state::spatial::{AnalyzeDraft, AnalyzeUi, MapUi, SpatialSeed};
 
 const COLLECTION: &str = "places";

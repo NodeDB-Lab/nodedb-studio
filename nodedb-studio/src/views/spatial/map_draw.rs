@@ -4,8 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use crate::models::geo_ops::{Ring, Shape};
-use crate::models::geo_proj::{PlaneView, degree_label, map, ticks};
+use crate::models::spatial::geo_ops::{Ring, Shape};
+use crate::models::spatial::geo_proj::{PlaneView, degree_label, map, ticks};
 use crate::models::spatial::{Feature, FeatureRef, LayerPage, SourceRef};
 
 /// Markers closer than this, in pixels, merge into one cluster.
@@ -180,7 +180,7 @@ pub fn text_width(text: &str) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::geo_ops::Bbox;
+    use crate::models::spatial::geo_ops::Bbox;
 
     fn page(points: &[(&str, f64, f64)]) -> LayerPage {
         LayerPage {

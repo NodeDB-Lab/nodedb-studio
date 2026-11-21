@@ -9,9 +9,9 @@
 
 use dioxus::prelude::Signal;
 
-use crate::models::query_plan::{ExplainMode, QueryPlan};
-use crate::models::saved_query::SavedQuery;
-use crate::models::sql_text::parameters;
+use crate::models::workbench::query_plan::{ExplainMode, QueryPlan};
+use crate::models::workbench::saved_query::SavedQuery;
+use crate::models::workbench::sql_text::parameters;
 use crate::models::workbench::{
     PAGE_SIZE, ParamBinding, ParamError, ParamType, QueryDraft, QueryRequest, QueryRun,
 };
@@ -367,7 +367,7 @@ impl QueryWorkspace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::saved_query::QueryScope;
+    use crate::models::workbench::saved_query::QueryScope;
 
     fn draft(id: &str, sql: &str, saved: &str) -> QueryDraft {
         QueryDraft {

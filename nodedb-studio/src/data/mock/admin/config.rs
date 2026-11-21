@@ -3,12 +3,12 @@
 
 use crate::data::mock::admin::store::{AdminStore, missing};
 use crate::data::mock::cluster::members::{node_id, node_name};
-use crate::models::admin::{AdminReview, ReviewLine};
-use crate::models::admin_audit::TargetType;
-use crate::models::admin_config::{
+use crate::models::admin::audit::TargetType;
+use crate::models::admin::config::{
     ConfigItem, ConfigProposal, ConfigRequest, ConfigScope, ConfigSetting, ConfigSource,
     ConfigTarget, ConfigView, Validation, difference,
 };
+use crate::models::admin::{AdminReview, ReviewLine};
 use crate::services::error::StudioError;
 
 /// How much memory each node has. A budget above it cannot apply.

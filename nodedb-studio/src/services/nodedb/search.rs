@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 
+use crate::models::search::analyze::{Analysis, AnalyzeRequest};
+use crate::models::search::index::{BuildRun, IndexOverview, RebuildPlan, RunHistory};
 use crate::models::search::{SearchRequest, SearchResult, SearchSetup};
-use crate::models::search_analyze::{Analysis, AnalyzeRequest};
-use crate::models::search_index::{BuildRun, IndexOverview, RebuildPlan, RunHistory};
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::search_data::SearchData;

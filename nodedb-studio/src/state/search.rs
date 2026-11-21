@@ -8,10 +8,10 @@
 
 use dioxus::prelude::*;
 
+use crate::models::search::analyze::{Analysis, AnalyzeRequest, InputRole};
+use crate::models::search::compare::Comparison;
+use crate::models::search::form::{SearchForm, VectorEditor};
 use crate::models::search::{SearchMode, SearchRequest, SearchResult, VectorInput};
-use crate::models::search_analyze::{Analysis, AnalyzeRequest, InputRole};
-use crate::models::search_compare::Comparison;
-use crate::models::search_form::{SearchForm, VectorEditor};
 
 /// A tab of the Result details panel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]

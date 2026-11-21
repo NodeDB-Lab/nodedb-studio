@@ -2,8 +2,8 @@
 //! one scene's selection or open sheet never leaks into the next image.
 
 use crate::data::mock::SyncStore;
-use crate::models::sync_enroll::EnrollDraft;
-use crate::models::sync_sub::SubChange;
+use crate::models::sync::enroll::EnrollDraft;
+use crate::models::sync::sub::SubChange;
 use crate::state::sync::{
     DevicesUi, RejectUi, RepairSheet, SubDraft, SubTab, SubsUi, SyncActivityUi, SyncSeed,
 };
@@ -77,7 +77,7 @@ pub fn reject_edit() -> SyncSeed {
     let rows = SyncStore::seeded().rejected();
     let text = rows
         .get("m104")
-        .map(|r| crate::models::record_json::pretty(&r.payload, &[]))
+        .map(|r| crate::models::records::json::pretty(&r.payload, &[]))
         .unwrap_or_default();
     SyncSeed {
         rejects: Some(RejectUi {

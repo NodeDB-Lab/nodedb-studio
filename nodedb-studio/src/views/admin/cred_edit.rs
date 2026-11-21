@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::admin::AdminChange;
-use crate::models::admin_credential::{
+use crate::models::admin::credential::{
     Credential, CredentialChange, CredentialDraft, CredentialKind, CredentialList,
 };
 use crate::models::format::date_minute;

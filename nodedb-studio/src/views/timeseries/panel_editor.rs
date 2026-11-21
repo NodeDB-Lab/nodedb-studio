@@ -10,10 +10,10 @@ use crate::components::async_view::AsyncView;
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter};
 use crate::models::records::Filter;
+use crate::models::timeseries::dashboard::{Dashboard, PanelDef};
 use crate::models::timeseries::{
     Aggregate, Bucket, ChartKind, GapPolicy, Measure, TimeCatalog, TimeSource,
 };
-use crate::models::ts_dashboard::{Dashboard, PanelDef};
 use crate::services::backend::Backend;
 use crate::state::timeseries::{DashUi, PanelEditor};
 use crate::views::events::common::FormField;

@@ -7,10 +7,10 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
-use crate::models::admin_access::{
+use crate::models::admin::access::{
     AccessChange, AccessDirectory, PrincipalDraft, PrincipalKind, RoleDraft,
 };
-use crate::models::admin_password::Secret;
+use crate::models::admin::password::Secret;
 use crate::services::backend::Backend;
 use crate::state::admin::{AccessMode, AccessSheet, AdminUi};
 use crate::views::admin::common::ReviewSheet;

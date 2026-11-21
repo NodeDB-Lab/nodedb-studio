@@ -6,7 +6,7 @@
 use dioxus::prelude::*;
 
 use crate::models::graph::NodeKind;
-use crate::models::graph_scene::NODE_R;
+use crate::models::graph::scene::NODE_R;
 
 /// The glyph's 24-unit drawing, as SVG path data.
 fn glyph(kind: NodeKind) -> &'static [&'static str] {

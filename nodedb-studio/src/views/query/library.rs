@@ -9,7 +9,7 @@ use dioxus::prelude::*;
 
 use crate::components::async_view::AsyncView;
 use crate::components::icon::{Ico, Icon};
-use crate::models::saved_query::{QueryLibrary, SavedQuery};
+use crate::models::workbench::saved_query::{QueryLibrary, SavedQuery};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::query::{QueryWorkspace, SidePane, TxEpoch};

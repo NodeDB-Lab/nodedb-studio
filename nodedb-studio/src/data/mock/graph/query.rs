@@ -3,11 +3,11 @@
 
 use super::store::StoredGraph;
 use super::{commerce, eval, rag, social};
-use crate::models::cypher::parse;
+use crate::models::graph::cypher::parse;
+use crate::models::graph::rag::{RagRequest, RagResult};
 use crate::models::graph::{
     GraphBinding, GraphPath, GraphResult, NodeKind, PathSet, paths_to_kind,
 };
-use crate::models::graph_rag::{RagRequest, RagResult};
 use crate::services::error::StudioError;
 
 /// Paths a search returns at most.

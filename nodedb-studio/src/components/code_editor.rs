@@ -7,8 +7,8 @@
 
 use dioxus::prelude::*;
 
-use crate::models::console::Protocol;
-use crate::models::sql_text::tokenize;
+use crate::models::workbench::console::Protocol;
+use crate::models::workbench::sql_text::tokenize;
 
 /// The number of lines in `text`, counting a trailing empty one.
 pub fn line_count(text: &str) -> usize {

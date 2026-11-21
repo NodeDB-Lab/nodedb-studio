@@ -6,12 +6,12 @@
 
 use dioxus::prelude::*;
 
-use crate::models::cluster_activity::ActivityRange;
+use crate::models::cluster::activity::ActivityRange;
+use crate::models::sync::activity::{SyncEvent, SyncEventKind, SyncQuery};
+use crate::models::sync::enroll::EnrollDraft;
+use crate::models::sync::reject::{RejectReason, RejectState, Rejection};
+use crate::models::sync::sub::{SubChange, Subscription};
 use crate::models::sync::{Device, DeviceState};
-use crate::models::sync_activity::{SyncEvent, SyncEventKind, SyncQuery};
-use crate::models::sync_enroll::EnrollDraft;
-use crate::models::sync_reject::{RejectReason, RejectState, Rejection};
-use crate::models::sync_sub::{SubChange, Subscription};
 use crate::state::events::feeds::Notice;
 
 /// Devices: the chosen device, the filters, and the open enrollment.

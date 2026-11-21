@@ -6,7 +6,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::date_second;
-use crate::models::search_index::{RunHistory, RunState};
+use crate::models::search::index::{RunHistory, RunState};
 use crate::state::search::SearchUi;
 use crate::views::search::indexes::edit;
 

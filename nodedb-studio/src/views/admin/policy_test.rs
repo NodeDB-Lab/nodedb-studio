@@ -8,7 +8,7 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::admin_policy::{PolicySet, PolicyTest};
+use crate::models::admin::policy::{PolicySet, PolicyTest};
 use crate::models::format::thousands;
 use crate::services::backend::Backend;
 use crate::state::admin::{AdminUi, PolicyUi, TestRun};

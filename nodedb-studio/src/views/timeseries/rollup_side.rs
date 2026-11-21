@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::components::tabs::TabBar;
 use crate::models::format::date_minute;
-use crate::models::ts_lifecycle::{Lifecycle, RollupRun, Tier};
+use crate::models::timeseries::lifecycle::{Lifecycle, RollupRun, Tier};
 use crate::state::timeseries::RollupTab;
 use crate::views::events::common::SqlBlock;
 

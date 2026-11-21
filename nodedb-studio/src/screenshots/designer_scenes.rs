@@ -1,9 +1,9 @@
 //! The Designer states the design shows: the workbench with one staged
 //! index, the Create collection drawer, and the review of two changes.
 
+use crate::models::designer::change::ChangeKind;
+use crate::models::designer::new::{Constraint, ConstraintKind, NewCollection, SchemaMode};
 use crate::models::designer::{IndexChoice, ObjectState};
-use crate::models::designer_change::ChangeKind;
-use crate::models::designer_new::{Constraint, ConstraintKind, NewCollection, SchemaMode};
 use crate::models::schema::{FieldType, IndexKind};
 use crate::state::designer::{CreateState, DesignerState, ReviewState, Target};
 

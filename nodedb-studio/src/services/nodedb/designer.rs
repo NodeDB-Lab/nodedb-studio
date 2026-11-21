@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 
 use crate::models::designer::DesignSchema;
-use crate::models::designer_change::{ApplyReport, ChangeKind, ChangeReview, PendingChange};
+use crate::models::designer::change::{ApplyReport, ChangeKind, ChangeReview, PendingChange};
 use crate::services::designer_data::DesignerData;
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;

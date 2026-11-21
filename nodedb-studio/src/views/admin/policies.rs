@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
-use crate::models::admin_policy::{Policy, PolicyDraft, PolicySet};
+use crate::models::admin::policy::{Policy, PolicyDraft, PolicySet};
 use crate::routes::tabs::AdminTab;
 use crate::services::backend::Backend;
 use crate::state::admin::{AdminUi, NEW_POLICY, PolicyUi, pick};

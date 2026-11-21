@@ -8,7 +8,9 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::admin::AdminChange;
-use crate::models::admin_access::{AccessDirectory, Principal, PrincipalKind, Role, SubjectAccess};
+use crate::models::admin::access::{
+    AccessDirectory, Principal, PrincipalKind, Role, SubjectAccess,
+};
 use crate::models::format::{date, date_second};
 use crate::services::backend::Backend;
 use crate::state::admin::AdminUi;

@@ -8,8 +8,8 @@ use nodedb_types::Value;
 use crate::data::mock;
 use crate::models::array_data::{ArraySchema, SliceRequest, SliceResult};
 use crate::models::collection::{Collection, Profile};
-use crate::models::graph_records::{EdgePage, EdgeQuery};
-use crate::models::record_check::violations;
+use crate::models::graph::records::{EdgePage, EdgeQuery};
+use crate::models::records::check::violations;
 use crate::models::records::{CollectionAccess, Denial, Grant, Record, RecordPage, RecordQuery};
 use crate::models::schema::CollectionSchema;
 use crate::services::error::StudioError;
@@ -93,7 +93,7 @@ fn derive_kv(mut record: Record) -> Record {
             Value::Bytes(_) => "bytes",
             _ => "json",
         };
-        let size = crate::models::record_json::compact(&value, &[]).len() as i64;
+        let size = crate::models::records::json::compact(&value, &[]).len() as i64;
         map.insert("type".to_string(), Value::String(kind.to_string()));
         map.insert("size".to_string(), Value::Integer(size));
     }

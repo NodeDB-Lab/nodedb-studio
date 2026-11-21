@@ -3,8 +3,8 @@
 
 use crate::models::format::{date_minute, thousands};
 use crate::models::timeseries::Bucket;
-use crate::models::ts_backfill::{BackfillRun, RunState};
-use crate::models::ts_lifecycle::{
+use crate::models::timeseries::backfill::{BackfillRun, RunState};
+use crate::models::timeseries::lifecycle::{
     BeyondHorizon, ChangeReview, LatePolicy, LateWrites, Lifecycle, LifecycleChange, Receipt,
     RefreshPolicy, Retention, ReviewItem, RollupDef, RollupFn, RollupOutput, RollupRun,
 };
@@ -197,7 +197,7 @@ impl LifecycleStore {
 
 fn retention_item(
     l: &Lifecycle,
-    d: &crate::models::ts_lifecycle::RetentionDraft,
+    d: &crate::models::timeseries::lifecycle::RetentionDraft,
     raw_times: &[i64],
     jobs: &[BackfillRun],
     now: i64,
@@ -279,7 +279,7 @@ fn retention_item(
     }
 }
 
-fn rollup_item(l: &Lifecycle, d: &crate::models::ts_lifecycle::RollupDraft) -> ReviewItem {
+fn rollup_item(l: &Lifecycle, d: &crate::models::timeseries::lifecycle::RollupDraft) -> ReviewItem {
     let def = d.def();
     let input_def = l.rollup(&d.input);
     let sql = def.sql(input_def.is_none(), input_def);
@@ -354,8 +354,8 @@ mod tests {
     use super::*;
     use crate::models::format::epoch;
     use crate::models::timeseries::TimeSpan;
-    use crate::models::ts_backfill::BackfillRun;
-    use crate::models::ts_lifecycle::{RetentionDraft, RollupDraft};
+    use crate::models::timeseries::backfill::BackfillRun;
+    use crate::models::timeseries::lifecycle::{RetentionDraft, RollupDraft};
 
     const NOW: i64 = epoch(2026, 6, 13, 13, 40, 0);
 

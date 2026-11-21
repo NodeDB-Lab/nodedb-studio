@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use crate::models::record_json::tokens;
+use crate::models::records::json::tokens;
 
 #[component]
 pub fn JsonView(text: String, #[props(default)] class: String) -> Element {

@@ -11,11 +11,11 @@ use std::collections::BTreeSet;
 
 use dioxus::prelude::*;
 
+use crate::models::timeseries::axis::{axis_number, fixed, long_stamp};
+use crate::models::timeseries::chart::{Frame, Geometry, marker, runs, y_title};
 use crate::models::timeseries::{
     Aggregate, ChartKind, ExploreResult, PointState, Series, TimeSpan,
 };
-use crate::models::timeseries_axis::{axis_number, fixed, long_stamp};
-use crate::models::timeseries_chart::{Frame, Geometry, marker, runs, y_title};
 
 /// How a value reads: counts whole, everything else to two places.
 pub fn value_text(aggregate: Aggregate, v: f64) -> String {

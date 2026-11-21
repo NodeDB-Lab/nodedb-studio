@@ -5,11 +5,11 @@ use dioxus::prelude::*;
 
 use crate::components::clipboard::use_copier;
 use crate::components::icon::{Ico, Icon};
-use crate::models::console::Protocol;
 use crate::models::format::thousands;
 use crate::models::spatial::GeoSource;
-use crate::models::spatial_text::crs_unit;
-use crate::models::sql_text::tokenize;
+use crate::models::spatial::text::crs_unit;
+use crate::models::workbench::console::Protocol;
+use crate::models::workbench::sql_text::tokenize;
 use crate::state::spatial::SpatialUi;
 
 const PLACEHOLDER: &str = "-- Fix the marked fields to build the SQL.";

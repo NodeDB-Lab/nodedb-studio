@@ -3,7 +3,7 @@
 //! writes the Origin holds.
 
 use crate::data::mock::sync::devices::t;
-use crate::models::sync_activity::{Cursor, Direction, SyncEvent, SyncEventKind};
+use crate::models::sync::activity::{Cursor, Direction, SyncEvent, SyncEventKind};
 
 struct Seed {
     id: u32,

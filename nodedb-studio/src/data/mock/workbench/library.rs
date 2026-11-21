@@ -4,7 +4,9 @@
 use std::collections::BTreeMap;
 
 use crate::models::format::epoch;
-use crate::models::saved_query::{QueryLibrary, QueryScope, SavedQuery, SavedQueryVersion};
+use crate::models::workbench::saved_query::{
+    QueryLibrary, QueryScope, SavedQuery, SavedQueryVersion,
+};
 use crate::models::workbench::{ParamBinding, ParamType, QueryDraft};
 
 /// The signed-in person, owner of My workspace.

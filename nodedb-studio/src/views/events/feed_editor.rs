@@ -11,7 +11,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::resource_state;
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
-use crate::models::feed_draft::{DraftField, FeedDraft, Issue};
+use crate::models::feeds::draft::{DraftField, FeedDraft, Issue};
 use crate::models::feeds::{
     Backoff, ChangeFeed, ChangeOp, DeliveryKind, RetentionUnit, StartPosition,
 };

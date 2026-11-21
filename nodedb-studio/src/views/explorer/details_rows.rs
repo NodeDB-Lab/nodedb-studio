@@ -186,7 +186,7 @@ pub fn ColumnarDetails(
         .get("updated_at")
         .map(|v| time_label(v, offset))
         .unwrap_or_default();
-    let json = crate::models::record_json::pretty(&record.value, &schema.fields);
+    let json = crate::models::records::json::pretty(&record.value, &schema.fields);
     let show_revision = shows_revisions(use_caps().as_ref());
     rsx! {
         div { class: "inspector",

@@ -1,13 +1,13 @@
 //! The graph canvas: an SVG drawn from typed graph data. Placement and edge
-//! curves come from `models::graph_layout` and `models::graph_scene`, so
+//! curves come from `models::graph::layout` and `models::graph::scene`, so
 //! nothing here decides where a node goes.
 
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
+use crate::models::graph::layout::{LayoutKind, layout};
+use crate::models::graph::scene::build;
 use crate::models::graph::{GraphPath, GraphResult, NodeKind};
-use crate::models::graph_layout::{LayoutKind, layout};
-use crate::models::graph_scene::build;
 use crate::state::graph::{CanvasState, Pick};
 use crate::views::graph::glyphs::{LegendShape, NodeShape, R, kind_class};
 

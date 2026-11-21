@@ -11,7 +11,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::resource_state;
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::graph::GraphResult;
-use crate::models::graph_layout::LayoutKind;
+use crate::models::graph::layout::LayoutKind;
 use crate::routes::tabs::GraphTab;
 use crate::services::backend::Backend;
 use crate::state::graph::GraphUi;

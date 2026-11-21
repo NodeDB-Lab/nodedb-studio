@@ -3,10 +3,10 @@
 //! 13:36:02: its series end there and its row stays stale with that time.
 
 use crate::data::mock::cluster::members::{NOW, node_id, node_name};
-use crate::models::cluster_monitor::{
+use crate::models::cluster::monitor::{
     Metric, MetricSeries, NodeTelemetry, Sample, Telemetry, TelemetryRange,
 };
-use crate::models::cluster_place::GIB;
+use crate::models::cluster::place::GIB;
 use crate::models::format::epoch;
 
 /// What a node reports last, and the level its series hover around.

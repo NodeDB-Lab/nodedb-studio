@@ -12,7 +12,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::{date_minute, date_second, offset_label};
-use crate::models::saved_query::{QueryLibrary, QueryScope, SavedQuery};
+use crate::models::workbench::saved_query::{QueryLibrary, QueryScope, SavedQuery};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::preferences::Preferences;
@@ -65,7 +65,7 @@ pub fn DetailsBody(library: AsyncState<QueryLibrary>) -> Element {
 #[component]
 fn QueryFacts(
     query: SavedQuery,
-    versions: AsyncState<Vec<crate::models::saved_query::SavedQueryVersion>>,
+    versions: AsyncState<Vec<crate::models::workbench::saved_query::SavedQueryVersion>>,
 ) -> Element {
     let backend = use_context::<Rc<dyn Backend>>();
     let mut ws = use_context::<Signal<QueryWorkspace>>();

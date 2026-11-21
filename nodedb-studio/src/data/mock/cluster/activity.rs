@@ -3,7 +3,7 @@
 //! server's clock around 2026-06-13 13:40 UTC.
 
 use crate::data::mock::cluster::members::{node_id, node_name};
-use crate::models::cluster_activity::{ClusterEvent, EventKind, Severity};
+use crate::models::cluster::activity::{ClusterEvent, EventKind, Severity};
 use crate::models::format::epoch;
 
 /// One event. `observed` is when the server saw it, `happened` when the

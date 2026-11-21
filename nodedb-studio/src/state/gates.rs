@@ -5,8 +5,8 @@
 
 use dioxus::prelude::*;
 
-use crate::models::query_plan::ExplainMode;
 use crate::models::workbench::TxAccess;
+use crate::models::workbench::query_plan::ExplainMode;
 use crate::routes::tabs::AdminTab;
 use crate::state::connection::{ActiveConnection, Capabilities};
 

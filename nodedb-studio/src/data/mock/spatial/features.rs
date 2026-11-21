@@ -6,9 +6,9 @@ use nodedb_types::geometry::Geometry;
 
 use crate::data::mock::Overlay;
 use crate::data::mock::explorer::{all_records, collection_schema, plain_text};
-use crate::models::geo_ops::{Shape, Validity, validity};
 use crate::models::records::Record;
 use crate::models::schema::{CollectionSchema, FieldType};
+use crate::models::spatial::geo_ops::{Shape, Validity, validity};
 use crate::models::spatial::{
     Feature, FeatureRef, LayerPage, SourceRef, Viewport, ViewportRequest,
 };
@@ -125,7 +125,7 @@ pub fn spatial_validity(overlay: &Overlay, r: &FeatureRef) -> Result<Validity, S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::geo_ops::Bbox;
+    use crate::models::spatial::geo_ops::Bbox;
 
     fn places() -> SourceRef {
         SourceRef::new("places", "geometry")

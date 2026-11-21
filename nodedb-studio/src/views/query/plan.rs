@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::thousands;
-use crate::models::query_plan::{ExplainMode, PlanOperator, QueryPlan, duration};
+use crate::models::workbench::query_plan::{ExplainMode, PlanOperator, QueryPlan, duration};
 use crate::state::gates::{explain_mode, explain_modes, use_caps};
 use crate::state::query::{PlanState, QueryTab, QueryWorkspace};
 
@@ -277,7 +277,7 @@ mod tests {
     fn an_absent_estimate_is_a_dash_never_zero() {
         let op = PlanOperator {
             id: 1,
-            kind: crate::models::query_plan::OperatorKind::Sort,
+            kind: crate::models::workbench::query_plan::OperatorKind::Sort,
             target: None,
             est_rows: None,
             actual_rows: None,

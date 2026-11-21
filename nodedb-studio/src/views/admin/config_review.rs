@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::models::admin::AdminChange;
-use crate::models::admin_config::{ConfigRequest, ConfigScope, ConfigTarget, Validation};
+use crate::models::admin::config::{ConfigRequest, ConfigScope, ConfigTarget, Validation};
 use crate::models::feeds::Tone;
 use crate::services::backend::Backend;
 use crate::state::admin::{AdminUi, ConfigUi};

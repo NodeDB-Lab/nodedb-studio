@@ -3,7 +3,7 @@
 //! has something to filter.
 
 use crate::data::mock::sync::devices::t;
-use crate::models::sync_sub::{
+use crate::models::sync::sub::{
     ShapeKind, Snapshot, SubEvent, SubEventKind, SubState, Subscription,
 };
 

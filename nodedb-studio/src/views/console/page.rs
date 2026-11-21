@@ -11,7 +11,7 @@ use crate::components::clipboard::use_copier;
 use crate::components::code_editor::CodeEditor;
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side, region_style};
-use crate::models::console::{HistoryQuery, HistoryWindow};
+use crate::models::workbench::console::{HistoryQuery, HistoryWindow};
 use crate::services::backend::Backend;
 use crate::state::connection::ActiveConnection;
 use crate::state::console::ConsoleState;

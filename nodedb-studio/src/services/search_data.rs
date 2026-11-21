@@ -8,9 +8,9 @@
 
 use async_trait::async_trait;
 
+use crate::models::search::analyze::{Analysis, AnalyzeRequest};
+use crate::models::search::index::{BuildRun, IndexOverview, RebuildPlan, RunHistory};
 use crate::models::search::{SearchRequest, SearchResult, SearchSetup};
-use crate::models::search_analyze::{Analysis, AnalyzeRequest};
-use crate::models::search_index::{BuildRun, IndexOverview, RebuildPlan, RunHistory};
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
@@ -52,9 +52,9 @@ pub trait SearchData {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::search::analyze::InputRole;
+    use crate::models::search::index::RunState;
     use crate::models::search::{Fusion, SearchMode, VectorInput};
-    use crate::models::search_analyze::InputRole;
-    use crate::models::search_index::RunState;
     use crate::services::async_state::AsyncState;
     use crate::services::mock::MockConnectionService;
 

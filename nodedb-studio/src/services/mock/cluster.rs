@@ -3,12 +3,12 @@
 use async_trait::async_trait;
 
 use crate::data::mock;
+use crate::models::cluster::activity::{ActivityLog, ActivityQuery};
+use crate::models::cluster::monitor::{Telemetry, TelemetryRange};
+use crate::models::cluster::op::OpResult;
+use crate::models::cluster::place::{MoveRequest, Placement, RebalancePlan};
+use crate::models::cluster::raft::{RaftGroups, SnapshotInfo, TransferPreview};
 use crate::models::cluster::{ClusterMembers, HostedGroup};
-use crate::models::cluster_activity::{ActivityLog, ActivityQuery};
-use crate::models::cluster_monitor::{Telemetry, TelemetryRange};
-use crate::models::cluster_op::OpResult;
-use crate::models::cluster_place::{MoveRequest, Placement, RebalancePlan};
-use crate::models::cluster_raft::{RaftGroups, SnapshotInfo, TransferPreview};
 use crate::services::cluster_data::ClusterData;
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;

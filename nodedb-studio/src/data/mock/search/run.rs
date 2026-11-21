@@ -12,10 +12,10 @@ use super::fusion::{Fused, fuse};
 use crate::data::mock::vector::{ArticleText, article_number, vector_record, vector_search};
 use crate::models::format::epoch;
 use crate::models::records::Filter;
+use crate::models::search::sql::search_sql;
 use crate::models::search::{
     Excerpt, Hit, Leg, Score, SearchMode, SearchRequest, SearchResult, VectorInput,
 };
-use crate::models::search_sql::search_sql;
 use crate::models::vector::{NeighborRequest, QuerySource};
 use crate::services::error::StudioError;
 

@@ -5,8 +5,8 @@ use nodedb_types::Value;
 use super::sources::time_sources;
 use crate::data::mock::explorer::{Overlay, all_records, observed_at, plain_text};
 use crate::models::records::Record;
+use crate::models::timeseries::agg::{Sample, aggregate};
 use crate::models::timeseries::{ExploreQuery, ExploreResult, QueryIssue};
-use crate::models::timeseries_agg::{Sample, aggregate};
 
 /// Why a query did not run.
 #[derive(Debug, Clone, PartialEq)]

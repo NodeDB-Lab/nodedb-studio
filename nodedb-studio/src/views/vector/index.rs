@@ -10,7 +10,7 @@ use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::format::{clock, offset_label};
 use crate::models::vector::VectorTarget;
-use crate::models::vector_index::{BuildState, Coverage, IndexStatus};
+use crate::models::vector::index::{BuildState, Coverage, IndexStatus};
 use crate::routes::Route;
 use crate::routes::tabs::VectorTab;
 use crate::services::async_state::AsyncState;

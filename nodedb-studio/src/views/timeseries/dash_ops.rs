@@ -1,8 +1,10 @@
 //! Dashboard document rules: opening, leaving, adding, removing. Plain
 //! functions over `DashUi`, so each rule is tested without a renderer.
 
+use crate::models::timeseries::dashboard::{
+    Dashboard, MAX_PANEL_HEIGHT, MIN_PANEL_HEIGHT, PanelDef,
+};
 use crate::models::timeseries::{ExploreQuery, TimeSpan};
-use crate::models::ts_dashboard::{Dashboard, MAX_PANEL_HEIGHT, MIN_PANEL_HEIGHT, PanelDef};
 use crate::state::timeseries::{After, DashDialog, DashUi, Notice, PanelEditor, SaveState};
 
 /// The key a panel's View entry and visibility use: the document and the

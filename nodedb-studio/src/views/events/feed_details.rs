@@ -14,7 +14,7 @@ use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::json_view::JsonView;
 use crate::components::tabs::TabBar;
-use crate::models::feed_draft::FeedDraft;
+use crate::models::feeds::draft::FeedDraft;
 use crate::models::feeds::{ChangeFeed, FeedEvent, FeedState};
 use crate::routes::Route;
 use crate::services::backend::Backend;

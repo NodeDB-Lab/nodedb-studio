@@ -2,7 +2,7 @@
 //! the index is bound to and reports each stage it observed.
 
 use super::analyzer::analyze;
-use crate::models::search_analyze::{
+use crate::models::search::analyze::{
     Analysis, AnalyzeRequest, AnalyzedToken, AnalyzerProfile, OffsetUnit, TraceStep,
 };
 use crate::services::error::StudioError;
@@ -92,7 +92,7 @@ pub fn analysis(request: &AnalyzeRequest) -> Result<Analysis, StudioError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::search_analyze::InputRole;
+    use crate::models::search::analyze::InputRole;
 
     fn request(text: &str) -> AnalyzeRequest {
         AnalyzeRequest {

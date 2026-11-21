@@ -5,7 +5,7 @@
 
 use dioxus::prelude::*;
 
-use crate::models::ts_lifecycle::{Lifecycle, Tier};
+use crate::models::timeseries::lifecycle::{Lifecycle, Tier};
 
 /// The selected tier, or the raw collection when none is chosen.
 pub fn selected_tier<'a>(tiers: &'a [Tier], selected: Option<&str>) -> &'a Tier {

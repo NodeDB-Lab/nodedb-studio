@@ -6,7 +6,7 @@ use std::rc::Rc;
 use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
-use crate::models::console::Protocol;
+use crate::models::workbench::console::Protocol;
 use crate::services::backend::Backend;
 use crate::state::console::ConsoleState;
 use crate::state::query::TxEpoch;

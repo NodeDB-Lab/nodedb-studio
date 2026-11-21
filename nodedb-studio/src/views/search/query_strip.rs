@@ -5,10 +5,10 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::records::Filter;
-use crate::models::search::{SearchCollection, SearchMode};
-use crate::models::search_form::{
+use crate::models::search::form::{
     FusionForm, Issue, IssueField, SearchForm, VectorEditor, VectorKind,
 };
+use crate::models::search::{SearchCollection, SearchMode};
 use crate::state::search::{FilterDraft, SearchUi};
 use crate::views::search::query_bar::edit;
 

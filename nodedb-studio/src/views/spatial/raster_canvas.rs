@@ -8,11 +8,11 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::geo_proj::PlaneView;
-use crate::models::geo_raster::{Palette, RasterCrs, RasterFrame, ValueMode};
 use crate::models::img_encode::png_data_uri;
+use crate::models::spatial::geo_proj::PlaneView;
+use crate::models::spatial::geo_raster::{Palette, RasterCrs, RasterFrame, ValueMode};
+use crate::models::spatial::text::{raw_text, trimmed};
 use crate::models::spatial::{RasterSlice, RasterSource};
-use crate::models::spatial_text::{raw_text, trimmed};
 use crate::state::spatial::SpatialUi;
 use crate::views::spatial::map_draw::text_width;
 

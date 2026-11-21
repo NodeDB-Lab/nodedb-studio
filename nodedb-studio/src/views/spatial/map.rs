@@ -9,8 +9,8 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side, region_style};
-use crate::models::geo_ops::{Bbox, Shape};
-use crate::models::geo_proj::map;
+use crate::models::spatial::geo_ops::{Bbox, Shape};
+use crate::models::spatial::geo_proj::map;
 use crate::models::spatial::{GeoSource, SourceRef, SpatialSetup, ViewportRequest};
 use crate::routes::tabs::SpatialTab;
 use crate::services::backend::Backend;

@@ -2,7 +2,7 @@
 //! time each operator measured.
 
 use crate::data::mock::workbench::results::{Shape, shape};
-use crate::models::query_plan::{ExplainMode, OperatorKind, PlanOperator, QueryPlan};
+use crate::models::workbench::query_plan::{ExplainMode, OperatorKind, PlanOperator, QueryPlan};
 
 struct Op {
     kind: OperatorKind,

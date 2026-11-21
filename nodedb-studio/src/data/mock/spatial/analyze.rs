@@ -2,11 +2,11 @@
 
 use crate::data::mock::Overlay;
 use crate::data::mock::spatial::features::all_features;
-use crate::models::geo_ops::{Shape, haversine_m, point_intersects, point_within};
 use crate::models::spatial::Feature;
-use crate::models::spatial_analyze::{
+use crate::models::spatial::analyze::{
     AnalysisRequest, AnalysisResult, Operation, Query, ResultColumn, ResultRow,
 };
+use crate::models::spatial::geo_ops::{Shape, haversine_m, point_intersects, point_within};
 use crate::services::error::StudioError;
 
 fn column(name: &str, numeric: bool) -> ResultColumn {
@@ -120,7 +120,7 @@ mod tests {
     use super::*;
     use crate::data::mock::spatial::spatial_setup;
     use crate::models::spatial::SourceRef;
-    use crate::models::spatial_analyze::{AnalysisForm, Availability};
+    use crate::models::spatial::analyze::{AnalysisForm, Availability};
 
     fn request(form: AnalysisForm) -> AnalysisRequest {
         let o = Overlay::default();
@@ -167,7 +167,7 @@ mod tests {
             &Overlay::default(),
             &request(AnalysisForm {
                 radius: "1000".into(),
-                unit: crate::models::spatial_analyze::DistanceUnit::Kilometres,
+                unit: crate::models::spatial::analyze::DistanceUnit::Kilometres,
                 ..AnalysisForm::default()
             }),
         )

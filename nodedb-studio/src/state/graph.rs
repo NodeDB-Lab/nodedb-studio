@@ -7,10 +7,10 @@
 
 use dioxus::prelude::*;
 
+use crate::models::graph::builder::BuilderForm;
+use crate::models::graph::layout::LayoutKind;
+use crate::models::graph::rag::{RagRequest, RagSetup, RagSource};
 use crate::models::graph::{GraphPath, GraphResult, NodeKind, paths_to_kind};
-use crate::models::graph_builder::BuilderForm;
-use crate::models::graph_layout::LayoutKind;
-use crate::models::graph_rag::{RagRequest, RagSetup, RagSource};
 
 /// The query the Cypher tab opens with.
 pub const DEFAULT_CYPHER: &str = "MATCH (u:User)-[:POSTED]->(p:Post)\n      -[:TAGGED]->(t:Topic {name: \"databases\"})\nWHERE u.country = \"MY\"\nRETURN u, p, t\nLIMIT 50";
@@ -538,11 +538,11 @@ mod tests {
                 metric: "cosine".into(),
             }],
             models: vec![
-                crate::models::graph_rag::EmbeddingModel {
+                crate::models::graph::rag::EmbeddingModel {
                     name: "support-embed-v2".into(),
                     dimension: 768,
                 },
-                crate::models::graph_rag::EmbeddingModel {
+                crate::models::graph::rag::EmbeddingModel {
                     name: "support-embed-v1".into(),
                     dimension: 384,
                 },

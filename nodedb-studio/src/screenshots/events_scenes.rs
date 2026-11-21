@@ -3,8 +3,8 @@
 //! next image.
 
 use crate::data::mock::seen_messages;
-use crate::models::feed_draft::FeedDraft;
 use crate::models::feeds::FeedSession;
+use crate::models::feeds::draft::FeedDraft;
 use crate::models::listen::ListenSession;
 use crate::state::events::EventsSeed;
 use crate::state::events::feeds::{FeedEditor, FeedsUi, Tail};

@@ -6,8 +6,8 @@ use nodedb_types::Value;
 
 use crate::data::mock::explorer::{Overlay, stored_record};
 use crate::data::mock::sync::store::{SyncStore, missing, stale};
-use crate::models::sync_activity::{Direction, SyncEventKind};
-use crate::models::sync_reject::{
+use crate::models::sync::activity::{Direction, SyncEventKind};
+use crate::models::sync::reject::{
     CompensationState, CompensationStep, Hint, RejectReason, RejectState, Rejection, RepairResult,
     StepState,
 };
@@ -96,7 +96,7 @@ impl SyncStore {
                 r.received_at,
                 Some(format!(
                     "Made on the device at {}.",
-                    crate::models::sync_activity::utc(r.device_time)
+                    crate::models::sync::activity::utc(r.device_time)
                 )),
             ),
             CompensationStep {

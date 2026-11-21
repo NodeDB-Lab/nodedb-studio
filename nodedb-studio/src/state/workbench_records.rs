@@ -4,8 +4,8 @@
 
 use std::collections::BTreeMap;
 
-use crate::models::console::{HistoryEntry, HistoryQuery, Protocol};
-use crate::models::saved_query::{
+use crate::models::workbench::console::{HistoryEntry, HistoryQuery, Protocol};
+use crate::models::workbench::saved_query::{
     QueryLibrary, QueryScope, SaveQuery, SavedQuery, SavedQueryVersion,
 };
 use crate::services::error::StudioError;

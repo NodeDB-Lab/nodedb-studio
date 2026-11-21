@@ -8,7 +8,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::designer::DesignSchema;
-use crate::models::designer_form::{IndexForm, ReferenceForm};
+use crate::models::designer::form::{IndexForm, ReferenceForm};
 use crate::services::backend::Backend;
 use crate::state::designer::{CreateState, DesignerState, Inspector, ReviewState};
 use crate::state::workspace::{Surface, Workspace};

@@ -12,7 +12,9 @@ use dioxus::prelude::*;
 use crate::components::clipboard::copy_text;
 use crate::components::icon::{Ico, Icon};
 use crate::models::timeseries::ExploreQuery;
-use crate::models::ts_dashboard::{Dashboard, MAX_PANEL_HEIGHT, MIN_PANEL_HEIGHT, PanelDef};
+use crate::models::timeseries::dashboard::{
+    Dashboard, MAX_PANEL_HEIGHT, MIN_PANEL_HEIGHT, PanelDef,
+};
 use crate::routes::Route;
 use crate::routes::tabs::TimeseriesTab;
 use crate::services::backend::Backend;

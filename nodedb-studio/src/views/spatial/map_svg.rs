@@ -4,9 +4,9 @@
 
 use dioxus::prelude::*;
 
-use crate::models::geo_ops::Shape;
-use crate::models::geo_proj::{PlaneView, map};
 use crate::models::spatial::FeatureRef;
+use crate::models::spatial::geo_ops::Shape;
+use crate::models::spatial::geo_proj::{PlaneView, map};
 use crate::state::spatial::{Draft, ResultLayer};
 use crate::views::spatial::map_draw::{Item, Tick, polygon_path, ring_path, text_width};
 use crate::views::spatial::map_overlay::Preview;

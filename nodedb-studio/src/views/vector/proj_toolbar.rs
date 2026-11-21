@@ -4,7 +4,7 @@
 use dioxus::prelude::*;
 
 use crate::models::vector::VectorTarget;
-use crate::models::vector_projection::{
+use crate::models::vector::projection::{
     Method, ProjectionField, ProjectionIssue, ProjectionRequest, sample_bounds,
 };
 use crate::state::vector::{Drafts, ProjectionUi, VectorUi};

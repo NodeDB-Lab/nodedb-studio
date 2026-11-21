@@ -5,8 +5,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::tabs::TabBar;
+use crate::models::search::analyze::InputRole;
 use crate::models::search::{Hit, SearchCollection, SearchMode, SearchResult};
-use crate::models::search_analyze::InputRole;
 use crate::routes::Route;
 use crate::routes::tabs::SearchTab;
 use crate::state::explorer::{RecordView, Selected, select_record};

@@ -6,8 +6,8 @@ use std::rc::Rc;
 use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
-use crate::models::query_plan::ExplainMode;
-use crate::models::saved_query::SaveQuery;
+use crate::models::workbench::query_plan::ExplainMode;
+use crate::models::workbench::saved_query::SaveQuery;
 use crate::models::workbench::{QueryRequest, TxAccess};
 use crate::services::backend::Backend;
 use crate::state::query::{PlanState, QueryTab, QueryWorkspace, ResultsView, RunState, TxEpoch};

@@ -8,10 +8,12 @@ use nodedb_types::Value;
 use crate::data::mock::{
     self, BackfillError, DashError, ExploreError, LifecycleError, backfill_preview,
 };
+use crate::models::timeseries::backfill::{BackfillPreview, BackfillRun, BackfillSpec};
+use crate::models::timeseries::dashboard::{Dashboard, DashboardSummary};
+use crate::models::timeseries::lifecycle::{
+    ChangeReview, Lifecycle, LifecycleChange, Receipt, RollupRun,
+};
 use crate::models::timeseries::{ExploreQuery, ExploreResult, TimeCatalog};
-use crate::models::ts_backfill::{BackfillPreview, BackfillRun, BackfillSpec};
-use crate::models::ts_dashboard::{Dashboard, DashboardSummary};
-use crate::models::ts_lifecycle::{ChangeReview, Lifecycle, LifecycleChange, Receipt, RollupRun};
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;
 use crate::services::mock_behavior::{MockBehavior, apply_one_result, apply_result, apply_write};

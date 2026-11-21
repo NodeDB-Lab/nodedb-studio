@@ -5,7 +5,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::json_view::JsonView;
-use crate::models::cluster_activity::ClusterEvent;
+use crate::models::cluster::activity::ClusterEvent;
 use crate::models::format::clock_second;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;

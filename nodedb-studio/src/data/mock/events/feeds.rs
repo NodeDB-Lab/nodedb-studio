@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use super::feed_history::{attempts, consumers, retained, upcoming};
-use crate::models::feed_draft::FeedDraft;
+use crate::models::feeds::draft::FeedDraft;
 use crate::models::feeds::{
     Backoff, ChangeFeed, ChangeOp, DeliveryAttempt, DeliveryKind, FeedConsumer, FeedEvent,
     FeedState, StartPosition,

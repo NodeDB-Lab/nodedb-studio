@@ -6,10 +6,10 @@
 //! cap.
 
 use crate::data::mock::graph::store::StoredGraph;
-use crate::models::graph::{GraphPath, GraphResult, NodeKind, Relation};
-use crate::models::graph_rag::{
+use crate::models::graph::rag::{
     EmbeddingModel, Evidence, Provenance, RagRequest, RagResult, RagSetup, RagSource,
 };
+use crate::models::graph::{GraphPath, GraphResult, NodeKind, Relation};
 use crate::services::error::StudioError;
 
 const INDEX: &str = "idx_articles_embedding";

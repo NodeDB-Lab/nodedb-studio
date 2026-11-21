@@ -5,7 +5,7 @@
 use dioxus::prelude::*;
 
 use crate::models::format::thousands;
-use crate::models::vector_index::{Coverage, IndexStatus, estimate, percent};
+use crate::models::vector::index::{Coverage, IndexStatus, estimate, percent};
 
 #[component]
 pub fn StatusBody(status: IndexStatus) -> Element {

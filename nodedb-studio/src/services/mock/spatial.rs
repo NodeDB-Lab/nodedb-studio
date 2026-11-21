@@ -5,11 +5,11 @@
 use async_trait::async_trait;
 
 use crate::data::mock;
-use crate::models::geo_ops::Validity;
+use crate::models::spatial::analyze::{AnalysisRequest, AnalysisResult};
+use crate::models::spatial::geo_ops::Validity;
 use crate::models::spatial::{
     Feature, FeatureRef, RasterRequest, RasterSlice, SpatialSetup, Viewport, ViewportRequest,
 };
-use crate::models::spatial_analyze::{AnalysisRequest, AnalysisResult};
 use crate::services::error::StudioError;
 use crate::services::mock::MockConnectionService;
 use crate::services::mock_behavior::{MockBehavior, apply_one_result};

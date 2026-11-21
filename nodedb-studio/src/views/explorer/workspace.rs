@@ -15,7 +15,7 @@ use crate::components::panel::{Panel, ResizeHandle, Side};
 use crate::components::tabs::TabBar;
 use crate::models::collection::{Collection, Profile};
 use crate::models::format::{clock, offset_label};
-use crate::models::graph_records::{EdgePage, EdgeQuery};
+use crate::models::graph::records::{EdgePage, EdgeQuery};
 use crate::models::records::{CollectionAccess, RecordPage};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;

@@ -9,8 +9,8 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::geo_ops::Shape;
-use crate::models::geo_proj::map;
+use crate::models::spatial::geo_ops::Shape;
+use crate::models::spatial::geo_proj::map;
 use crate::models::spatial::{GeoSource, LayerPage, SpatialSetup};
 use crate::state::spatial::{MapTool, SpatialUi};
 use crate::views::spatial::map_draw::{graticule, layout};

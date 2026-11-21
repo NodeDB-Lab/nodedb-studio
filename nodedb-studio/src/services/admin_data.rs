@@ -8,14 +8,14 @@
 
 use async_trait::async_trait;
 
+use crate::models::admin::access::{AccessDirectory, AccessSubject, SubjectAccess};
+use crate::models::admin::audit::{AuditEvent, AuditFacets, AuditPage, AuditQuery};
+use crate::models::admin::backup::BackupOverview;
+use crate::models::admin::config::{ConfigProposal, ConfigRequest, ConfigTarget, ConfigView};
+use crate::models::admin::credential::{CredentialList, CredentialTest};
+use crate::models::admin::policy::{PolicySet, PolicyTest, PolicyTestResult};
 use crate::models::admin::{AdminChange, AdminReview};
-use crate::models::admin_access::{AccessDirectory, AccessSubject, SubjectAccess};
-use crate::models::admin_audit::{AuditEvent, AuditFacets, AuditPage, AuditQuery};
-use crate::models::admin_backup::BackupOverview;
-use crate::models::admin_config::{ConfigProposal, ConfigRequest, ConfigTarget, ConfigView};
-use crate::models::admin_credential::{CredentialList, CredentialTest};
-use crate::models::admin_policy::{PolicySet, PolicyTest, PolicyTestResult};
-use crate::models::cluster_op::OpResult;
+use crate::models::cluster::op::OpResult;
 use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
@@ -70,11 +70,11 @@ pub trait AdminData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::admin_access::AccessChange;
-    use crate::models::admin_audit::AuditRange;
-    use crate::models::admin_backup::{BackupChange, RestoreRequest};
-    use crate::models::admin_config::ConfigScope;
-    use crate::models::admin_policy::{PolicyChange, PolicyOperation};
+    use crate::models::admin::access::AccessChange;
+    use crate::models::admin::audit::AuditRange;
+    use crate::models::admin::backup::{BackupChange, RestoreRequest};
+    use crate::models::admin::config::ConfigScope;
+    use crate::models::admin::policy::{PolicyChange, PolicyOperation};
     use crate::models::format::epoch;
     use crate::services::async_state::AsyncState;
     use crate::services::mock::MockConnectionService;
@@ -213,8 +213,8 @@ mod tests {
 
     #[tokio::test]
     async fn a_new_user_needs_a_password_and_it_shows_nowhere() {
-        use crate::models::admin_access::PrincipalKind;
-        use crate::models::admin_password::Secret;
+        use crate::models::admin::access::PrincipalKind;
+        use crate::models::admin::password::Secret;
         let create = |kind, password: Option<&str>| {
             AdminChange::Access(vec![AccessChange::CreatePrincipal {
                 name: "new_one".into(),
@@ -407,7 +407,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_new_credential_previews_applies_and_reads_unknown() {
-        use crate::models::admin_credential::{
+        use crate::models::admin::credential::{
             CredentialChange, CredentialDraft, CredentialStatus,
         };
         let svc = MockConnectionService::ready();
@@ -441,7 +441,7 @@ mod tests {
         let before = svc.credentials().await.expect("credentials");
         assert_eq!(
             before.items[1].status,
-            crate::models::admin_credential::CredentialStatus::Unknown
+            crate::models::admin::credential::CredentialStatus::Unknown
         );
         let t = svc.test_credential("backup_store").await.expect("test");
         assert!(t.reachable);

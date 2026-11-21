@@ -10,7 +10,7 @@ use dioxus::prelude::*;
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
 use crate::models::format::clock;
-use crate::models::sync_enroll::EnrollDraft;
+use crate::models::sync::enroll::EnrollDraft;
 use crate::services::backend::Backend;
 use crate::state::sync::SyncUi;
 use crate::views::events::common::FormField;

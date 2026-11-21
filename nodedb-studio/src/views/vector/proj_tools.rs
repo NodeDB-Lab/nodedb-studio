@@ -3,7 +3,7 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::vector_projection::{Category, Projection};
+use crate::models::vector::projection::{Category, Projection};
 use crate::state::vector::{
     Drafts, MapTool, MapView, ProjectionUi, Selection, VectorUi, ZOOM_STEP,
 };

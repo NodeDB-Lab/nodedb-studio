@@ -8,8 +8,8 @@ use dioxus::prelude::*;
 
 use crate::components::async_view::AsyncView;
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
+use crate::models::search::compare::{Comparison, compare};
 use crate::models::search::{SearchMode, SearchRequest, VectorInput};
-use crate::models::search_compare::{Comparison, compare};
 use crate::services::backend::Backend;
 use crate::services::error::StudioError;
 use crate::state::search::SearchUi;

@@ -1,7 +1,7 @@
 //! Lifecycle drafts: the rules for building a rollup and queueing changes
 //! for review. Plain functions, so each rule is tested without a renderer.
 
-use crate::models::ts_lifecycle::{
+use crate::models::timeseries::lifecycle::{
     Lifecycle, LifecycleChange, RollupDraft, RollupFn, RollupOutput,
 };
 use crate::state::timeseries::LifeUi;
@@ -122,7 +122,7 @@ pub fn queue(ui: &mut LifeUi, change: LifecycleChange) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::ts_lifecycle::{Retention, RetentionDraft};
+    use crate::models::timeseries::lifecycle::{Retention, RetentionDraft};
     use crate::services::MockConnectionService;
     use crate::services::timeseries_data::TimeseriesData;
 

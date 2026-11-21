@@ -6,12 +6,12 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::records::Filter;
+use crate::models::timeseries::axis::range_label;
+use crate::models::timeseries::dashboard::Refresh;
 use crate::models::timeseries::{
     Aggregate, Bucket, ExploreQuery, IssueField, Measure, Preset, QueryIssue, TimeCatalog,
     TimeSource, TimeSpan, parse_utc,
 };
-use crate::models::timeseries_axis::range_label;
-use crate::models::ts_dashboard::Refresh;
 use crate::state::timeseries::ExploreUi;
 use crate::views::timeseries::explore_tasks::{choose_collection, set_range};
 use crate::views::timeseries::picker::CollectionPicker;

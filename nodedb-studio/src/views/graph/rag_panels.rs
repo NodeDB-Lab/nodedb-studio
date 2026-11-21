@@ -5,9 +5,9 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::date;
+use crate::models::graph::layout::LayoutKind;
+use crate::models::graph::rag::{Evidence, RagResult};
 use crate::models::graph::{GraphNode, NodeKind, value_text};
-use crate::models::graph_layout::LayoutKind;
-use crate::models::graph_rag::{Evidence, RagResult};
 use crate::state::graph::{CanvasState, Pick, RagUi};
 use crate::views::graph::canvas::GraphCanvas;
 use crate::views::graph::glyphs::LegendShape;

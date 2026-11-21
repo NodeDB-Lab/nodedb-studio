@@ -5,8 +5,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::tx_badge::TxBadge;
-use crate::models::console::Protocol;
 use crate::models::workbench::TxState;
+use crate::models::workbench::console::Protocol;
 use crate::state::connection::ActiveConnection;
 use crate::state::console::ConsoleState;
 

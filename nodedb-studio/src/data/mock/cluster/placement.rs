@@ -3,8 +3,8 @@
 //! group, so placement and Raft groups never disagree.
 
 use crate::data::mock::cluster::members::{OBSERVED, cluster_members, node_id};
-use crate::models::cluster_place::{GIB, GroupQuorum, Movement, Placement, PlacementNode, VShard};
-use crate::models::cluster_raft::{PeerRole, RaftGroup};
+use crate::models::cluster::place::{GIB, GroupQuorum, Movement, Placement, PlacementNode, VShard};
+use crate::models::cluster::raft::{PeerRole, RaftGroup};
 
 /// number, database, collection, group, size in GiB.
 const SEEDS: &[(u32, &str, &str, &str, u64)] = &[

@@ -3,9 +3,9 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::console::Protocol;
 use crate::models::feeds::Tone;
-use crate::models::sql_text::tokenize;
+use crate::models::workbench::console::Protocol;
+use crate::models::workbench::sql_text::tokenize;
 use crate::state::events::feeds::Notice;
 
 /// A status word with its color dot. The word always shows.

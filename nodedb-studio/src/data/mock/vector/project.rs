@@ -7,8 +7,8 @@ use crate::data::mock::vector::corpus::{
 };
 use crate::data::mock::vector::search::check_target;
 use crate::models::format::epoch;
-use crate::models::vector_pca::{PCA_VERSION, PcaError, project_2d, sample_ids};
-use crate::models::vector_projection::{
+use crate::models::vector::pca::{PCA_VERSION, PcaError, project_2d, sample_ids};
+use crate::models::vector::projection::{
     Category, MISSING, NO_CATEGORY, Projection, ProjectionPoint, ProjectionRequest,
 };
 use crate::services::error::StudioError;
@@ -124,7 +124,7 @@ pub fn project(
 mod tests {
     use super::*;
     use crate::data::mock::vector::corpus::{COLLECTION, FIELD};
-    use crate::models::vector_projection::Method;
+    use crate::models::vector::projection::Method;
 
     fn request(sample: u32) -> ProjectionRequest {
         ProjectionRequest {

@@ -4,8 +4,8 @@
 //! with one voter missing. Member reachability alone would not show that.
 
 use crate::data::mock::cluster::members::{NOW, node_id, node_name};
+use crate::models::cluster::raft::{Peer, PeerRole, RaftGroup, SnapshotInfo};
 use crate::models::cluster::{GroupKind, GroupRole, HostedGroup, ReplicationState};
-use crate::models::cluster_raft::{Peer, PeerRole, RaftGroup, SnapshotInfo};
 
 fn peer(n: u32, role: PeerRole, match_index: u64, applied: u64, heartbeat: Option<u64>) -> Peer {
     Peer {

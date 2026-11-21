@@ -8,7 +8,7 @@ use std::rc::Rc;
 use dioxus::prelude::*;
 
 use crate::components::clipboard::copy_text;
-use crate::models::sync_enroll::EnrollDraft;
+use crate::models::sync::enroll::EnrollDraft;
 use crate::services::backend::Backend;
 use crate::state::events::feeds::Notice;
 use crate::state::sync::DevicesUi;

@@ -1,12 +1,12 @@
 //! Snapshots, the nightly schedule, and restores into new databases.
 
 use crate::data::mock::admin::store::{AdminStore, DATABASE, missing};
-use crate::models::admin::{AdminReview, ReviewLine, bytes_text};
-use crate::models::admin_audit::TargetType;
-use crate::models::admin_backup::{
+use crate::models::admin::audit::TargetType;
+use crate::models::admin::backup::{
     BackupChange, BackupOverview, Checksums, RestoreJob, RestoreState, Schedule, Snapshot,
     SnapshotState,
 };
+use crate::models::admin::{AdminReview, ReviewLine, bytes_text};
 use crate::models::format::{clock_second, date_second, epoch};
 use crate::services::error::StudioError;
 
@@ -177,7 +177,7 @@ impl AdminStore {
                         .errors
                         .push("The restore point is outside the available range.".to_string());
                 }
-                if let Some(issue) = (crate::models::admin_backup::RestoreDraft {
+                if let Some(issue) = (crate::models::admin::backup::RestoreDraft {
                     target: r.target.clone(),
                 })
                 .target_issue(&self.databases)
@@ -311,7 +311,7 @@ fn enabled(on: bool) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::admin_backup::RestoreRequest;
+    use crate::models::admin::backup::RestoreRequest;
 
     fn request(target: &str) -> BackupChange {
         BackupChange::Restore(RestoreRequest {

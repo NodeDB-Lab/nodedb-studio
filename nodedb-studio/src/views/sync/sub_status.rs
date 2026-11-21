@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::clock_second;
-use crate::models::sync_sub::{Snapshot, Subscription};
+use crate::models::sync::sub::{Snapshot, Subscription};
 use crate::routes::Route;
 use crate::routes::tabs::SyncTab;
 use crate::state::sync::SyncUi;

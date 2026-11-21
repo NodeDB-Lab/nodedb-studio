@@ -6,11 +6,11 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::models::format::thousands;
-use crate::models::geo_ops::{Bbox, Shape, haversine_m, point_within};
-use crate::models::geo_proj::{PlaneView, length_label, map, scale_bar};
+use crate::models::spatial::geo_ops::{Bbox, Shape, haversine_m, point_within};
+use crate::models::spatial::geo_proj::{PlaneView, length_label, map, scale_bar};
+use crate::models::spatial::sql::distance_text;
+use crate::models::spatial::text::trimmed;
 use crate::models::spatial::{GeoSource, LayerPage, SpatialSetup};
-use crate::models::spatial_sql::distance_text;
-use crate::models::spatial_text::trimmed;
 use crate::routes::Route;
 use crate::routes::tabs::SpatialTab;
 use crate::state::spatial::{Draft, SpatialUi};

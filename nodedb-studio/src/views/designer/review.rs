@@ -13,7 +13,7 @@ use dioxus::prelude::*;
 use crate::components::async_view::AsyncView;
 use crate::components::clipboard::use_copier;
 use crate::components::icon::{Ico, Icon};
-use crate::models::designer_change::{ChangeReview, DryRun, PendingChange};
+use crate::models::designer::change::{ChangeReview, DryRun, PendingChange};
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
 use crate::state::designer::{ApplyResult, DesignerState, ReviewState, ReviewTab};

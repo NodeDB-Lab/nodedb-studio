@@ -9,8 +9,8 @@ use dioxus::core::spawn_forever;
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::cluster_op::Impact;
-use crate::models::cluster_place::{MoveRequest, Placement, VShard, size_text};
+use crate::models::cluster::op::Impact;
+use crate::models::cluster::place::{MoveRequest, Placement, VShard, size_text};
 use crate::services::backend::Backend;
 use crate::state::cluster::ClusterUi;
 use crate::views::cluster::place_tasks;

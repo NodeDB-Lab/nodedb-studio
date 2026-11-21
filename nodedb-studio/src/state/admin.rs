@@ -6,13 +6,13 @@
 
 use dioxus::prelude::*;
 
+use crate::models::admin::access::{AccessChange, PrincipalDraft, PrincipalKind, RoleDraft};
+use crate::models::admin::audit::{AuditQuery, AuditRange, AuditResult, TargetType};
+use crate::models::admin::backup::ScheduleDraft;
+use crate::models::admin::config::{ConfigScope, ConfigTarget};
+use crate::models::admin::credential::{CredentialDraft, CredentialTest};
+use crate::models::admin::policy::{PolicyDraft, PolicyTestResult};
 use crate::models::admin::{AdminChange, AdminReview};
-use crate::models::admin_access::{AccessChange, PrincipalDraft, PrincipalKind, RoleDraft};
-use crate::models::admin_audit::{AuditQuery, AuditRange, AuditResult, TargetType};
-use crate::models::admin_backup::ScheduleDraft;
-use crate::models::admin_config::{ConfigScope, ConfigTarget};
-use crate::models::admin_credential::{CredentialDraft, CredentialTest};
-use crate::models::admin_policy::{PolicyDraft, PolicyTestResult};
 use crate::state::events::feeds::Notice;
 
 /// An open review: what would change, and whether it is applying.
@@ -405,7 +405,7 @@ impl Reviewing for CredUi {
             self.drop_draft(c.alias());
             if matches!(
                 c,
-                crate::models::admin_credential::CredentialChange::Create(_)
+                crate::models::admin::credential::CredentialChange::Create(_)
             ) {
                 self.creating = None;
                 self.selected = Some(c.alias().to_string());
@@ -473,7 +473,7 @@ pub fn pick<'a, T>(list: &'a [T], chosen: Option<&str>, key: impl Fn(&T) -> &str
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::admin_policy::PolicyOperation;
+    use crate::models::admin::policy::PolicyOperation;
 
     fn target(node: &str) -> ConfigTarget {
         ConfigTarget {

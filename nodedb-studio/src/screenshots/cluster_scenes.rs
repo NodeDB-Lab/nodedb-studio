@@ -2,8 +2,8 @@
 //! so one scene's selection or open review never leaks into the next image.
 
 use crate::data::mock::ClusterStore;
-use crate::models::cluster_place::MoveRequest;
-use crate::models::ts_dashboard::Refresh;
+use crate::models::cluster::place::MoveRequest;
+use crate::models::timeseries::dashboard::Refresh;
 use crate::state::cluster::{
     ActivityUi, ClusterSeed, MonitorUi, PlaceUi, PlanReview, RaftUi, TransferReview,
 };

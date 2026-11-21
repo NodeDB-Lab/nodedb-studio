@@ -3,8 +3,8 @@
 
 use dioxus::prelude::*;
 
-use crate::models::geo_raster::{Palette, RasterCrs, RasterFrame, ValueMode};
 use crate::models::spatial::RasterSource;
+use crate::models::spatial::geo_raster::{Palette, RasterCrs, RasterFrame, ValueMode};
 use crate::state::spatial::SpatialUi;
 
 #[component]

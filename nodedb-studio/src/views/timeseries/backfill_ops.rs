@@ -2,9 +2,9 @@
 //! a run may use, and the target-key choices. Plain functions, tested
 //! without a renderer.
 
+use crate::models::timeseries::backfill::{BackfillPreview, BackfillSpec};
+use crate::models::timeseries::lifecycle::Lifecycle;
 use crate::models::timeseries::{Bucket, TimeSpan, parse_utc};
-use crate::models::ts_backfill::{BackfillPreview, BackfillSpec};
-use crate::models::ts_lifecycle::Lifecycle;
 use crate::state::timeseries::{BackfillUi, PreviewState};
 
 /// `day`, `hour`, or `minute`: the word a bucket's key starts with.
