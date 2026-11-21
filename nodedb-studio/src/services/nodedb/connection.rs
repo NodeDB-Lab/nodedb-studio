@@ -34,7 +34,17 @@ struct Probe {
     client: Rc<NativeClient>,
     ping_ms: u32,
     version: String,
+    who: Identity,
     databases: Vec<String>,
+}
+
+/// Who the server says the session is.
+struct Identity {
+    user: String,
+    /// The role line: `superuser`, or the roles the user holds.
+    role: String,
+    /// A superuser or a tenant admin. Only they may list databases.
+    admin: bool,
 }
 
 /// Reach the server `config` names, authenticate, and list its databases.
@@ -43,7 +53,8 @@ async fn probe(config: &PoolConfig, database: &str) -> Result<Probe, StudioError
     let start = Instant::now();
     client.ping().await?;
     let ping_ms = u32::try_from(start.elapsed().as_millis()).unwrap_or(u32::MAX);
-    let databases = databases_of(&client).await?;
+    let who = identity_of(&client).await?;
+    let databases = databases_of(&client, database, who.admin).await?;
     Ok(Probe {
         // The handshake reports `NodeDB/0.6.2`. The chrome shows the number.
         version: client
@@ -52,31 +63,67 @@ async fn probe(config: &PoolConfig, database: &str) -> Result<Probe, StudioError
             .to_string(),
         client,
         ping_ms,
+        who,
         databases,
     })
 }
 
-async fn databases_of(client: &NativeClient) -> Result<Vec<String>, StudioError> {
+/// The databases the session can list. The server refuses `SHOW DATABASES`
+/// to a user who is not an admin: that user sees `current`, the one
+/// database the session is on.
+async fn databases_of(
+    client: &NativeClient,
+    current: &str,
+    admin: bool,
+) -> Result<Vec<String>, StudioError> {
+    if !admin {
+        return Ok(vec![database_name(current)]);
+    }
     let table = to_table(&client.query("SHOW DATABASES").await?);
     decode_rows(&table, &["name"], |r| Ok(r.field("name")?.to_string()))
 }
 
-/// Who the server says the session is: the user name and the role line.
-async fn identity_of(client: &NativeClient) -> Result<(String, String), StudioError> {
+/// The name of the database a saved connection opens: its own, or the
+/// server default when it names none.
+fn database_name(saved: &str) -> String {
+    match saved.trim() {
+        "" => DEFAULT_DATABASE.to_string(),
+        name => name.to_string(),
+    }
+}
+
+async fn identity_of(client: &NativeClient) -> Result<Identity, StudioError> {
     let table = to_table(&client.query("SHOW SESSION").await?);
     let rows = decode_rows(&table, &["username", "roles", "is_superuser"], |r| {
-        let role = if r.field("is_superuser")? == "true" {
-            "superuser".to_string()
-        } else {
-            r.field("roles")?.to_string()
-        };
-        Ok((r.field("username")?.to_string(), role))
+        Ok(identity(
+            r.field("username")?,
+            r.field("roles")?,
+            r.field("is_superuser")?,
+        ))
     })?;
     rows.into_iter()
         .next()
         .ok_or_else(|| StudioError::MalformedRows {
             reason: "SHOW SESSION returned no row".to_string(),
         })
+}
+
+/// One `SHOW SESSION` row as an identity. The native result prints a
+/// boolean as `t` or `f`.
+fn identity(username: &str, roles: &str, is_superuser: &str) -> Identity {
+    let superuser = matches!(is_superuser, "t" | "true");
+    let tenant_admin = roles
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .any(|r| r == "tenant_admin");
+    Identity {
+        user: username.to_string(),
+        role: if superuser {
+            "superuser".to_string()
+        } else {
+            roles.to_string()
+        },
+        admin: superuser || tenant_admin,
+    }
 }
 
 #[async_trait(?Send)]
@@ -133,12 +180,8 @@ impl ConnectionService for NodeDbConnectionService {
                 return Err(e);
             }
         };
-        let (user, role) = identity_of(&seen.client).await?;
-        let database = if entry.database.trim().is_empty() {
-            DEFAULT_DATABASE.to_string()
-        } else {
-            entry.database.trim().to_string()
-        };
+        let Identity { user, role, .. } = seen.who;
+        let database = database_name(&entry.database);
         // Multi-node only: a single-node server refuses `SHOW CLUSTER`.
         let cluster = seen.client.query("SHOW CLUSTER").await.is_ok();
 
@@ -290,7 +333,14 @@ impl ConnectionService for NodeDbConnectionService {
 
     async fn databases(&self) -> Result<Vec<String>, StudioError> {
         let client = self.client(None)?;
-        databases_of(&client).await
+        let current = self
+            .session
+            .borrow()
+            .as_ref()
+            .map(|s| s.database.clone())
+            .ok_or(StudioError::NotConnected)?;
+        let who = identity_of(&client).await?;
+        databases_of(&client, &current, who.admin).await
     }
 
     async fn select_database(&self, name: &str) -> Result<(), StudioError> {

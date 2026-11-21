@@ -178,18 +178,33 @@ impl NodeDbConnectionService {
 /// Run them with `cargo nextest run --run-ignored ignored-only -E 'test(live_)'`.
 #[cfg(test)]
 pub(super) async fn live() -> NodeDbConnectionService {
+    let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
+    live_as(&var("NODEDB_PROBE_USER"), &var("NODEDB_PROBE_PASSWORD"))
+        .await
+        .0
+}
+
+/// `live`, as another user of the same server. Also returns the session
+/// `connect` opened.
+#[cfg(test)]
+pub(super) async fn live_as(
+    username: &str,
+    password: &str,
+) -> (
+    NodeDbConnectionService,
+    crate::state::connection::ActiveConnection,
+) {
     use crate::models::connections::ConnectionDraft;
     use crate::services::connection_service::ConnectionService;
     use crate::state::connections_registry::Credentials;
 
-    let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
-    let addr = var("NODEDB_PROBE_ADDR");
+    let addr = std::env::var("NODEDB_PROBE_ADDR").expect("set NODEDB_PROBE_ADDR");
     let (host, port) = addr
         .rsplit_once(':')
         .expect("NODEDB_PROBE_ADDR is host:port");
     let creds = Credentials {
-        username: var("NODEDB_PROBE_USER"),
-        password: Some(var("NODEDB_PROBE_PASSWORD")),
+        username: username.to_string(),
+        password: Some(password.to_string()),
     };
     let draft = ConnectionDraft {
         name: "probe".into(),
@@ -207,10 +222,11 @@ pub(super) async fn live() -> NodeDbConnectionService {
     svc.save_connection(draft, creds.clone(), None)
         .await
         .expect("the draft saves");
-    svc.connect("probe", &creds)
+    let session = svc
+        .connect("probe", &creds)
         .await
         .expect("the probe connects");
-    svc
+    (svc, session)
 }
 
 #[cfg(test)]
@@ -587,5 +603,30 @@ mod tests {
             svc.select_database("no_such_db").await,
             Err(StudioError::UnknownDatabase(_))
         ));
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+    async fn live_connect_works_for_a_user_who_cannot_list_databases() {
+        let admin = super::live().await;
+        // Fails when the user exists from an earlier run: that is fine.
+        let _ = admin
+            .client(None)
+            .expect("a session")
+            .query("CREATE USER studio_probe_c_ro WITH PASSWORD 'cropass1' ROLE readonly")
+            .await;
+        let (svc, session) = super::live_as("studio_probe_c_ro", "cropass1").await;
+        assert_eq!(session.user, "studio_probe_c_ro");
+        assert_eq!(session.role, "readonly");
+        assert_eq!(session.current_database, "default");
+        let dbs = svc.databases().await.expect("databases read");
+        assert_eq!(dbs, ["default"]);
+
+        let (_, admin_session) = super::live_as(
+            &std::env::var("NODEDB_PROBE_USER").expect("set NODEDB_PROBE_USER"),
+            &std::env::var("NODEDB_PROBE_PASSWORD").expect("set NODEDB_PROBE_PASSWORD"),
+        )
+        .await;
+        assert_eq!(admin_session.role, "superuser");
     }
 }

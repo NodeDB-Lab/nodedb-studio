@@ -93,8 +93,10 @@ The live tests are `#[ignore]` and need a NodeDB 0.6.2 server:
 
 ```bash
 NODEDB_PROBE_ADDR=host:port NODEDB_PROBE_USER=... NODEDB_PROBE_PASSWORD=... \
-  cargo nextest run --run-ignored ignored-only -E 'test(live_)'
+  cargo nextest run --run-ignored ignored-only -E 'test(live_)' -j 2
 ```
+
+Keep `-j 2`. Every live test logs in, and the server limits login attempts.
 
 ## Project structure
 
