@@ -6,8 +6,8 @@
 //!   - Connected    -> `Studio`, with the manager over it on demand
 //!
 //! Global state is exposed as fine-grained signals via context. The backend
-//! seam is a `dyn Backend` behind an `Rc`, so swapping the mock for a
-//! real NodeDB client later is a one-line change here.
+//! seam is a `dyn Backend` behind an `Rc`: the mock by default, the NodeDB
+//! client when `NODEDB_STUDIO_BACKEND=native`.
 
 use std::rc::Rc;
 
@@ -19,6 +19,7 @@ use crate::models::notification::Notification;
 use crate::services::MockConnectionService;
 use crate::services::async_state::AsyncState;
 use crate::services::backend::Backend;
+use crate::services::nodedb::NodeDbConnectionService;
 use crate::state::admin::AdminUi;
 use crate::state::cluster::ClusterUi;
 use crate::state::connection::{ActiveConnection, ConnectError};
@@ -94,19 +95,51 @@ where
     });
 }
 
+/// The environment variable that selects the backend.
+const BACKEND_ENV: &str = "NODEDB_STUDIO_BACKEND";
+
+/// Which backend serves the app.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BackendKind {
+    Mock,
+    Native,
+}
+
+/// The backend `value` of `NODEDB_STUDIO_BACKEND` selects. Unset, empty, and
+/// `mock` select the mock. Any other value is a mistake: it warns and uses the mock.
+fn backend_from(value: Option<&str>) -> BackendKind {
+    match value.map(str::trim) {
+        None | Some("") | Some("mock") => BackendKind::Mock,
+        Some("native") => BackendKind::Native,
+        Some(other) => {
+            tracing::warn!(
+                "{BACKEND_ENV}={other:?} is not a backend: use \"native\" or \"mock\". Using the mock."
+            );
+            BackendKind::Mock
+        }
+    }
+}
+
 // Dioxus components are PascalCase by convention; `App` is the root component.
 #[allow(non_snake_case)]
 pub fn App() -> Element {
-    // The single seam to the outside world. Provided as a trait object so a
-    // real client can replace the mock without touching consumers. Built once:
-    // a resource re-runs with the closure from the latest render, so an
-    // instance per render answers those re-runs from fresh state (a
-    // connection switch undid mark-all-read).
-    let service: Rc<dyn Backend> =
-        use_context_provider(|| Rc::new(MockConnectionService::ready()) as Rc<dyn Backend>);
-    // The real-client stub's instantiability + object-safety behind the seam is
-    // proven by `nodedb::service::tests::stub_is_object_safe_behind_rc`, so it is
-    // not constructed here.
+    // The single seam to the outside world, provided as a trait object. The
+    // mock is the default. `NODEDB_STUDIO_BACKEND=native` selects the
+    // client-backed service. Built once: a resource re-runs with the closure
+    // from the latest render, so an instance per render answers those re-runs
+    // from fresh state (a connection switch undid mark-all-read).
+    let service: Rc<dyn Backend> = use_context_provider(|| {
+        // The scene runner always renders the mock, whatever the environment.
+        #[cfg(all(feature = "screenshots", target_os = "linux"))]
+        if try_use_context::<crate::screenshots::RunConfig>().is_some() {
+            return Rc::new(MockConnectionService::ready()) as Rc<dyn Backend>;
+        }
+        let value = std::env::var(BACKEND_ENV).ok();
+        match backend_from(value.as_deref()) {
+            BackendKind::Mock => Rc::new(MockConnectionService::ready()) as Rc<dyn Backend>,
+            BackendKind::Native => Rc::new(NodeDbConnectionService::default()) as Rc<dyn Backend>,
+        }
+    });
     let mut active = use_context_provider(|| Signal::new(None::<ActiveConnection>));
     // The active connection's name. Per-connection reads subscribe to this,
     // not to `active`: a database pick or a failed switch also writes
@@ -351,5 +384,20 @@ pub fn App() -> Element {
         // Overlays everything; renders nothing when no modal is open.
         ModalHost {}
         }
+    }
+}
+
+#[cfg(test)]
+mod backend_tests {
+    use super::{BackendKind, backend_from};
+
+    #[test]
+    fn backend_choice() {
+        assert_eq!(backend_from(None), BackendKind::Mock);
+        assert_eq!(backend_from(Some("")), BackendKind::Mock);
+        assert_eq!(backend_from(Some("mock")), BackendKind::Mock);
+        assert_eq!(backend_from(Some("native")), BackendKind::Native);
+        assert_eq!(backend_from(Some(" native ")), BackendKind::Native);
+        assert_eq!(backend_from(Some("nativ")), BackendKind::Mock);
     }
 }

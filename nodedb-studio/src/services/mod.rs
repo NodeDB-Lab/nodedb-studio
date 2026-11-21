@@ -1,5 +1,6 @@
-//! Service traits at the backend seam. The mock impl is the only one today;
-//! a NodeDB-client-backed impl plugs in here later.
+//! Service traits at the backend seam. Two impls: `mock` (the default, and the
+//! only one tests and screenshots use) and `nodedb` (the NodeDB client, chosen
+//! with `NODEDB_STUDIO_BACKEND=native`).
 
 pub mod admin_data;
 pub mod async_state;

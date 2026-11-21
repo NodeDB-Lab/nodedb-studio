@@ -1,30 +1,224 @@
-//! The real-client-backed `ConnectionService` impl. Currently an inert stub:
-//! every method returns `StudioError::NotConnected` until a real connection is
-//! opened — no panic or `todo!()` in the interim.
+//! The real-client backend: one live session over `nodedb-client`'s native
+//! transport.
 //!
-//! The future `ConnectionBuilder` wiring will add the held client (an
-//! `Option<NativeClient>`, gated behind nodedb-client's `native` feature) in the
-//! same change that first reads it. That feature pulls a TLS + C-toolchain build
-//! tree (tokio-rustls, aws-lc-rs, cmake), so it is deliberately left disabled
-//! until a live consumer exists rather than carried here for a field nothing reads.
+//! Wired today: the connection registry, connect, test, databases, the
+//! catalog, and `run_query`. Every other seam method returns
+//! `StudioError::NotConnected` until it is wired.
 
-// The tests below prove its trait conformance and object-safety. The mock is
-// still the injected service, so only tests build this type today.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "app.rs builds it in place of MockConnectionService once the real client is wired"
-    )
-)]
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::rc::Rc;
+
+use nodedb_client::native::pool::PoolConfig;
+use nodedb_client::{NativeClient, NodeDbError, QueryResult};
+use nodedb_types::protocol::AuthMethod as WireAuth;
+
+use crate::models::connections::{AuthMethod, ConnectionTarget, TlsConfig};
+use crate::services::decode::Table;
+use crate::services::error::StudioError;
+use crate::state::connections_registry::SavedConnection;
+
+/// The backend that talks to a NodeDB server.
 #[derive(Default)]
-pub struct NodeDbConnectionService;
+pub struct NodeDbConnectionService {
+    /// The saved-connection registry.
+    // ponytail: memory only, so a restart starts empty. Persist it with
+    // `state::persist` when connections must survive a restart.
+    pub(super) saved: RefCell<Vec<SavedConnection>>,
+    /// The password or token of each saved connection, by name.
+    // ponytail: memory only and never written to disk, so a restart asks
+    // again. The OS keychain replaces this map.
+    pub(super) secrets: RefCell<HashMap<String, String>>,
+    pub(super) session: RefCell<Option<Session>>,
+}
+
+/// The last statement `run_query` executed, kept so a page change reads the
+/// buffered rows and never executes the statement a second time.
+pub(super) struct LastRun {
+    pub database: String,
+    pub sql: String,
+    pub result: QueryResult,
+    pub elapsed_ms: u32,
+}
+
+/// One open session: who and where, plus a client per database it has used.
+pub(super) struct Session {
+    config: PoolConfig,
+    /// The database session-scoped reads answer for.
+    pub database: String,
+    pub server_version: String,
+    clients: HashMap<String, Rc<NativeClient>>,
+    pub last_run: Option<LastRun>,
+}
+
+impl Session {
+    pub fn new(config: PoolConfig, database: String, server_version: String) -> Self {
+        Self {
+            config,
+            database,
+            server_version,
+            clients: HashMap::new(),
+            last_run: None,
+        }
+    }
+}
+
+fn setup(detail: &str) -> StudioError {
+    StudioError::from(NodeDbError::config(detail))
+}
+
+/// The pool config a target and an identity describe. `database` blank means
+/// the server default.
+pub(super) fn pool_config(
+    target: &ConnectionTarget,
+    auth: AuthMethod,
+    username: &str,
+    secret: Option<&str>,
+    tls: &TlsConfig,
+    database: &str,
+) -> Result<PoolConfig, StudioError> {
+    let ConnectionTarget::Origin { host, port } = target else {
+        return Err(setup("NodeDB-Lite files cannot be opened yet"));
+    };
+    let secret = secret.filter(|s| !s.is_empty());
+    let wire = match auth {
+        AuthMethod::UserPassword => {
+            let username = username.trim();
+            if username.is_empty() {
+                return Err(StudioError::MissingUsername);
+            }
+            match secret {
+                Some(password) => WireAuth::Password {
+                    username: username.to_string(),
+                    password: password.to_string(),
+                },
+                // No password: the server accepts this only in trust mode.
+                None => WireAuth::Trust {
+                    username: username.to_string(),
+                },
+            }
+        }
+        AuthMethod::Token => WireAuth::ApiKey {
+            token: secret
+                .ok_or_else(|| setup("this connection needs a token"))?
+                .to_string(),
+        },
+        AuthMethod::SystemCredentials => {
+            return Err(setup("system credentials cannot be used yet"));
+        }
+    };
+    // The client has no client-certificate support. Refuse instead of
+    // connecting without the certificate the user asked for.
+    if !tls.client_cert.is_empty() || !tls.client_key.is_empty() {
+        return Err(setup("client certificates cannot be used yet"));
+    }
+    let mut config = PoolConfig::new(format!("{host}:{port}"), wire);
+    config.max_size = 4;
+    config.database = database_of(database);
+    config.tls.enabled = tls.required;
+    config.tls.server_name = Some(tls.server_name.clone()).filter(|s| !s.is_empty());
+    config.tls.ca_cert_path = Some(tls.ca_file.clone())
+        .filter(|s| !s.is_empty())
+        .map(Into::into);
+    Ok(config)
+}
+
+fn database_of(name: &str) -> Option<String> {
+    Some(name.trim().to_string()).filter(|s| !s.is_empty())
+}
+
+/// A client for `database` of the server `config` names.
+pub(super) fn client_for(config: &PoolConfig, database: &str) -> Rc<NativeClient> {
+    Rc::new(NativeClient::new(PoolConfig {
+        database: database_of(database),
+        ..config.clone()
+    }))
+}
+
+/// A server result as display strings.
+pub(super) fn to_table(result: &QueryResult) -> Table {
+    Table {
+        columns: result.columns.clone(),
+        rows: result
+            .rows
+            .iter()
+            .map(|row| row.iter().map(ToString::to_string).collect())
+            .collect(),
+    }
+}
+
+impl NodeDbConnectionService {
+    /// The client for `database`, or for the session's database when `None`.
+    /// The caller awaits on the returned client, never on a `session` borrow.
+    pub(super) fn client(&self, database: Option<&str>) -> Result<Rc<NativeClient>, StudioError> {
+        let mut session = self.session.borrow_mut();
+        let session = session.as_mut().ok_or(StudioError::NotConnected)?;
+        let database = database
+            .filter(|d| !d.trim().is_empty())
+            .unwrap_or(&session.database)
+            .to_string();
+        let config = &session.config;
+        Ok(session
+            .clients
+            .entry(database)
+            .or_insert_with_key(|db| client_for(config, db))
+            .clone())
+    }
+
+    /// Run `sql` on the session's database and return its rows as strings.
+    pub(super) async fn table(&self, sql: &str) -> Result<Table, StudioError> {
+        let client = self.client(None)?;
+        Ok(to_table(&client.query(sql).await?))
+    }
+}
+
+/// A service connected to a live server, for the `#[ignore]` live tests.
+/// `NODEDB_PROBE_ADDR` is `host:port` of the native listener.
+/// `NODEDB_PROBE_USER` and `NODEDB_PROBE_PASSWORD` are the login.
+/// Run them with `cargo nextest run --run-ignored ignored-only -E 'test(live_)'`.
+#[cfg(test)]
+pub(super) async fn live() -> NodeDbConnectionService {
+    use crate::models::connections::ConnectionDraft;
+    use crate::services::connection_service::ConnectionService;
+    use crate::state::connections_registry::Credentials;
+
+    let var = |name: &str| std::env::var(name).unwrap_or_else(|_| panic!("set {name}"));
+    let addr = var("NODEDB_PROBE_ADDR");
+    let (host, port) = addr
+        .rsplit_once(':')
+        .expect("NODEDB_PROBE_ADDR is host:port");
+    let creds = Credentials {
+        username: var("NODEDB_PROBE_USER"),
+        password: Some(var("NODEDB_PROBE_PASSWORD")),
+    };
+    let draft = ConnectionDraft {
+        name: "probe".into(),
+        target: ConnectionTarget::Origin {
+            host: host.into(),
+            port: port.parse().expect("the port is a number"),
+        },
+        database: String::new(),
+        auth: AuthMethod::UserPassword,
+        username: creds.username.clone(),
+        keychain: false,
+        tls: TlsConfig::default(),
+    };
+    let svc = NodeDbConnectionService::default();
+    svc.save_connection(draft, creds.clone(), None)
+        .await
+        .expect("the draft saves");
+    svc.connect("probe", &creds)
+        .await
+        .expect("the probe connects");
+    svc
+}
 
 #[cfg(test)]
 mod tests {
     use std::rc::Rc;
 
     use super::*;
+    use crate::models::connections::ConnectionDraft;
     use crate::models::feeds::FeedSession;
     use crate::services::connection_service::ConnectionService;
     use crate::services::error::StudioError;
@@ -41,56 +235,45 @@ mod tests {
     use crate::services::workbench_data::WorkbenchData;
     use crate::state::connections_registry::Credentials;
 
-    #[tokio::test]
-    async fn stub_returns_not_connected() {
-        let svc = NodeDbConnectionService;
-        assert!(matches!(
-            svc.list_connections().await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.notifications().await,
-            Err(StudioError::NotConnected)
-        ));
-        let creds = Credentials {
+    fn draft(name: &str) -> ConnectionDraft {
+        ConnectionDraft {
+            name: name.into(),
+            target: ConnectionTarget::Origin {
+                host: "localhost".into(),
+                port: 6433,
+            },
+            database: String::new(),
+            auth: AuthMethod::UserPassword,
             username: "alice".into(),
-            password: None,
-        };
-        assert!(matches!(
-            svc.connect("anything", &creds).await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.mark_all_read().await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.mark_read("id").await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.connection_activity().await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.recent_items().await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.duplicate_connection("x").await,
-            Err(StudioError::NotConnected)
-        ));
-        assert!(matches!(
-            svc.select_database("x").await,
-            Err(StudioError::NotConnected)
-        ));
+            keychain: false,
+            tls: TlsConfig::default(),
+        }
+    }
+
+    fn creds() -> Credentials {
+        Credentials {
+            username: "alice".into(),
+            password: Some("pw".into()),
+        }
     }
 
     #[tokio::test]
-    async fn stub_shell_chrome_reads_are_not_connected() {
-        let svc = NodeDbConnectionService;
+    async fn no_session_reads_the_empty_answers() {
+        let svc = NodeDbConnectionService::default();
+        assert!(svc.list_connections().await.expect("lists").is_empty());
+        assert!(svc.notifications().await.expect("reads").is_empty());
+        assert!(svc.recent_items().await.expect("reads").is_empty());
+        assert!(svc.connection_activity().await.expect("reads").is_empty());
+        assert!(svc.mark_all_read().await.is_ok());
+        assert!(svc.mark_read("id").await.is_ok());
+        assert_eq!(svc.nav_badges().await.expect("reads").query, 0);
+    }
+
+    #[tokio::test]
+    async fn no_session_is_not_connected() {
+        let svc = NodeDbConnectionService::default();
         assert!(matches!(
-            svc.nav_badges().await,
+            svc.connect("anything", &creds()).await,
             Err(StudioError::NotConnected)
         ));
         assert!(matches!(
@@ -101,11 +284,172 @@ mod tests {
             svc.databases().await,
             Err(StudioError::NotConnected)
         ));
+        assert!(matches!(
+            svc.select_database("x").await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.duplicate_connection("x").await,
+            Err(StudioError::NotConnected)
+        ));
+    }
+
+    #[tokio::test]
+    async fn registry_saves_then_lists() {
+        let svc = NodeDbConnectionService::default();
+        let saved = svc
+            .save_connection(draft("a"), creds(), None)
+            .await
+            .expect("saves");
+        assert_eq!(saved.name, "a");
+        let list = svc.list_connections().await.expect("lists");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "a");
+    }
+
+    #[tokio::test]
+    async fn registry_refuses_a_duplicate_name() {
+        let svc = NodeDbConnectionService::default();
+        svc.save_connection(draft("a"), creds(), None)
+            .await
+            .expect("saves");
+        assert!(matches!(
+            svc.save_connection(draft("a"), creds(), None).await,
+            Err(StudioError::NameTaken(n)) if n == "a"
+        ));
+        assert_eq!(svc.list_connections().await.expect("lists").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn registry_edit_renames_and_keeps_the_entry() {
+        let svc = NodeDbConnectionService::default();
+        svc.save_connection(draft("a"), creds(), None)
+            .await
+            .expect("saves");
+        let renamed = svc
+            .save_connection(draft("b"), Credentials::default(), Some("a".into()))
+            .await
+            .expect("edits");
+        assert_eq!(renamed.name, "b");
+        let list = svc.list_connections().await.expect("lists");
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].name, "b");
+        // The rename keeps the secret the entry had.
+        assert_eq!(
+            svc.secrets.borrow().get("b").map(String::as_str),
+            Some("pw")
+        );
+        assert!(!svc.secrets.borrow().contains_key("a"));
+    }
+
+    #[tokio::test]
+    async fn registry_edit_may_keep_its_own_name() {
+        let svc = NodeDbConnectionService::default();
+        svc.save_connection(draft("a"), creds(), None)
+            .await
+            .expect("saves");
+        assert!(
+            svc.save_connection(draft("a"), creds(), Some("a".into()))
+                .await
+                .is_ok()
+        );
+    }
+
+    #[tokio::test]
+    async fn registry_edit_of_a_missing_entry_is_unknown() {
+        let svc = NodeDbConnectionService::default();
+        assert!(matches!(
+            svc.save_connection(draft("a"), creds(), Some("ghost".into()))
+                .await,
+            Err(StudioError::UnknownConnection(n)) if n == "ghost"
+        ));
+    }
+
+    fn config_of(
+        target: &ConnectionTarget,
+        auth: AuthMethod,
+        username: &str,
+        secret: Option<&str>,
+        tls: &TlsConfig,
+    ) -> Result<PoolConfig, StudioError> {
+        pool_config(target, auth, username, secret, tls, "")
+    }
+
+    fn origin() -> ConnectionTarget {
+        ConnectionTarget::Origin {
+            host: "localhost".into(),
+            port: 6433,
+        }
+    }
+
+    #[test]
+    fn pool_config_needs_a_username() {
+        let r = config_of(
+            &origin(),
+            AuthMethod::UserPassword,
+            "  ",
+            Some("pw"),
+            &TlsConfig::default(),
+        );
+        assert!(matches!(r, Err(StudioError::MissingUsername)));
+    }
+
+    #[test]
+    fn pool_config_refuses_a_lite_target() {
+        let lite = ConnectionTarget::Lite {
+            path: "/tmp/x".into(),
+        };
+        let r = config_of(
+            &lite,
+            AuthMethod::UserPassword,
+            "alice",
+            Some("pw"),
+            &TlsConfig::default(),
+        );
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn pool_config_token_needs_a_token() {
+        let tls = TlsConfig::default();
+        assert!(config_of(&origin(), AuthMethod::Token, "", None, &tls).is_err());
+        assert!(config_of(&origin(), AuthMethod::Token, "", Some(""), &tls).is_err());
+        assert!(config_of(&origin(), AuthMethod::Token, "", Some("tok"), &tls).is_ok());
+    }
+
+    #[test]
+    fn pool_config_refuses_a_client_certificate() {
+        let tls = TlsConfig {
+            client_cert: "/c.pem".into(),
+            client_key: "/k.pem".into(),
+            ..TlsConfig::default()
+        };
+        let r = config_of(
+            &origin(),
+            AuthMethod::UserPassword,
+            "alice",
+            Some("pw"),
+            &tls,
+        );
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn pool_config_builds_the_address() {
+        let config = config_of(
+            &origin(),
+            AuthMethod::UserPassword,
+            "alice",
+            Some("pw"),
+            &TlsConfig::default(),
+        )
+        .expect("builds");
+        assert_eq!(config.addr, "localhost:6433");
     }
 
     #[tokio::test]
     async fn stub_events_reads_and_session_are_not_connected() {
-        let svc = NodeDbConnectionService;
+        let svc = NodeDbConnectionService::default();
         let session = FeedSession {
             feed: "feed_01".into(),
             group: "studio_feed_01".into(),
@@ -147,7 +491,7 @@ mod tests {
 
     #[tokio::test]
     async fn stub_workbench_reads_are_not_connected() {
-        let svc = NodeDbConnectionService;
+        let svc = NodeDbConnectionService::default();
         let request = crate::models::workbench::QueryRequest {
             sql: "SELECT 1".into(),
             params: Vec::new(),
@@ -180,7 +524,7 @@ mod tests {
 
     #[tokio::test]
     async fn stub_viewer_reads_are_not_connected() {
-        let svc = NodeDbConnectionService;
+        let svc = NodeDbConnectionService::default();
         assert!(matches!(
             svc.vector_setup().await,
             Err(StudioError::NotConnected)
@@ -219,12 +563,29 @@ mod tests {
     fn stub_is_object_safe_behind_rc() {
         // Compile-time guarantee: the stub coerces to the seam trait object,
         // exactly as `app.rs` provides it via context.
-        let _s: Rc<dyn ConnectionService> = Rc::new(NodeDbConnectionService);
+        let _s: Rc<dyn ConnectionService> = Rc::new(NodeDbConnectionService::default());
     }
 
     #[test]
     fn stub_is_object_safe_behind_backend() {
         use crate::services::backend::Backend;
-        let _b: Rc<dyn Backend> = Rc::new(NodeDbConnectionService);
+        let _b: Rc<dyn Backend> = Rc::new(NodeDbConnectionService::default());
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+    async fn live_connect_reads_the_session_and_its_databases() {
+        let svc = super::live().await;
+        let saved = svc.list_connections().await.expect("the registry reads");
+        println!("saved: {saved:#?}");
+        let dbs = svc.databases().await.expect("databases read");
+        println!("databases: {dbs:?}");
+        assert!(dbs.iter().any(|d| d == "default"), "got {dbs:?}");
+        let info = svc.session_info().await.expect("session info reads");
+        assert!(info.server_version.starts_with("0.6"), "got {info:?}");
+        assert!(matches!(
+            svc.select_database("no_such_db").await,
+            Err(StudioError::UnknownDatabase(_))
+        ));
     }
 }

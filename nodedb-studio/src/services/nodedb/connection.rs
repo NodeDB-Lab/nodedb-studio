@@ -1,57 +1,267 @@
 //! Connections, notifications, and session reads and writes.
 
-use async_trait::async_trait;
+use std::rc::Rc;
+use std::time::Instant;
 
-use crate::models::connections::{ConnectionDraft, ConnectionEvent, ConnectionTest};
+use async_trait::async_trait;
+use nodedb_client::native::pool::PoolConfig;
+use nodedb_client::{NativeClient, NodeDb};
+
+use crate::models::connections::{
+    ConnStatus, ConnectionDraft, ConnectionEvent, ConnectionTest, Observation, TlsStatus,
+};
 use crate::models::notification::Notification;
 use crate::models::shell::{NavBadges, RecentItem, SessionInfo};
 use crate::services::connection_service::ConnectionService;
+use crate::services::decode::decode_rows;
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
-use crate::state::connection::ActiveConnection;
+use crate::services::nodedb::service::{Session, client_for, pool_config, to_table};
+use crate::state::connection::{ActiveConnection, Capabilities};
 use crate::state::connections_registry::{Credentials, SavedConnection};
+
+/// The database a session opens when the saved connection names none.
+const DEFAULT_DATABASE: &str = "default";
+
+fn now_epoch() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
+}
+
+/// What one round trip to a server saw.
+struct Probe {
+    client: Rc<NativeClient>,
+    ping_ms: u32,
+    version: String,
+    databases: Vec<String>,
+}
+
+/// Reach the server `config` names, authenticate, and list its databases.
+async fn probe(config: &PoolConfig, database: &str) -> Result<Probe, StudioError> {
+    let client = client_for(config, database);
+    let start = Instant::now();
+    client.ping().await?;
+    let ping_ms = u32::try_from(start.elapsed().as_millis()).unwrap_or(u32::MAX);
+    let databases = databases_of(&client).await?;
+    Ok(Probe {
+        // The handshake reports `NodeDB/0.6.2`. The chrome shows the number.
+        version: client
+            .server_version()
+            .trim_start_matches("NodeDB/")
+            .to_string(),
+        client,
+        ping_ms,
+        databases,
+    })
+}
+
+async fn databases_of(client: &NativeClient) -> Result<Vec<String>, StudioError> {
+    let table = to_table(&client.query("SHOW DATABASES").await?);
+    decode_rows(&table, &["name"], |r| Ok(r.field("name")?.to_string()))
+}
+
+/// Who the server says the session is: the user name and the role line.
+async fn identity_of(client: &NativeClient) -> Result<(String, String), StudioError> {
+    let table = to_table(&client.query("SHOW SESSION").await?);
+    let rows = decode_rows(&table, &["username", "roles", "is_superuser"], |r| {
+        let role = if r.field("is_superuser")? == "true" {
+            "superuser".to_string()
+        } else {
+            r.field("roles")?.to_string()
+        };
+        Ok((r.field("username")?.to_string(), role))
+    })?;
+    rows.into_iter()
+        .next()
+        .ok_or_else(|| StudioError::MalformedRows {
+            reason: "SHOW SESSION returned no row".to_string(),
+        })
+}
 
 #[async_trait(?Send)]
 impl ConnectionService for NodeDbConnectionService {
     async fn list_connections(&self) -> Result<Vec<SavedConnection>, StudioError> {
-        Err(StudioError::NotConnected)
+        Ok(self.saved.borrow().clone())
     }
 
+    // The activity log, notifications, recent items, and tab badges are
+    // Studio's own records, not server data. Nothing records them yet, so
+    // each one is empty.
     async fn connection_activity(&self) -> Result<Vec<ConnectionEvent>, StudioError> {
-        Err(StudioError::NotConnected)
+        Ok(Vec::new())
     }
 
     async fn notifications(&self) -> Result<Vec<Notification>, StudioError> {
-        Err(StudioError::NotConnected)
+        Ok(Vec::new())
     }
 
     async fn recent_items(&self) -> Result<Vec<RecentItem>, StudioError> {
-        Err(StudioError::NotConnected)
+        Ok(Vec::new())
     }
 
     async fn connect(
         &self,
-        _name: &str,
-        _creds: &Credentials,
+        name: &str,
+        creds: &Credentials,
     ) -> Result<ActiveConnection, StudioError> {
-        Err(StudioError::NotConnected)
+        let entry = self
+            .saved
+            .borrow()
+            .iter()
+            .find(|c| c.name == name)
+            .cloned()
+            .ok_or(StudioError::NotConnected)?;
+        let secret = creds
+            .password
+            .clone()
+            .or_else(|| self.secrets.borrow().get(name).cloned());
+        let config = pool_config(
+            &entry.target,
+            entry.auth,
+            &creds.username,
+            secret.as_deref(),
+            &entry.tls,
+            &entry.database,
+        )?;
+        let seen = match probe(&config, &entry.database).await {
+            Ok(seen) => seen,
+            Err(e) => {
+                if matches!(e, StudioError::Connection(_)) {
+                    self.update(name, |c| c.status = ConnStatus::Offline);
+                }
+                return Err(e);
+            }
+        };
+        let (user, role) = identity_of(&seen.client).await?;
+        let database = if entry.database.trim().is_empty() {
+            DEFAULT_DATABASE.to_string()
+        } else {
+            entry.database.trim().to_string()
+        };
+        // Multi-node only: a single-node server refuses `SHOW CLUSTER`.
+        let cluster = seen.client.query("SHOW CLUSTER").await.is_ok();
+
+        let now = now_epoch();
+        let observation = Observation {
+            at: now,
+            ping_ms: seen.ping_ms,
+            db_count: u32::try_from(seen.databases.len()).unwrap_or(u32::MAX),
+            version: seen.version.clone(),
+            // The client does not expose the server certificate.
+            tls: if entry.tls.required {
+                TlsStatus::NotChecked
+            } else {
+                TlsStatus::NotUsed
+            },
+        };
+        let sub = self
+            .update(name, |c| {
+                c.status = ConnStatus::Available;
+                c.last_used = now;
+                c.observation = Some(observation);
+                c.summary()
+            })
+            .unwrap_or_default();
+        *self.session.borrow_mut() = Some(Session::new(config, database.clone(), seen.version));
+        Ok(ActiveConnection {
+            name: name.to_string(),
+            sub,
+            display_name: user.clone(),
+            user,
+            role,
+            capabilities: Capabilities {
+                graph: true,
+                vector: true,
+                events: true,
+                timeseries: true,
+                spatial: true,
+                search: true,
+                // The server has no statement that lists Lite devices.
+                sync: false,
+                cluster,
+                // ponytail: assumes the user can write. Read the session's
+                // grants when a read-only login must hide the write actions.
+                readonly: false,
+            },
+            current_database: database,
+        })
     }
 
     async fn test_connection(
         &self,
-        _draft: &ConnectionDraft,
-        _creds: &Credentials,
+        draft: &ConnectionDraft,
+        creds: &Credentials,
     ) -> Result<ConnectionTest, StudioError> {
-        Err(StudioError::NotConnected)
+        let config = pool_config(
+            &draft.target,
+            draft.auth,
+            &draft.username,
+            creds.password.as_deref(),
+            &draft.tls,
+            &draft.database,
+        )?;
+        let seen = probe(&config, &draft.database).await?;
+        Ok(ConnectionTest {
+            latency_ms: seen.ping_ms,
+            tls_verified: draft.tls.required,
+            server_version: seen.version,
+            db_count: u32::try_from(seen.databases.len()).unwrap_or(u32::MAX),
+        })
     }
 
     async fn save_connection(
         &self,
-        _draft: ConnectionDraft,
-        _creds: Credentials,
-        _replacing: Option<String>,
+        draft: ConnectionDraft,
+        creds: Credentials,
+        replacing: Option<String>,
     ) -> Result<SavedConnection, StudioError> {
-        Err(StudioError::NotConnected)
+        let mut saved = self.saved.borrow_mut();
+        if saved
+            .iter()
+            .any(|c| c.name == draft.name && replacing.as_deref() != Some(c.name.as_str()))
+        {
+            return Err(StudioError::NameTaken(draft.name));
+        }
+        let mut secrets = self.secrets.borrow_mut();
+        let entry = match replacing {
+            Some(old) => {
+                let entry = saved
+                    .iter_mut()
+                    .find(|c| c.name == old)
+                    .ok_or_else(|| StudioError::UnknownConnection(old.clone()))?;
+                entry.apply_draft(&draft);
+                // A rename keeps the secret the entry had.
+                if let Some(secret) = secrets.remove(&old) {
+                    secrets.insert(draft.name.clone(), secret);
+                }
+                entry.clone()
+            }
+            None => {
+                let now = now_epoch();
+                let entry = SavedConnection {
+                    name: draft.name.clone(),
+                    description: String::new(),
+                    target: draft.target.clone(),
+                    database: draft.database.clone(),
+                    auth: draft.auth,
+                    username: draft.username.clone(),
+                    keychain: draft.keychain,
+                    tls: draft.tls.clone(),
+                    status: ConnStatus::NotConnected,
+                    last_used: now,
+                    created: now,
+                    observation: None,
+                    profile: None,
+                };
+                saved.push(entry.clone());
+                entry
+            }
+        };
+        if let Some(secret) = creds.password.filter(|s| !s.is_empty()) {
+            secrets.insert(entry.name.clone(), secret);
+        }
+        Ok(entry)
     }
 
     async fn duplicate_connection(&self, _name: &str) -> Result<SavedConnection, StudioError> {
@@ -59,26 +269,49 @@ impl ConnectionService for NodeDbConnectionService {
     }
 
     async fn mark_all_read(&self) -> Result<(), StudioError> {
-        Err(StudioError::NotConnected)
+        Ok(())
     }
 
     async fn mark_read(&self, _id: &str) -> Result<(), StudioError> {
-        Err(StudioError::NotConnected)
+        Ok(())
     }
 
     async fn nav_badges(&self) -> Result<NavBadges, StudioError> {
-        Err(StudioError::NotConnected)
+        Ok(NavBadges { query: 0 })
     }
 
     async fn session_info(&self) -> Result<SessionInfo, StudioError> {
-        Err(StudioError::NotConnected)
+        let session = self.session.borrow();
+        let session = session.as_ref().ok_or(StudioError::NotConnected)?;
+        Ok(SessionInfo {
+            server_version: session.server_version.clone(),
+        })
     }
 
     async fn databases(&self) -> Result<Vec<String>, StudioError> {
-        Err(StudioError::NotConnected)
+        let client = self.client(None)?;
+        databases_of(&client).await
     }
 
-    async fn select_database(&self, _name: &str) -> Result<(), StudioError> {
-        Err(StudioError::NotConnected)
+    async fn select_database(&self, name: &str) -> Result<(), StudioError> {
+        if !self.databases().await?.iter().any(|d| d == name) {
+            return Err(StudioError::UnknownDatabase(name.to_string()));
+        }
+        let mut session = self.session.borrow_mut();
+        let session = session.as_mut().ok_or(StudioError::NotConnected)?;
+        session.database = name.to_string();
+        Ok(())
+    }
+}
+
+impl NodeDbConnectionService {
+    /// Change the saved entry `name` and return what `f` returns. `None`
+    /// when no entry has the name.
+    fn update<T>(&self, name: &str, f: impl FnOnce(&mut SavedConnection) -> T) -> Option<T> {
+        self.saved
+            .borrow_mut()
+            .iter_mut()
+            .find(|c| c.name == name)
+            .map(f)
     }
 }
