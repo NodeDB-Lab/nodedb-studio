@@ -178,6 +178,11 @@ fn target_text(kind: TargetType, object: &str) -> String {
         TargetType::Snapshot => "snapshot",
         TargetType::Config => "config",
         TargetType::Credential => "credential",
+        TargetType::Database => "database",
+        TargetType::Tenant => "tenant",
+        TargetType::Node => "node",
+        TargetType::Data => "data",
+        TargetType::Other => "other",
     };
     format!("{prefix}:{object}")
 }
@@ -205,7 +210,7 @@ fn older() -> Vec<AuditEvent> {
             action: action.to_string(),
             target_type: kind,
             target: target_text(kind, object),
-            database: "analytics".to_string(),
+            database: Some("analytics".to_string()),
             object: object.to_string(),
             result: if denied {
                 AuditResult::Denied
@@ -258,7 +263,7 @@ pub(super) fn seeded_events() -> Vec<AuditEvent> {
                 action: r.action.to_string(),
                 target_type: r.kind,
                 target: r.target.to_string(),
-                database: "analytics".to_string(),
+                database: Some("analytics".to_string()),
                 object: r.object.to_string(),
                 result: r.result,
                 correlation: r.correlation.to_string(),
@@ -287,7 +292,7 @@ impl AdminStore {
         AuditFacets {
             actors,
             actions,
-            retention_days: RETENTION_DAYS,
+            retention_days: Some(RETENTION_DAYS),
             scope: "audit.read".to_string(),
         }
     }
@@ -317,6 +322,8 @@ impl AdminStore {
             total: kept.len(),
             page,
             page_size: size,
+            // The mock reads every event.
+            truncated: false,
             observed_at: self.clock,
         }
     }

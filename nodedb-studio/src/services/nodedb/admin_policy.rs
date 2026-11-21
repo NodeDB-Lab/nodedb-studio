@@ -1,8 +1,12 @@
 //! Row policies from `SHOW RLS POLICIES`.
 //!
 //! NodeDB 0.6.2 reports `name, collection, type, mode, has_auth_refs,
-//! enabled, created_by`. It does not report the `USING` text, a role, or a
-//! write constraint, and a policy has no role: it applies to every user.
+//! enabled, created_by`. The catalog stores the `USING` text, but no
+//! statement returns it, a role, or a write constraint, so the filter and
+//! the role are not reported. A policy stores no role: it
+//! applies to every user. Bare `SHOW RLS POLICIES` lists the policies of
+//! every database of the tenant by collection name only, so the policies
+//! of one database come from `SHOW RLS POLICIES ON <collection>` there.
 //! `type` is `Read`, `Write` or `All`, and `Write` covers INSERT, UPDATE and
 //! DELETE together. The model has no operation for plain `Write`, so a
 //! `Write` policy is an error and never a guess.
@@ -10,6 +14,7 @@
 use crate::models::admin_policy::{Policy, PolicyChange, PolicyOperation};
 use crate::services::decode::{Table, decode_rows};
 use crate::services::error::StudioError;
+use crate::services::nodedb::admin_access::ident;
 
 use nodedb_client::NodeDbError;
 
@@ -32,8 +37,8 @@ pub(super) fn policies(table: &Table, database: &str) -> Result<Vec<Policy>, Stu
             database: database.to_string(),
             collection: collection.to_string(),
             operation,
-            role: String::new(),
-            using_expr: String::new(),
+            role: None,
+            using_expr: None,
             check_expr: None,
             enabled: matches!(r.field("enabled")?, "t" | "true"),
         })
@@ -43,6 +48,21 @@ pub(super) fn policies(table: &Table, database: &str) -> Result<Vec<Policy>, Stu
 /// The names `SHOW COLLECTIONS` lists.
 pub(super) fn collection_names(table: &Table) -> Result<Vec<String>, StudioError> {
     decode_rows(table, &["name"], |r| Ok(r.field("name")?.to_string()))
+}
+
+/// The collections of this database that bare `SHOW RLS POLICIES` names,
+/// each once. A name only another database holds is left out.
+pub(super) fn policy_collections(
+    listed: &Table,
+    collections: &[String],
+) -> Result<Vec<String>, StudioError> {
+    let mut names = decode_rows(listed, &["collection"], |r| {
+        Ok(r.field("collection")?.to_string())
+    })?;
+    names.retain(|n| collections.contains(n) && ident(n, "collection").is_ok());
+    names.sort();
+    names.dedup();
+    Ok(names)
 }
 
 /// Why the server cannot hold this change. A change that reaches the server
@@ -101,8 +121,22 @@ mod tests {
         assert_eq!(p[1].operation, PolicyOperation::All);
         assert!(!p[1].enabled);
         assert_eq!(p[0].id, "c.p1");
-        assert_eq!((p[0].role.as_str(), p[0].using_expr.as_str()), ("", ""));
+        assert_eq!(
+            (p[0].role.as_deref(), p[0].using_expr.as_deref()),
+            (None, None)
+        );
+        assert!(!p[0].is_reported(), "the filter text is not reported");
         assert_eq!(p[0].check_expr, None);
+    }
+
+    #[test]
+    fn only_this_databases_collections_are_asked_again() {
+        let listed = Table {
+            columns: vec!["collection".into()],
+            rows: vec![vec!["a".into()], vec!["b".into()], vec!["a".into()]],
+        };
+        let names = policy_collections(&listed, &["a".to_string()]).expect("decodes");
+        assert_eq!(names, ["a"]);
     }
 
     #[test]

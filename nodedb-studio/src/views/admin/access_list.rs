@@ -10,8 +10,15 @@ use crate::models::admin_access::{
 };
 use crate::models::format::date;
 use crate::state::admin::{AccessSheet, AccessUi, AdminUi};
-use crate::views::admin::common::Cut;
+use crate::views::admin::common::{Cut, Reported};
 use crate::views::events::common::StatusText;
+
+/// The footer suffix that names the one tenant the lists cover.
+fn tenant_only(dir: &AccessDirectory) -> String {
+    dir.tenant
+        .map(|t| format!(" · tenant {t} only"))
+        .unwrap_or_default()
+}
 
 #[component]
 pub fn PrincipalsList(dir: AccessDirectory, chosen: Option<String>) -> Element {
@@ -33,6 +40,7 @@ pub fn PrincipalsList(dir: AccessDirectory, chosen: Option<String>) -> Element {
                 kind,
                 description,
                 credential_expiry,
+                ..
             } => Some((name.clone(), *kind, description.clone(), *credential_expiry)),
             AccessChange::CreateRole { .. }
             | AccessChange::AddMembership { .. }
@@ -112,7 +120,7 @@ pub fn PrincipalsList(dir: AccessDirectory, chosen: Option<String>) -> Element {
                                     }
                                     td { "{p.kind.label()}" }
                                     td { StatusText { tone: p.status.tone(), text: p.status.label().to_string() } }
-                                    td { "{date(p.credential_expiry, 0)}" }
+                                    td { Reported { text: p.credential_expiry.map(|t| date(t, 0)) } }
                                     td { Cut { text: p.description.clone() } }
                                 }
                             }
@@ -138,7 +146,7 @@ pub fn PrincipalsList(dir: AccessDirectory, chosen: Option<String>) -> Element {
                 div { class: "async-empty", "No principal matches these filters." }
             }
         }
-        div { class: "dt-footer", "{dir.principals.len()} principals" }
+        div { class: "dt-footer", "{dir.principals.len()} principals{tenant_only(&dir)}" }
     }
 }
 
@@ -244,6 +252,6 @@ pub fn RolesList(dir: AccessDirectory, chosen: Option<String>) -> Element {
                 div { class: "async-empty", "No role matches the filter." }
             }
         }
-        div { class: "dt-footer", "{dir.roles.len()} roles" }
+        div { class: "dt-footer", "{dir.roles.len()} roles{tenant_only(&dir)}" }
     }
 }

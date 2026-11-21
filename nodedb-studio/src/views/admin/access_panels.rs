@@ -4,7 +4,9 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::admin_access::{AccessChange, AccessDirectory, AccessSubject, SubjectAccess};
+use crate::models::admin_access::{
+    AccessChange, AccessDirectory, AccessSubject, NOT_REPORTED, SubjectAccess, scope_text,
+};
 use crate::state::admin::{AccessMode, AccessSheet, AdminUi};
 use crate::views::admin::common::Cut;
 use crate::views::events::common::InfoTip;
@@ -29,9 +31,13 @@ pub fn GrantsBody(access: Option<SubjectAccess>, loading: bool) -> Element {
         .iter()
         .filter(|g| {
             needle.is_empty()
-                || [&g.role, &g.collection, &g.granted_by]
-                    .iter()
-                    .any(|f| f.to_lowercase().contains(&needle))
+                || [
+                    g.role.as_str(),
+                    g.collection.as_str(),
+                    g.granted_by.as_deref().unwrap_or(""),
+                ]
+                .iter()
+                .any(|f| f.to_lowercase().contains(&needle))
         })
         .collect();
     rsx! {
@@ -62,10 +68,15 @@ pub fn GrantsBody(access: Option<SubjectAccess>, loading: bool) -> Element {
                     for (i , g) in rows.iter().enumerate() {
                         tr { key: "{i}-{g.role}-{g.collection}-{g.privilege.label()}",
                             td { class: "key", Cut { text: g.role.clone() } }
-                            td { title: "{g.database}.{g.collection}", Cut { text: g.collection.clone() } }
+                            td { Cut { text: scope_text(g.database.as_deref(), &g.collection) } }
                             td { "{g.privilege.label()}" }
                             td { "Direct" }
-                            td { Cut { text: g.granted_by.clone() } }
+                            td {
+                                match g.granted_by.as_ref() {
+                                    Some(by) => rsx! { Cut { text: by.clone() } },
+                                    None => rsx! { span { class: "muted", "{NOT_REPORTED}" } },
+                                }
+                            }
                         }
                     }
                 }
@@ -181,13 +192,25 @@ pub fn MembershipBody(
                         {
                             let group: Vec<_> = rows.iter().filter(|r| r.0 == db).collect();
                             let count: u32 = group.iter().filter_map(|r| r.2).sum();
+                            // An empty database: the roles apply in every database.
+                            let every = db.is_empty();
                             rsx! {
                                 div { key: "{db}", class: "ad-group-head",
                                     Ico { icon: Icon::Database, size: 16 }
-                                    span { class: "muted", "Database" }
-                                    strong { "{db}" }
+                                    if every {
+                                        strong { "Every database" }
+                                    } else {
+                                        span { class: "muted", "Database" }
+                                        strong { "{db}" }
+                                    }
                                     span { class: "muted", "({count} " if count == 1 { "collection" } else { "collections" } ")" }
-                                    InfoTip { text: "Collections the roles below grant privileges on in this database.".to_string() }
+                                    InfoTip {
+                                        text: if every {
+                                            "These roles apply in every database. The count covers the collections the roles below grant on, in any database.".to_string()
+                                        } else {
+                                            "Collections the roles below grant privileges on in this database.".to_string()
+                                        },
+                                    }
                                 }
                                 table { class: "dt cl-table ad-table ad-members",
                                     thead {
@@ -381,7 +404,7 @@ pub fn EffectiveBody(
                 tbody {
                     for (i , e) in a.effective.iter().enumerate() {
                         tr { key: "{i}-{e.target}-{e.privilege.label()}",
-                            td { class: "key", title: "{e.database}.{e.target}", Cut { text: e.target.clone() } }
+                            td { class: "key", Cut { text: scope_text(e.database.as_deref(), &e.target) } }
                             td { "{e.privilege.label()}" }
                             td { Cut { text: e.source.clone() } }
                             td {
@@ -403,6 +426,9 @@ pub fn EffectiveBody(
                         "No collection privilege is held. Administrative permissions are separate."
                     }
                 }
+            }
+            for (i , note) in a.unreported.iter().enumerate() {
+                p { key: "{i}", class: "inspector-note", "{note}" }
             }
         }
     }

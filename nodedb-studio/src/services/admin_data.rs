@@ -212,6 +212,60 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_new_user_needs_a_password_and_it_shows_nowhere() {
+        use crate::models::admin_access::PrincipalKind;
+        use crate::models::admin_password::Secret;
+        let create = |kind, password: Option<&str>| {
+            AdminChange::Access(vec![AccessChange::CreatePrincipal {
+                name: "new_one".into(),
+                kind,
+                description: String::new(),
+                credential_expiry: 1_800_000_000,
+                password: password.map(Secret::new),
+            }])
+        };
+        let svc = MockConnectionService::ready();
+        let none = create(PrincipalKind::User, None);
+        let review = svc.preview_admin_change(&none).await.expect("preview");
+        assert!(!review.can_apply(), "a user needs a password");
+        let empty = create(PrincipalKind::User, Some(""));
+        assert!(
+            !svc.preview_admin_change(&empty)
+                .await
+                .expect("preview")
+                .can_apply()
+        );
+        let bot = create(PrincipalKind::ServiceAccount, None);
+        assert!(
+            svc.preview_admin_change(&bot)
+                .await
+                .expect("preview")
+                .can_apply(),
+            "a service account has no password"
+        );
+
+        let user = create(PrincipalKind::User, Some("zq-pw-7731"));
+        assert!(!format!("{user:?}").contains("zq-pw-7731"));
+        let review = svc.preview_admin_change(&user).await.expect("preview");
+        assert!(review.can_apply(), "{:?}", review.errors);
+        let done = svc
+            .apply_admin_change(&user, review.revision)
+            .await
+            .expect("apply");
+        let dir = svc.access_directory().await.expect("directory");
+        let page = svc.audit_events(&week()).await.expect("audit");
+        for text in [
+            format!("{review:?}"),
+            format!("{done:?}"),
+            format!("{:?}", dir.principals),
+            format!("{:?}", page.events),
+        ] {
+            assert!(!text.contains("zq-pw-7731"));
+        }
+        assert!(dir.principals.iter().any(|p| p.name == "new_one"));
+    }
+
+    #[tokio::test]
     async fn a_stale_review_never_applies() {
         let svc = MockConnectionService::ready();
         let change = AdminChange::Access(vec![AccessChange::RemoveMembership {

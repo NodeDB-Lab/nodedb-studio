@@ -10,6 +10,7 @@ use crate::models::shell::RecentItem;
 use crate::routes::{Destination, NAV_GROUPS, Route};
 use crate::state::connection::Capabilities;
 use crate::state::connections_registry::SavedConnection;
+use crate::state::gates::admin_tabs;
 use crate::state::ui::PrefsPane;
 use crate::state::workspace::Surface;
 
@@ -70,8 +71,26 @@ pub struct PaletteContext<'a> {
     pub surface: Surface,
 }
 
-fn describe(d: Destination) -> &'static str {
-    match d {
+/// What Administration offers on this connection. It never names a tab
+/// the server lacks.
+fn admin_text(caps: &Capabilities) -> String {
+    let names: Vec<String> = admin_tabs(Some(caps))
+        .iter()
+        .enumerate()
+        .map(|(i, t)| match i {
+            0 => t.label().to_string(),
+            _ => t.label().to_lowercase(),
+        })
+        .collect();
+    match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{}, and {last}", rest.join(", ")),
+        Some((last, _)) => last.clone(),
+        None => String::new(),
+    }
+}
+
+fn describe(d: Destination, caps: &Capabilities) -> String {
+    let text = match d {
         Destination::Explorer => "Browse collections and records",
         Destination::Query => "Write and run SQL",
         Destination::Designer => "Design schemas and indexes",
@@ -83,9 +102,10 @@ fn describe(d: Destination) -> &'static str {
         Destination::Search => "Run keyword, semantic, and hybrid search",
         Destination::Cluster => "Nodes, Raft groups, and placement",
         Destination::Sync => "Lite devices and subscriptions",
-        Destination::Administration => "Access, audit, backups, and config",
+        Destination::Administration => return admin_text(caps),
         Destination::Console => "Run commands in a session",
-    }
+    };
+    text.to_string()
 }
 
 fn command(
@@ -132,7 +152,7 @@ pub fn commands(ctx: &PaletteContext) -> Vec<Command> {
                 format!("nav:{}", d.label()),
                 Group::Navigation,
                 format!("Open {}", d.label()),
-                describe(*d),
+                describe(*d, ctx.caps),
                 d.icon(),
                 PaletteAction::Navigate(d.route()),
             ));
@@ -333,6 +353,26 @@ mod tests {
 
     fn ids(list: &[Command]) -> Vec<&str> {
         list.iter().map(|c| c.id.as_str()).collect()
+    }
+
+    #[test]
+    fn administration_promises_only_what_the_server_offers() {
+        let text = |caps: Capabilities| {
+            catalog(caps, Surface::Query)
+                .into_iter()
+                .find(|c| c.id == "nav:Administration")
+                .map(|c| c.description)
+                .expect("administration")
+        };
+        let mut caps = all_caps();
+        assert_eq!(
+            text(caps),
+            "Access, row policies, audit, backups, config, and credentials"
+        );
+        caps.backups = false;
+        caps.config = false;
+        caps.credentials = false;
+        assert_eq!(text(caps), "Access, row policies, and audit");
     }
 
     #[test]

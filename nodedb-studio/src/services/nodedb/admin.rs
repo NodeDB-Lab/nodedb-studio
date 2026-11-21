@@ -1,18 +1,21 @@
 //! Administration reads and changes over `SHOW` and DDL statements.
 //!
 //! Wired: the access directory and subject access, the policy list, the
-//! audit trail, and access changes. Every other method returns a typed error
-//! that names what NodeDB 0.6.2 lacks (see `unavailable`).
+//! audit trail and its filter lists, and access changes. Every other
+//! method returns a typed error that names what NodeDB 0.6.2 lacks (see
+//! `unavailable`).
 //!
 //! The server has no revision on users or roles. A review's revision is a
 //! hash of the rows the change read, and apply reads them again and refuses
 //! when the hash differs. Another administrator's change that lands between
 //! that read and the statement is not caught.
 
+use std::collections::HashSet;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use async_trait::async_trait;
-use nodedb_client::NodeDbError;
+use nodedb_client::{NodeDb, NodeDbError};
+use nodedb_types::Value;
 
 use crate::models::admin::{AdminChange, AdminReview};
 use crate::models::admin_access::{AccessDirectory, AccessSubject, SubjectAccess};
@@ -26,9 +29,12 @@ use crate::services::admin_data::AdminData;
 use crate::services::decode::Table;
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
-use crate::services::nodedb::admin_access as access;
+use crate::services::nodedb::admin_access::{self as access, Grant, PermRow, RoleRow, UserRow};
 use crate::services::nodedb::admin_audit as audit;
+use crate::services::nodedb::admin_grants as grants;
+use crate::services::nodedb::admin_plan::plan;
 use crate::services::nodedb::admin_policy as policy;
+use crate::services::nodedb::admin_user::Statement;
 use crate::services::nodedb::service::{next_id, to_table};
 
 /// A typed error for something NodeDB 0.6.2 cannot supply.
@@ -52,24 +58,141 @@ fn revision(tables: &[&Table]) -> u64 {
     h.finish()
 }
 
+fn int(n: u64) -> Value {
+    Value::Integer(i64::try_from(n).unwrap_or(i64::MAX))
+}
+
+/// The users and custom roles of the caller's tenant.
+struct TenantRows {
+    users: Vec<UserRow>,
+    roles: Vec<RoleRow>,
+    tenant: u64,
+    /// Over every row the server listed, of every tenant.
+    revision: u64,
+}
+
 impl NodeDbConnectionService {
-    async fn principals(&self) -> Result<(Table, Table), StudioError> {
-        Ok((
-            self.table("SHOW USERS").await?,
-            self.table("SHOW ROLES").await?,
-        ))
+    async fn caller(&self) -> Result<access::Caller, StudioError> {
+        access::session(&self.table("SHOW SESSION").await?)
+    }
+
+    /// A superuser reads every tenant's users and roles. The views cover
+    /// the caller's tenant only, so a name repeated in another tenant never
+    /// lends its roles or grants.
+    async fn tenant_rows(&self) -> Result<TenantRows, StudioError> {
+        let users = self.table("SHOW USERS").await?;
+        let roles = self.table("SHOW ROLES").await?;
+        let tenant = self.caller().await?.tenant;
+        let (u, r) = access::of_tenant(access::users(&users)?, access::roles(&roles)?, tenant);
+        Ok(TenantRows {
+            users: u,
+            roles: r,
+            tenant,
+            revision: revision(&[&users, &roles]),
+        })
     }
 
     async fn permission_check(&self, required: &str) -> Result<PermissionCheck, StudioError> {
-        let session = self.table("SHOW SESSION").await?;
         Ok(PermissionCheck {
             required: required.to_string(),
-            granted: access::can_administer(&session)?,
+            granted: self.caller().await?.admin,
         })
     }
 
     async fn database_list(&self) -> Result<Vec<String>, StudioError> {
         access::database_names(&self.table("SHOW DATABASES").await?)
+    }
+
+    /// The grants made to `wanted`, each in its database. Bare `SHOW
+    /// PERMISSIONS` names no database, so each name is asked again in every
+    /// database. Tenant-wide grants show only under `FOR <role>`.
+    async fn grants_to(
+        &self,
+        wanted: &HashSet<String>,
+        databases: &[String],
+        tenant: u64,
+    ) -> Result<Vec<Grant>, StudioError> {
+        let ours = |rows: Vec<PermRow>| -> Vec<PermRow> {
+            rows.into_iter()
+                .filter(|p| wanted.contains(&p.grantee))
+                .collect()
+        };
+        let bare = ours(access::permissions(&self.table("SHOW PERMISSIONS").await?)?);
+        let mut names: Vec<&str> = bare
+            .iter()
+            .map(|p| p.target.as_str())
+            .filter(|n| access::ident(n, "collection").is_ok())
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        let mut per_db = Vec::new();
+        for db in databases {
+            let client = self.client(Some(db))?;
+            let mut rows = Vec::new();
+            for name in &names {
+                let t = to_table(&client.query(&format!("SHOW PERMISSIONS ON {name}")).await?);
+                rows.extend(ours(access::permissions(&t)?));
+            }
+            per_db.push((db.clone(), rows));
+        }
+        let mut wide = Vec::new();
+        for role in wanted.iter().filter(|g| access::ident(g, "role").is_ok()) {
+            let t = self.table(&format!("SHOW PERMISSIONS FOR {role}")).await?;
+            wide.extend(ours(access::permissions(&t)?));
+        }
+        Ok(access::placed(&bare, &per_db, &wide, tenant))
+    }
+
+    /// `(database, collection)` for each collection `user` owns.
+    async fn owned_by(
+        &self,
+        user: &str,
+        databases: &[String],
+    ) -> Result<Vec<(String, String)>, StudioError> {
+        let mut out = Vec::new();
+        for db in databases {
+            let t = to_table(&self.client(Some(db))?.query("SHOW COLLECTIONS").await?);
+            out.extend(
+                access::owners(&t)?
+                    .into_iter()
+                    .filter(|(_, o)| o == user)
+                    .map(|(c, _)| (db.clone(), c)),
+            );
+        }
+        Ok(out)
+    }
+
+    /// The newest events `query` asks for, from both audit reads.
+    async fn audit_fetch(
+        &self,
+        query: &AuditQuery,
+        now: i64,
+    ) -> Result<audit::Fetched, StudioError> {
+        let client = self.client(None)?;
+        let n = audit::FETCH_LIMIT as u64 + 1;
+        let from = now
+            .saturating_sub(query.range.seconds())
+            .saturating_mul(1_000_000);
+        let mut params = vec![Value::Integer(from), int(n)];
+        let sql = match &query.action {
+            Some(action) => {
+                params.push(Value::String(action.clone()));
+                audit::FRESH_ACTION_SQL
+            }
+            None => audit::FRESH_SQL,
+        };
+        // The fresh read runs first: a flush between the two reads moves
+        // rows into the catalog, where the stored read finds them.
+        let fresh = audit::events(&to_table(&client.execute_sql(sql, &params).await?))?;
+        let stored = audit::events(&self.table(&format!("SHOW AUDIT LOG LIMIT {n}")).await?)?;
+        let gap = match stored.first() {
+            Some((newest, _)) if stored.len() > audit::FETCH_LIMIT => {
+                let t = to_table(&client.execute_sql(audit::ONE_SQL, &[int(*newest)]).await?);
+                t.rows.is_empty()
+            }
+            _ => false,
+        };
+        Ok(audit::Fetched { fresh, stored, gap })
     }
 }
 
@@ -82,25 +205,26 @@ const ADMIN_PRIVILEGE: &str = "superuser or tenant_admin";
 #[async_trait(?Send)]
 impl AdminData for NodeDbConnectionService {
     async fn access_directory(&self) -> Result<AccessDirectory, StudioError> {
-        let (users, roles) = self.principals().await?;
+        let rows = self.tenant_rows().await?;
         Ok(access::directory(
-            &access::users(&users)?,
-            &access::roles(&roles)?,
+            &rows.users,
+            &rows.roles,
             self.database_list().await?,
+            Some(rows.tenant),
             now(),
         ))
     }
 
     async fn subject_access(&self, subject: &AccessSubject) -> Result<SubjectAccess, StudioError> {
-        let (users, roles) = self.principals().await?;
-        let perms = self.table("SHOW PERMISSIONS").await?;
-        access::subject_access(
-            subject,
-            &access::users(&users)?,
-            &access::roles(&roles)?,
-            &access::permissions(&perms)?,
-            now(),
-        )
+        let rows = self.tenant_rows().await?;
+        let wanted = grants::grantees(subject, &rows.users, &rows.roles)?;
+        let databases = self.database_list().await?;
+        let held = self.grants_to(&wanted, &databases, rows.tenant).await?;
+        let owned = match subject {
+            AccessSubject::Principal(id) => self.owned_by(id, &databases).await?,
+            AccessSubject::Role(_) => vec![],
+        };
+        grants::subject_access(subject, &rows.users, &rows.roles, &held, &owned, now())
     }
 
     async fn policy_set(&self, database: &str) -> Result<PolicySet, StudioError> {
@@ -110,18 +234,30 @@ impl AdminData for NodeDbConnectionService {
         }
         // A client bound to `database`: policies and collections are per database.
         let client = self.client(Some(database))?;
+        let collections =
+            policy::collection_names(&to_table(&client.query("SHOW COLLECTIONS").await?))?;
+        // Bare `SHOW RLS POLICIES` lists every database of the tenant, by
+        // collection name only. `ON <collection>` asks this database.
         let listed = to_table(&client.query("SHOW RLS POLICIES").await?);
-        let collections = to_table(&client.query("SHOW COLLECTIONS").await?);
-        let (users, roles) = self.principals().await?;
-        let dir = access::directory(&access::users(&users)?, &access::roles(&roles)?, vec![], 0);
+        let mut policies = Vec::new();
+        for name in policy::policy_collections(&listed, &collections)? {
+            let t = to_table(
+                &client
+                    .query(&format!("SHOW RLS POLICIES ON {name}"))
+                    .await?,
+            );
+            policies.extend(policy::policies(&t, database)?);
+        }
+        let rows = self.tenant_rows().await?;
+        let dir = access::directory(&rows.users, &rows.roles, vec![], None, 0);
         Ok(PolicySet {
             database: database.to_string(),
             databases,
-            collections: policy::collection_names(&collections)?,
+            collections,
             roles: dir.roles.into_iter().map(|r| r.name).collect(),
             // The server cannot run a filter as another user, so it offers none.
             test_users: vec![],
-            policies: policy::policies(&listed, database)?,
+            policies,
             observed_at: now(),
         })
     }
@@ -133,25 +269,41 @@ impl AdminData for NodeDbConnectionService {
     }
 
     async fn audit_facets(&self) -> Result<AuditFacets, StudioError> {
-        Err(unavailable(
-            "reports no audit retention period, and the facets state one",
-        ))
+        let mut actors: Vec<String> = access::users(&self.table("SHOW USERS").await?)?
+            .into_iter()
+            .map(|u| u.name)
+            .collect();
+        actors.sort();
+        actors.dedup();
+        Ok(AuditFacets {
+            actors,
+            actions: audit::actions(),
+            // The server reads `audit_retention_days` from its config file
+            // and reports it nowhere.
+            retention_days: None,
+            scope: "superuser".to_string(),
+        })
     }
 
     async fn audit_events(&self, query: &AuditQuery) -> Result<AuditPage, StudioError> {
-        let all = self.audit_log().await?;
-        Ok(audit::page(all, query, now()))
+        let now = now();
+        let fetched = self.audit_fetch(query, now).await?;
+        Ok(audit::page(fetched, query, now))
     }
 
     async fn audit_event(&self, id: &str) -> Result<AuditEvent, StudioError> {
-        self.audit_log()
-            .await?
-            .into_iter()
-            .find(|e| e.id == id)
-            .ok_or_else(|| StudioError::UnknownObject {
-                kind: "audit event",
-                id: id.to_string(),
-            })
+        let unknown = || StudioError::UnknownObject {
+            kind: "audit event",
+            id: id.to_string(),
+        };
+        let seq: u64 = id.parse().map_err(|_| unknown())?;
+        let client = self.client(None)?;
+        let fresh = audit::events(&to_table(
+            &client.execute_sql(audit::ONE_SQL, &[int(seq)]).await?,
+        ))?;
+        let n = audit::FETCH_LIMIT + 1;
+        let stored = audit::events(&self.table(&format!("SHOW AUDIT LOG LIMIT {n}")).await?)?;
+        audit::find(fresh, stored, seq).ok_or_else(unknown)
     }
 
     async fn backup_overview(&self) -> Result<BackupOverview, StudioError> {
@@ -183,8 +335,8 @@ impl AdminData for NodeDbConnectionService {
 
     async fn preview_admin_change(&self, change: &AdminChange) -> Result<AdminReview, StudioError> {
         if let Some(changes) = access::access_changes(change) {
-            let (users, roles) = self.principals().await?;
-            let planned = access::plan(changes, &access::users(&users)?, &access::roles(&roles)?);
+            let rows = self.tenant_rows().await?;
+            let planned = plan(changes, &rows.users, &rows.roles);
             return Ok(AdminReview {
                 title: "Change access".to_string(),
                 target: format!("{} change(s)", planned.len()),
@@ -193,7 +345,7 @@ impl AdminData for NodeDbConnectionService {
                 errors: planned.iter().flat_map(|p| p.errors.clone()).collect(),
                 lines: planned.into_iter().map(|p| p.line).collect(),
                 permission: self.permission_check(ADMIN_PRIVILEGE).await?,
-                revision: revision(&[&users, &roles]),
+                revision: rows.revision,
                 apply_label: "Apply access changes".to_string(),
             });
         }
@@ -233,16 +385,15 @@ impl AdminData for NodeDbConnectionService {
                 reason: "NodeDB 0.6.2 cannot apply this change: the review lists why".to_string(),
             });
         };
-        let (users, roles) = self.principals().await?;
-        let stored = revision(&[&users, &roles]);
-        if stored != revision_seen {
+        let rows = self.tenant_rows().await?;
+        if rows.revision != revision_seen {
             return Err(StudioError::StaleRevision {
                 object: "access".to_string(),
                 expected: revision_seen,
-                stored,
+                stored: rows.revision,
             });
         }
-        let planned = access::plan(changes, &access::users(&users)?, &access::roles(&roles)?);
+        let planned = plan(changes, &rows.users, &rows.roles);
         let errors: Vec<String> = planned.iter().flat_map(|p| p.errors.clone()).collect();
         if !errors.is_empty() {
             return Err(StudioError::Rejected {
@@ -256,18 +407,20 @@ impl AdminData for NodeDbConnectionService {
                 collection: "access".to_string(),
             });
         }
-        let statements: Vec<String> = planned.into_iter().filter_map(|p| p.statement).collect();
+        let statements: Vec<Statement> = planned.into_iter().filter_map(|p| p.statement).collect();
         let client = self.client(None)?;
-        for (done, sql) in statements.iter().enumerate() {
-            if let Err(e) = client.query(sql).await {
-                let e = StudioError::from(e);
+        for (done, statement) in statements.iter().enumerate() {
+            if let Err(e) = client.query(statement.sql()).await {
+                // A statement with a password never puts it in the error.
+                let e = statement.scrubbed(StudioError::from(e));
                 return Err(if done == 0 {
                     e
                 } else {
                     StudioError::Rejected {
                         reason: format!(
-                            "applied {done} of {} statements, then `{sql}` failed: {e}",
-                            statements.len()
+                            "applied {done} of {} statements, then `{}` failed: {e}",
+                            statements.len(),
+                            statement.label
                         ),
                     }
                 });
@@ -280,31 +433,35 @@ impl AdminData for NodeDbConnectionService {
     }
 }
 
-impl NodeDbConnectionService {
-    async fn audit_log(&self) -> Result<Vec<AuditEvent>, StudioError> {
-        let sql = format!("SHOW AUDIT LOG LIMIT {}", audit::FETCH_LIMIT);
-        audit::events(&self.table(&sql).await?)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::admin_access::{AccessChange, PrincipalKind};
+    use crate::models::admin_access::{AccessChange, EVERY, PrincipalKind, Privilege};
     use crate::models::admin_audit::AuditRange;
     use crate::models::admin_policy::{PolicyChange, PolicyDraft};
+    use crate::services::nodedb::admin_user::live::users_lock;
     use crate::services::nodedb::service::live;
 
     const USER: &str = "studio_probe_a_t_user";
     const ROLE: &str = "studio_probe_a_t_role";
     const COLL: &str = "studio_probe_a_t_coll";
+    /// A second database, kept between runs.
+    const DB2: &str = "studio_probe_a_db2";
 
     /// Statements that must not fail a test: leftovers from an earlier run.
-    async fn quietly(svc: &NodeDbConnectionService, statements: &[&str]) {
-        let c = svc.client(None).expect("a session");
+    async fn quietly_in(svc: &NodeDbConnectionService, db: Option<&str>, statements: &[&str]) {
+        let c = svc.client(db).expect("a session");
         for sql in statements {
             let _ = c.query(sql).await;
         }
+    }
+
+    async fn quietly(svc: &NodeDbConnectionService, statements: &[&str]) {
+        quietly_in(svc, None, statements).await;
+    }
+
+    fn refs(v: &[String]) -> Vec<&str> {
+        v.iter().map(String::as_str).collect()
     }
 
     async fn clean(svc: &NodeDbConnectionService) {
@@ -347,7 +504,6 @@ mod tests {
         let svc = NodeDbConnectionService::default();
         assert!(svc.backup_overview().await.is_err());
         assert!(svc.credentials().await.is_err());
-        assert!(svc.audit_facets().await.is_err());
         let e = svc.credentials().await.expect_err("no credentials");
         assert!(e.to_string().contains("0.6.2"), "{e}");
     }
@@ -355,6 +511,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "needs a live server: see service::live"]
     async fn live_admin_reads_directory_access_and_audit() {
+        let _lock = users_lock();
         let svc = live().await;
         clean(&svc).await;
         quietly(
@@ -376,9 +533,16 @@ mod tests {
             .find(|p| p.name == "nodedb")
             .expect("the login");
         assert_eq!(me.kind, PrincipalKind::User);
+        assert_eq!(
+            (me.credential_expiry, me.created_at, me.password),
+            (None, None, None),
+            "nothing the server does not report"
+        );
+        assert_eq!(dir.tenant, Some(0));
         assert!(dir.principals.iter().any(|p| p.name == USER));
         assert!(dir.roles.iter().any(|r| r.name == "readonly"));
-        assert!(dir.roles.iter().any(|r| r.name == ROLE));
+        let custom = dir.roles.iter().find(|r| r.name == ROLE).expect("custom");
+        assert!(custom.created_at.is_some(), "SHOW ROLES reports it");
         assert!(dir.databases.iter().any(|d| d == "default"));
 
         let a = svc
@@ -390,11 +554,9 @@ mod tests {
                 .iter()
                 .any(|m| m.role == ROLE && m.collections == 1)
         );
-        assert!(
-            a.effective
-                .iter()
-                .any(|g| g.target == COLL && g.source == ROLE)
-        );
+        assert!(a.effective.iter().any(|g| g.target == COLL
+            && g.source == ROLE
+            && g.database.as_deref() == Some("default")));
         let r = svc
             .subject_access(&AccessSubject::Role(ROLE.into()))
             .await
@@ -423,6 +585,10 @@ mod tests {
             "{:?}",
             grants.events.first()
         );
+        let facets = svc.audit_facets().await.expect("facets");
+        assert!(facets.actors.iter().any(|a| a == "nodedb"));
+        assert!(facets.actions.iter().any(|a| a == "PermissionDenied"));
+        assert_eq!(facets.retention_days, None);
 
         let set = svc.policy_set("default").await.expect("policy set");
         assert!(set.collections.iter().any(|c| c == COLL));
@@ -438,6 +604,18 @@ mod tests {
     async fn live_admin_policy_lists_what_the_server_reports() {
         let svc = live().await;
         clean(&svc).await;
+        let other = "studio_probe_a_t_pol2";
+        quietly(&svc, &[&format!("CREATE DATABASE {DB2}")]).await;
+        quietly_in(
+            &svc,
+            Some(DB2),
+            &[
+                &format!("DROP RLS POLICY {other} ON {COLL}"),
+                &format!("CREATE COLLECTION {COLL}"),
+                &format!("CREATE RLS POLICY {other} ON {COLL} FOR READ USING (id = $auth.id)"),
+            ],
+        )
+        .await;
         quietly(
             &svc,
             &[
@@ -454,7 +632,20 @@ mod tests {
             .expect("the policy");
         assert_eq!(p.collection, COLL);
         assert!(p.enabled);
-        assert_eq!(p.using_expr, "", "the server reports no filter text");
+        assert_eq!(p.using_expr, None, "the server reports no filter text");
+        assert_eq!(p.role, None);
+        assert!(
+            !set.policies.iter().any(|p| p.name == other),
+            "a policy of another database is not listed here"
+        );
+        let in_db2 = svc.policy_set(DB2).await.expect("policy set");
+        assert!(in_db2.policies.iter().any(|p| p.name == other));
+        assert!(
+            !in_db2
+                .policies
+                .iter()
+                .any(|p| p.name == "studio_probe_a_t_pol")
+        );
         let change = AdminChange::Policy(PolicyChange::Create(PolicyDraft::blank(
             "default", COLL, "r",
         )));
@@ -465,12 +656,156 @@ mod tests {
                 .await
                 .is_err()
         );
+        quietly_in(
+            &svc,
+            Some(DB2),
+            &[
+                &format!("DROP RLS POLICY {other} ON {COLL}"),
+                &format!("DROP COLLECTION IF EXISTS {COLL}"),
+            ],
+        )
+        .await;
         clean(&svc).await;
     }
 
     #[tokio::test]
     #[ignore = "needs a live server: see service::live"]
+    async fn live_admin_grants_show_every_right_and_their_database() {
+        let _lock = users_lock();
+        let svc = live().await;
+        let (role, owner, coll) = (
+            "studio_probe_a_g_role",
+            "studio_probe_a_g_owner",
+            "studio_probe_a_g_coll",
+        );
+        let reset = [
+            format!("REVOKE READ ON TENANT 0 FROM {role}"),
+            format!("DROP USER IF EXISTS {owner}"),
+            format!("DROP ROLE IF EXISTS {role}"),
+            format!("DROP COLLECTION IF EXISTS {coll}"),
+        ];
+        let in_db2 = [
+            format!("REVOKE DROP ON {coll} FROM {role}"),
+            format!("REVOKE ADMIN ON {coll} FROM {role}"),
+            format!("DROP COLLECTION IF EXISTS {coll}"),
+        ];
+        quietly_in(&svc, Some(DB2), &refs(&in_db2)).await;
+        quietly(&svc, &refs(&reset)).await;
+        quietly(&svc, &[&format!("CREATE DATABASE {DB2}")]).await;
+        quietly(
+            &svc,
+            &[
+                &format!("CREATE ROLE {role}"),
+                &format!(
+                    "CREATE USER {owner} WITH PASSWORD 'studio-probe-fixture-3' ROLE readonly"
+                ),
+                // The same name in the default database, with no grant.
+                &format!("CREATE COLLECTION {coll}"),
+                &format!("GRANT READ ON TENANT 0 TO {role}"),
+            ],
+        )
+        .await;
+        quietly_in(
+            &svc,
+            Some(DB2),
+            &[
+                &format!("CREATE COLLECTION {coll}"),
+                &format!("GRANT DROP ON {coll} TO {role}"),
+                &format!("GRANT ADMIN ON {coll} TO {role}"),
+                &format!("ALTER COLLECTION {coll} OWNER TO {owner}"),
+            ],
+        )
+        .await;
+
+        let r = svc
+            .subject_access(&AccessSubject::Role(role.into()))
+            .await
+            .expect("role");
+        let held: Vec<_> = r
+            .grants
+            .iter()
+            .map(|g| (g.database.as_deref(), g.collection.as_str(), g.privilege))
+            .collect();
+        for want in [
+            (Some(DB2), coll, Privilege::Drop),
+            (Some(DB2), coll, Privilege::Admin),
+            (Some(EVERY), EVERY, Privilege::Select),
+        ] {
+            assert!(held.contains(&want), "{want:?} in {held:?}");
+        }
+        assert!(
+            !held.iter().any(|(db, _, _)| *db == Some("default")),
+            "the grant binds {DB2}, not the same name in default: {held:?}"
+        );
+
+        let o = svc
+            .subject_access(&AccessSubject::Principal(owner.into()))
+            .await
+            .expect("owner");
+        assert!(o.effective.iter().any(|e| e.privilege == Privilege::All
+            && e.source == "owner"
+            && e.target == coll
+            && e.database.as_deref() == Some(DB2)));
+        let me = svc
+            .subject_access(&AccessSubject::Principal("nodedb".into()))
+            .await
+            .expect("superuser");
+        assert!(me.effective.iter().any(|e| e.privilege == Privilege::All
+            && e.database.as_deref() == Some(EVERY)
+            && e.source == "superuser account"));
+
+        quietly_in(&svc, Some(DB2), &refs(&in_db2)).await;
+        quietly(&svc, &refs(&reset)).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live server: see service::live"]
+    async fn live_admin_audit_shows_the_newest_event_at_once() {
+        let _lock = users_lock();
+        let svc = live().await;
+        let role = "studio_probe_a_au_role";
+        quietly(&svc, &[&format!("DROP ROLE IF EXISTS {role}")]).await;
+        quietly(&svc, &[&format!("CREATE ROLE {role}")]).await;
+        let created = format!("created role '{role}'");
+        let stored = svc.table("SHOW AUDIT LOG LIMIT 20").await.expect("raw");
+        // Shown, not asserted: the server moves events to its catalog every
+        // 10 seconds, so the raw read misses them until then.
+        println!(
+            "SHOW AUDIT LOG already holds the event: {}",
+            stored.rows.iter().flatten().any(|c| *c == created)
+        );
+        let page = svc
+            .audit_events(&AuditQuery {
+                range: AuditRange::Last24Hours,
+                action: Some("PrivilegeChange".into()),
+                page_size: 50,
+                ..AuditQuery::default()
+            })
+            .await
+            .expect("audit");
+        assert!(
+            page.events.iter().any(|e| e.object == created),
+            "the event written just now is listed"
+        );
+        let all = svc.audit_events(&week()).await.expect("audit");
+        assert!(all.total <= audit::FETCH_LIMIT);
+        if all.total == audit::FETCH_LIMIT {
+            assert!(all.truncated, "a full list says it is cut");
+        }
+        // Unflushed events lack a database, and they are the newest: no
+        // event without one follows an event with one.
+        let first_stored = all.events.iter().position(|e| e.database.is_some());
+        assert!(
+            first_stored.is_none_or(|i| all.events[i..].iter().all(|e| e.database.is_some())),
+            "only events younger than the last flush lack a database"
+        );
+        quietly(&svc, &[&format!("DROP ROLE IF EXISTS {role}")]).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live server: see service::live"]
     async fn live_admin_access_change_previews_applies_and_goes_stale() {
+        let _lock = users_lock();
         let svc = live().await;
         clean(&svc).await;
         quietly(
@@ -552,18 +887,6 @@ mod tests {
         let again = svc.preview_admin_change(&remove).await.expect("preview");
         assert!(!again.can_apply(), "nothing left to remove");
 
-        let user = AdminChange::Access(vec![AccessChange::CreatePrincipal {
-            name: "studio_probe_a_t_new".into(),
-            kind: PrincipalKind::User,
-            description: String::new(),
-            credential_expiry: 0,
-        }]);
-        assert!(
-            !svc.preview_admin_change(&user)
-                .await
-                .expect("preview")
-                .can_apply()
-        );
         clean(&svc).await;
     }
 }

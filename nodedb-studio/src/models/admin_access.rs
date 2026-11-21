@@ -1,11 +1,14 @@
 //! Access: principals, roles, the grants a role carries, and the memberships
 //! that give a principal its roles.
 //!
-//! A privilege always names a collection. There is no global administrator
-//! switch here: a role grants what its rows say, and the effective view
-//! tells whether each row is held directly or inherited from a parent role.
+//! A privilege names a collection, or every collection (`EVERY`). A
+//! principal that holds every right (a superuser, a tenant administrator, a
+//! collection owner) shows as an explicit `ALL` row, never as an empty
+//! list. The effective view tells whether each row is held directly or
+//! inherited from a parent role.
 
 use crate::models::admin::{identifier_issue, parse_date};
+use crate::models::admin_password::{Secret, confirm_issue, password_issue};
 use crate::models::feeds::Tone;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +73,8 @@ pub enum Mfa {
     NotRequired,
     /// A service account signs in with a key, so a second factor has no meaning.
     NotApplicable,
+    /// The server does not report it.
+    NotReported,
 }
 
 impl Mfa {
@@ -78,6 +83,7 @@ impl Mfa {
             Mfa::Required => "Required",
             Mfa::NotRequired => "Not required",
             Mfa::NotApplicable => "Not applicable",
+            Mfa::NotReported => NOT_REPORTED,
         }
     }
 }
@@ -90,11 +96,14 @@ pub struct Principal {
     pub kind: PrincipalKind,
     pub status: PrincipalStatus,
     pub description: String,
-    /// When the sign-in credential expires, seconds since the epoch.
-    pub credential_expiry: i64,
-    pub created_at: i64,
-    /// A user signs in with a password. A service account has none.
-    pub password: bool,
+    /// When the sign-in credential expires, seconds since the epoch. `None`:
+    /// the server does not report it.
+    pub credential_expiry: Option<i64>,
+    /// `None`: the server does not report it.
+    pub created_at: Option<i64>,
+    /// A user signs in with a password. A service account has none. `None`:
+    /// the server does not report it.
+    pub password: Option<bool>,
     pub mfa: Mfa,
 }
 
@@ -108,12 +117,30 @@ impl Principal {
     }
 }
 
+/// What the views print for a value the server does not report.
+pub const NOT_REPORTED: &str = "Not reported";
+
+/// Stands for every database, or every collection, in a grant row.
+pub const EVERY: &str = "*";
+
+/// One right on a collection. The server's permission set is closed:
+/// read, write, create, drop, alter, admin, monitor, execute, backup.
+/// `All` is every right at once: what a superuser, a tenant administrator
+/// or a collection owner holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Privilege {
     Select,
     Insert,
     Update,
     Delete,
+    Create,
+    Drop,
+    Alter,
+    Admin,
+    Monitor,
+    Execute,
+    Backup,
+    All,
 }
 
 impl Privilege {
@@ -123,7 +150,29 @@ impl Privilege {
             Privilege::Insert => "INSERT",
             Privilege::Update => "UPDATE",
             Privilege::Delete => "DELETE",
+            Privilege::Create => "CREATE",
+            Privilege::Drop => "DROP",
+            Privilege::Alter => "ALTER",
+            Privilege::Admin => "ADMIN",
+            Privilege::Monitor => "MONITOR",
+            Privilege::Execute => "EXECUTE",
+            Privilege::Backup => "BACKUP",
+            Privilege::All => "ALL",
         }
+    }
+}
+
+/// Where a grant row applies, for display. `None` for the database: the
+/// server does not report it.
+pub fn scope_text(database: Option<&str>, target: &str) -> String {
+    let Some(db) = database else {
+        return format!("{target} (database not reported)");
+    };
+    match (db == EVERY, target == EVERY) {
+        (true, true) => "Every collection in every database".to_string(),
+        (false, true) => format!("Every collection in {db}"),
+        (true, false) => format!("{target} in every database"),
+        (false, false) => format!("{db}.{target}"),
     }
 }
 
@@ -133,7 +182,8 @@ pub struct Role {
     pub description: String,
     /// Roles this one inherits grants from.
     pub parents: Vec<String>,
-    pub created_at: i64,
+    /// `None`: the server does not report it (a built-in role).
+    pub created_at: Option<i64>,
 }
 
 impl Role {
@@ -149,11 +199,15 @@ impl Role {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RoleGrant {
     pub role: String,
-    pub database: String,
+    /// `EVERY` for every database. `None`: the server does not report it.
+    pub database: Option<String>,
+    /// `EVERY` for every collection.
     pub collection: String,
     pub privilege: Privilege,
-    pub granted_by: String,
-    pub granted_at: i64,
+    /// `None`: the server does not report it.
+    pub granted_by: Option<String>,
+    /// `None`: the server does not report it.
+    pub granted_at: Option<i64>,
 }
 
 /// A principal holds a role within one database.
@@ -161,6 +215,7 @@ pub struct RoleGrant {
 pub struct Membership {
     pub principal: String,
     pub role: String,
+    /// Empty when the role applies in every database.
     pub database: String,
     /// How many collections the role's own grants cover in the database.
     pub collections: u32,
@@ -177,7 +232,9 @@ pub struct Member {
 /// One privilege a subject holds, and how.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectiveGrant {
-    pub database: String,
+    /// `EVERY` for every database. `None`: the server does not report it.
+    pub database: Option<String>,
+    /// `EVERY` for every collection.
     pub target: String,
     pub privilege: Privilege,
     /// The role the subject holds that carries the privilege.
@@ -218,6 +275,9 @@ pub struct SubjectAccess {
     /// The grants of the roles involved.
     pub grants: Vec<RoleGrant>,
     pub effective: Vec<EffectiveGrant>,
+    /// Access the server holds but does not report, one sentence each.
+    /// The lists above leave it out.
+    pub unreported: Vec<String>,
     pub observed_at: i64,
 }
 
@@ -226,6 +286,9 @@ pub struct AccessDirectory {
     pub principals: Vec<Principal>,
     pub roles: Vec<Role>,
     pub databases: Vec<String>,
+    /// The one tenant the lists cover: other tenants' principals and roles
+    /// are left out. `None` when the lists are not cut to a tenant.
+    pub tenant: Option<u64>,
     pub observed_at: i64,
 }
 
@@ -249,6 +312,9 @@ pub struct PrincipalDraft {
     pub description: String,
     /// `YYYY-MM-DD`.
     pub expiry: String,
+    /// A user signs in with a password. A service account has none.
+    pub password: Secret,
+    pub confirm: Secret,
     pub tried: bool,
 }
 
@@ -259,8 +325,33 @@ impl PrincipalDraft {
             kind: PrincipalKind::User,
             description: String::new(),
             expiry: String::new(),
+            password: Secret::default(),
+            confirm: Secret::default(),
             tried: false,
         }
+    }
+
+    /// Whether this kind of principal signs in with a password.
+    pub fn needs_password(&self) -> bool {
+        self.kind == PrincipalKind::User
+    }
+
+    pub fn password_issue(&self) -> Option<String> {
+        self.needs_password()
+            .then(|| password_issue(&self.password))
+            .flatten()
+    }
+
+    pub fn confirm_issue(&self) -> Option<String> {
+        self.needs_password()
+            .then(|| confirm_issue(&self.password, &self.confirm))
+            .flatten()
+    }
+
+    /// Forget what was typed for the password.
+    pub fn clear_password(&mut self) {
+        self.password = Secret::default();
+        self.confirm = Secret::default();
     }
 
     pub fn name_issue(&self, taken: &[String]) -> Option<String> {
@@ -284,7 +375,11 @@ impl PrincipalDraft {
 
     /// The change the draft stages, when every field is valid.
     pub fn change(&self, taken: &[String]) -> Option<AccessChange> {
-        if self.name_issue(taken).is_some() || self.expiry_issue().is_some() {
+        if self.name_issue(taken).is_some()
+            || self.expiry_issue().is_some()
+            || self.password_issue().is_some()
+            || self.confirm_issue().is_some()
+        {
             return None;
         }
         Some(AccessChange::CreatePrincipal {
@@ -292,6 +387,7 @@ impl PrincipalDraft {
             kind: self.kind,
             description: self.description.trim().to_string(),
             credential_expiry: parse_date(&self.expiry)?,
+            password: self.needs_password().then(|| self.password.clone()),
         })
     }
 }
@@ -331,6 +427,9 @@ impl RoleDraft {
 }
 
 /// One edit to who has access. Edits stage until the person reviews them.
+///
+/// `CreatePrincipal` carries a password, so the type has no `Serialize` and
+/// `Debug` redacts it. The change holds it until it is applied or withdrawn.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AccessChange {
     CreatePrincipal {
@@ -338,6 +437,9 @@ pub enum AccessChange {
         kind: PrincipalKind,
         description: String,
         credential_expiry: i64,
+        /// `Some` for a user, which signs in with it. `None` for a service
+        /// account.
+        password: Option<Secret>,
     },
     CreateRole {
         name: String,
@@ -395,15 +497,70 @@ mod tests {
     }
 
     #[test]
+    fn a_scope_names_its_database_or_says_it_is_not_reported() {
+        assert_eq!(scope_text(Some("db2"), "users"), "db2.users");
+        assert_eq!(scope_text(None, "users"), "users (database not reported)");
+        assert_eq!(
+            scope_text(Some(EVERY), EVERY),
+            "Every collection in every database"
+        );
+        assert_eq!(scope_text(Some("db2"), EVERY), "Every collection in db2");
+    }
+
+    #[test]
     fn a_new_principal_needs_a_free_name_and_an_expiry() {
         let mut d = PrincipalDraft::new();
         assert!(d.change(&[]).is_none());
         d.name = "etl_bot".into();
         d.expiry = "2027-01-10".into();
+        d.password = Secret::new("pw-1");
+        d.confirm = Secret::new("pw-1");
         assert!(d.change(&[]).is_some());
         assert!(d.change(&["etl_bot".to_string()]).is_none());
         d.expiry = "2027-02-30".into();
         assert!(d.expiry_issue().is_some());
+    }
+
+    #[test]
+    fn a_user_needs_a_matching_password_and_a_service_account_has_none() {
+        let mut d = PrincipalDraft::new();
+        d.name = "ann".into();
+        d.expiry = "2027-01-10".into();
+        assert!(d.password_issue().is_some());
+        assert!(d.change(&[]).is_none(), "no password");
+        d.password = Secret::new("pw-1");
+        assert!(d.confirm_issue().is_some());
+        assert!(d.change(&[]).is_none(), "not confirmed");
+        d.confirm = Secret::new("pw-2");
+        assert!(d.change(&[]).is_none(), "differs");
+        d.confirm = Secret::new("pw-1");
+        let Some(AccessChange::CreatePrincipal { password, .. }) = d.change(&[]) else {
+            panic!("a valid user stages");
+        };
+        assert_eq!(password, Some(Secret::new("pw-1")));
+        d.kind = PrincipalKind::ServiceAccount;
+        d.clear_password();
+        let Some(AccessChange::CreatePrincipal { password, .. }) = d.change(&[]) else {
+            panic!("a service account needs no password");
+        };
+        assert_eq!(password, None);
+    }
+
+    #[test]
+    fn debug_of_a_draft_or_a_change_hides_the_password() {
+        let mut d = PrincipalDraft::new();
+        d.name = "ann".into();
+        d.expiry = "2027-01-10".into();
+        d.password = Secret::new("s3cr3t-pw-Q");
+        d.confirm = Secret::new("s3cr3t-pw-Q");
+        let change = d.change(&[]);
+        for text in [
+            format!("{d:?}"),
+            format!("{change:?}"),
+            format!("{:#?}", change),
+        ] {
+            assert!(!text.contains("s3cr3t"), "{text}");
+        }
     }
 
     #[test]
@@ -422,7 +579,7 @@ mod tests {
     #[test]
     fn direct_rows_sort_before_inherited_ones() {
         let row = |t: &str, via: Option<&str>| EffectiveGrant {
-            database: "analytics".into(),
+            database: Some("analytics".into()),
             target: t.into(),
             privilege: Privilege::Select,
             source: "analytics".into(),

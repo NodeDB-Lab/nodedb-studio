@@ -7,6 +7,7 @@ pub mod admin_audit;
 pub mod admin_backup;
 pub mod admin_config;
 pub mod admin_credential;
+pub mod admin_password;
 pub mod admin_policy;
 pub mod array_data;
 pub mod cluster;

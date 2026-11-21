@@ -58,8 +58,11 @@ pub struct Policy {
     pub database: String,
     pub collection: String,
     pub operation: PolicyOperation,
-    pub role: String,
-    pub using_expr: String,
+    /// `None`: the server does not report it.
+    pub role: Option<String>,
+    /// The `USING` text. `None`: the server does not report it, so Studio
+    /// cannot tell what the policy filters.
+    pub using_expr: Option<String>,
     pub check_expr: Option<String>,
     pub enabled: bool,
 }
@@ -67,9 +70,19 @@ pub struct Policy {
 impl Policy {
     pub fn matches(&self, needle: &str) -> bool {
         needle.is_empty()
-            || [&self.name, &self.collection, &self.role]
-                .iter()
-                .any(|f| f.to_lowercase().contains(needle))
+            || [
+                &self.name,
+                &self.collection,
+                self.role.as_deref().unwrap_or(""),
+            ]
+            .iter()
+            .any(|f| f.to_lowercase().contains(needle))
+    }
+
+    /// Whether the server reports the filter text and the role, so the
+    /// editor can show and edit them.
+    pub fn is_reported(&self) -> bool {
+        self.using_expr.is_some() && self.role.is_some()
     }
 
     pub fn draft(&self) -> PolicyDraft {
@@ -79,8 +92,8 @@ impl Policy {
             database: self.database.clone(),
             collection: self.collection.clone(),
             operation: self.operation,
-            role: self.role.clone(),
-            using_expr: self.using_expr.clone(),
+            role: self.role.clone().unwrap_or_default(),
+            using_expr: self.using_expr.clone().unwrap_or_default(),
             check_expr: self.check_expr.clone().unwrap_or_default(),
             enabled: self.enabled,
             tried: false,
@@ -180,12 +193,13 @@ impl PolicyDraft {
             .then(|| self.check_expr.trim().to_string())
     }
 
-    /// Whether the draft differs from what `policy` stores.
+    /// Whether the draft differs from what `policy` stores. A field the
+    /// server does not report differs only when the draft fills it.
     pub fn differs_from(&self, policy: &Policy) -> bool {
         self.name.trim() != policy.name
             || self.operation != policy.operation
-            || self.role.trim() != policy.role
-            || self.using_expr.trim() != policy.using_expr
+            || self.role.trim() != policy.role.as_deref().unwrap_or("")
+            || self.using_expr.trim() != policy.using_expr.as_deref().unwrap_or("")
             || self.stored_check() != policy.check_expr
             || self.enabled != policy.enabled
     }
