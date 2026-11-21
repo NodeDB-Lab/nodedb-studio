@@ -1,10 +1,9 @@
 //! The backend seam.
 //!
 //! Everything the UI needs from "the outside world" goes through this trait.
-//! Today the only implementor is `MockConnectionService`, reading
-//! `crate::data::mock`. When NodeDB's real client lands, a second implementor
-//! wraps it here — and async (`use_resource`) is introduced at this boundary,
-//! not sprinkled through the views.
+//! Two implementors: `MockConnectionService`, reading `crate::data::mock`
+//! (the default), and `NodeDbConnectionService`, over the NodeDB client.
+//! Async (`use_resource`) lives at this boundary, not in the views.
 
 use async_trait::async_trait;
 

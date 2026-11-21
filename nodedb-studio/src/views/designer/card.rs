@@ -19,7 +19,7 @@ pub fn letter_tone(profile: Profile) -> &'static str {
         Profile::KeyValue => "orange",
         Profile::Columnar => "gray",
         Profile::Timeseries => "green",
-        Profile::Spatial => "violet",
+        Profile::Spatial | Profile::Vector => "violet",
     }
 }
 

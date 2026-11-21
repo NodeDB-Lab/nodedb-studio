@@ -51,10 +51,8 @@ pub fn RejectsTab() -> Element {
         }
     }
     let sheet = u.sheet.clone().and_then(|s| {
-        all.iter()
-            .find(|r| r.mutation == s.mutation())
-            .cloned()
-            .map(|r| (s, r))
+        let reject = all.iter().find(|r| r.mutation == s.mutation()).cloned();
+        Some(s).zip(reject)
     });
 
     rsx! {
