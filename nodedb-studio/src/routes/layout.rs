@@ -29,11 +29,15 @@ pub fn StudioLayout() -> Element {
         let caps = active.read().as_ref().map(|c| c.capabilities);
         gates::serves(caps.as_ref(), route.destination())
     };
-    use_effect(move || {
+    // `served` is plain data, not a signal, so the effect would run once and
+    // never again. `use_reactive` re-runs it when the value changes: on a
+    // switch to a connection without the screen, and on a move to a screen
+    // the connection lacks.
+    use_effect(use_reactive((&served,), move |(served,)| {
         if !served {
             nav.replace(Route::Explorer {});
         }
-    });
+    }));
 
     // Moves the router to the screenshot scene's target, when that feature is
     // built.

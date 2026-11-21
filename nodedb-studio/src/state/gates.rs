@@ -18,8 +18,8 @@ pub fn use_caps() -> Option<Capabilities> {
         .and_then(|s| s.read().as_ref().map(|c| c.capabilities))
 }
 
-/// Whether the connection serves a destination. Unlike the other gates,
-/// no connection serves none: a gated screen is never rendered then.
+/// Whether the connection serves a destination. The sidebar and the layout
+/// both ask here, so a screen is listed exactly when it can render.
 pub fn serves(caps: Option<&Capabilities>, d: Destination) -> bool {
     match d.required_cap() {
         Some(cap) => caps.is_some_and(|c| c.has(cap)),
