@@ -142,8 +142,10 @@ pub fn App() -> Element {
     // from fresh state (a connection switch undid mark-all-read).
     let service: Rc<dyn Backend> = use_context_provider(|| {
         // The scene runner always renders the mock, whatever the environment.
+        // `try_consume_context`, not `try_use_context`: this closure runs
+        // inside a hook, and a hook called from a hook panics.
         #[cfg(all(feature = "screenshots", target_os = "linux"))]
-        if try_use_context::<crate::screenshots::RunConfig>().is_some() {
+        if dioxus::prelude::try_consume_context::<crate::screenshots::RunConfig>().is_some() {
             return Rc::new(MockConnectionService::ready()) as Rc<dyn Backend>;
         }
         let value = std::env::var(BACKEND_ENV).ok();
