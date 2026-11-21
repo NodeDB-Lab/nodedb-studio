@@ -665,7 +665,7 @@ mod tests {
         ));
         assert!(matches!(
             svc.sync_devices().await,
-            Err(StudioError::NotConnected)
+            Err(StudioError::Unsupported { .. })
         ));
     }
 
