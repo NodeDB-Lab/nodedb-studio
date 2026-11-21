@@ -113,14 +113,6 @@ pub enum Privilege {
     Select,
     Insert,
     Update,
-    // The server reports it. No fixture grants it.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "services::nodedb::admin builds it from a server grant; that service is a stub today"
-        )
-    )]
     Delete,
 }
 

@@ -1,6 +1,9 @@
 //! The real-client backend, one file per domain trait.
 
 pub mod admin;
+pub mod admin_access;
+pub mod admin_audit;
+pub mod admin_policy;
 pub mod cluster;
 pub mod connection;
 pub mod designer;
