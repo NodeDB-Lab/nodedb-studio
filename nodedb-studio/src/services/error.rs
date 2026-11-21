@@ -183,6 +183,12 @@ fn studio_retries(details: &ErrorDetails) -> bool {
         ErrorDetails::ServerOverload
         // A rate limiter refused; the window refills.
         | ErrorDetails::RateExceeded { .. }
+        // NDB-1701. In a cluster this node's authorization state or read
+        // index is behind, as during a leader change, and nothing ran
+        // (server `Error::AuthorizationStateBehind`,
+        // `LinearizableReadRefused`). Only reads offer Retry: no write path
+        // reads this flag.
+        | ErrorDetails::StaleReadNotLeader { .. }
     )
 }
 
@@ -391,7 +397,7 @@ mod tests {
             (C::CLONE_WRITE_REQUIRES_MATERIALIZE, ReadOnly, FINAL),
             // Mirror
             (C::MIRROR_READ_ONLY, ReadOnly, FINAL),
-            (C::STALE_READ_NOT_LEADER, Connection, FINAL),
+            (C::STALE_READ_NOT_LEADER, Connection, RETRY),
             (C::MIRROR_NOT_PROMOTED, ReadOnly, FINAL),
             (C::CANNOT_DROP_DEFAULT_DATABASE, Setup, FINAL),
             // Move tenant
