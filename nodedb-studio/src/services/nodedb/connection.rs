@@ -206,7 +206,8 @@ impl ConnectionService for NodeDbConnectionService {
                 c.summary()
             })
             .unwrap_or_default();
-        *self.session.borrow_mut() = Some(Session::new(config, database.clone(), seen.version));
+        *self.session.borrow_mut() =
+            Some(Session::new(config, database.clone(), seen.version, &user));
         Ok(ActiveConnection {
             name: name.to_string(),
             sub,

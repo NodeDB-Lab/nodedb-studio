@@ -1,25 +1,31 @@
-//! Query workbench. `run_query` talks to the server. Every other method waits
-//! on the real client.
+//! Query workbench over the native client. Statements, transactions, plans,
+//! the schema tree, and the Console reach the server. Saved queries and the
+//! console history are Studio's own records, kept in the session.
 
 use std::time::Instant;
 
 use async_trait::async_trait;
-use nodedb_client::{NodeDb, QueryResult};
+use nodedb_client::{NodeDb, NodeDbError, QueryResult};
 use nodedb_types::Value;
 
-use crate::models::console::Protocol;
-use crate::models::console::{ConsoleReply, HistoryEntry, HistoryQuery};
+use crate::data::mock::WorkbenchStore;
+use crate::models::collection::Profile;
+use crate::models::console::{ConsoleOutput, ConsoleReply, HistoryEntry, HistoryQuery, Protocol};
 use crate::models::explorer::RecordRow;
 use crate::models::query_plan::{ExplainMode, QueryPlan};
 use crate::models::saved_query::{QueryLibrary, SaveQuery, SavedQuery, SavedQueryVersion};
+use crate::models::schema::CollectionSchema;
 use crate::models::sql_text::{TokenKind, tokenize};
 use crate::models::workbench::{
     MessageLevel, ParamBinding, ParamError, ParamType, QueryDraft, QueryMessage, QueryRequest,
-    QueryRun, ResultSet, SchemaTree, TxAccess, TxState,
+    QueryRun, ResultSet, SchemaField, SchemaKind, SchemaTable, SchemaTree, TxAccess, TxState,
 };
+use crate::services::decode::decode_rows;
 use crate::services::error::StudioError;
+use crate::services::explorer_data::ExplorerData;
 use crate::services::nodedb::NodeDbConnectionService;
-use crate::services::nodedb::service::LastRun;
+use crate::services::nodedb::service::{LastRun, to_table};
+use crate::services::nodedb::workbench_tx::read_only_unsupported;
 use crate::services::workbench_data::WorkbenchData;
 
 impl NodeDbConnectionService {
@@ -30,6 +36,7 @@ impl NodeDbConnectionService {
         request: &QueryRequest,
         sql: &str,
     ) -> Result<Option<QueryRun>, StudioError> {
+        let tx = self.tx_state()?;
         let session = self.session.borrow();
         let Some(last) = session.as_ref().and_then(|s| s.last_run.as_ref()) else {
             return Ok(None);
@@ -42,8 +49,68 @@ impl NodeDbConnectionService {
             request.page,
             request.page_size,
             last.elapsed_ms,
+            tx,
         )
         .map(Some)
+    }
+
+    /// Run `f` on the session's own records.
+    fn local<T>(
+        &self,
+        f: impl FnOnce(&mut WorkbenchStore) -> Result<T, StudioError>,
+    ) -> Result<T, StudioError> {
+        let mut session = self.session.borrow_mut();
+        f(&mut session.as_mut().ok_or(StudioError::NotConnected)?.local)
+    }
+}
+
+fn ms_since(started: Instant) -> u32 {
+    u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX)
+}
+
+/// 0.6.2 answers EXPLAIN with the Rust debug text of its physical plan. It
+/// names no operator `QueryPlan` knows and gives no row estimate, which
+/// `QueryPlan` requires. The error carries the plan so the user still reads
+/// it.
+fn plan_unsupported(plan: &str) -> StudioError {
+    StudioError::Setup(NodeDbError::config(format!(
+        "NodeDB 0.6.2 gives no operator types or row estimates, so Studio cannot draw this plan. The server's plan:\n{plan}"
+    )))
+}
+
+/// 0.6.2 has no EXPLAIN ANALYZE: it reports a parse error. Studio does not
+/// run the statement itself to time it.
+fn analyze_unsupported() -> StudioError {
+    StudioError::Setup(NodeDbError::config(
+        "NodeDB 0.6.2 has no EXPLAIN ANALYZE, so nothing measures this plan. Studio did not run the statement.",
+    ))
+}
+
+/// A collection's declared fields, the id field marked as the key.
+fn fields_of(schema: &CollectionSchema) -> Vec<SchemaField> {
+    schema
+        .fields
+        .iter()
+        .map(|f| SchemaField {
+            name: f.name.clone(),
+            type_name: f.ty.label(),
+            key: schema.id_field.as_deref() == Some(f.name.as_str()),
+        })
+        .collect()
+}
+
+/// A console reply: rows under a header, or the line saying what ran.
+fn console_output(result: &QueryResult) -> ConsoleOutput {
+    if result.columns.is_empty() {
+        return ConsoleOutput::Text(vec![outcome_text(result)]);
+    }
+    ConsoleOutput::Table {
+        columns: result.columns.clone(),
+        rows: result
+            .rows
+            .iter()
+            .map(|row| row.iter().map(render_cell).collect())
+            .collect(),
     }
 }
 
@@ -67,6 +134,7 @@ fn build_run(
     page: usize,
     page_size: usize,
     elapsed_ms: u32,
+    tx: TxState,
 ) -> Result<QueryRun, StudioError> {
     let page_size = page_size.max(1);
     let total = result.rows.len();
@@ -93,7 +161,7 @@ fn build_run(
     Ok(QueryRun {
         result: set,
         messages,
-        tx: TxState::Idle,
+        tx,
     })
 }
 
@@ -178,16 +246,17 @@ impl WorkbenchData for NodeDbConnectionService {
         {
             return Ok(run);
         }
-        let client = self.client(Some(&request.database))?;
-        let started = Instant::now();
-        let result = if request.params.is_empty() {
-            client.query(sql).await?
+        let (positional, values) = if request.params.is_empty() {
+            (sql.to_string(), Vec::new())
         } else {
-            let (positional, values) = bind_params(sql, &request.params)?;
-            client.execute_sql(&positional, &values).await?
+            bind_params(sql, &request.params)?
         };
-        let elapsed_ms = u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX);
-        let run = build_run(&result, request.page, request.page_size, elapsed_ms)?;
+        let started = Instant::now();
+        let (result, tx) = self
+            .execute(&request.database, &positional, &values)
+            .await?;
+        let elapsed_ms = ms_since(started);
+        let run = build_run(&result, request.page, request.page_size, elapsed_ms, tx)?;
         if let Some(session) = self.session.borrow_mut().as_mut() {
             session.last_run = Some(LastRun {
                 database: request.database.clone(),
@@ -201,70 +270,158 @@ impl WorkbenchData for NodeDbConnectionService {
 
     async fn explain(
         &self,
-        _request: &QueryRequest,
-        _mode: ExplainMode,
+        request: &QueryRequest,
+        mode: ExplainMode,
     ) -> Result<QueryPlan, StudioError> {
-        Err(StudioError::NotConnected)
+        let sql = request.sql.trim();
+        if sql.is_empty() {
+            return Err(StudioError::EmptyStatement);
+        }
+        match mode {
+            ExplainMode::Explain => {}
+            ExplainMode::Analyze => return Err(analyze_unsupported()),
+        }
+        // The pool plans it: EXPLAIN never runs the statement, so it stays
+        // out of the transaction.
+        let (sql, values) = bind_params(sql, &request.params)?;
+        let client = self.client(Some(&request.database))?;
+        // The server matches `EXPLAIN ` in upper case only.
+        let result = client
+            .execute_sql(&format!("EXPLAIN {sql}"), &values)
+            .await?;
+        let plan = decode_rows(&to_table(&result), &["plan"], |r| {
+            Ok(r.field("plan")?.to_string())
+        })?;
+        Err(plan_unsupported(&plan.join("\n")))
     }
 
     async fn schema_tree(&self) -> Result<SchemaTree, StudioError> {
-        Err(StudioError::NotConnected)
+        let listed = self.table("SHOW MATERIALIZED VIEWS").await?;
+        let views = decode_rows(&listed, &["name"], |r| Ok(r.field("name")?.to_string()))?;
+        let mut tree = SchemaTree::default();
+        // ponytail: a DESCRIBE and a SHOW INDEXES per collection, after the
+        // catalog's own DESCRIBE each. Batch them if a large catalog makes
+        // the panel slow.
+        for c in self.catalog().await? {
+            // An array has no DESCRIBE. A collection dropped since the
+            // catalog read is not in the schema.
+            let fields = if c.profile == Profile::Array {
+                Vec::new()
+            } else {
+                match self.collection_schema(&c.name).await {
+                    Ok(schema) => fields_of(&schema),
+                    Err(StudioError::NotFound(_)) => continue,
+                    Err(e) => return Err(e),
+                }
+            };
+            // A materialized view is stored as a collection, and the
+            // catalog lists it with them.
+            let is_view = views.contains(&c.name);
+            let table = SchemaTable {
+                kind: if is_view {
+                    SchemaKind::MaterializedView
+                } else {
+                    SchemaKind::Collection(c.profile)
+                },
+                name: c.name,
+                rows: c.rows,
+                fields,
+            };
+            if is_view {
+                tree.views.push(table);
+            } else {
+                tree.tables.push(table);
+            }
+        }
+        // A streaming view has no collection, so no fields to read.
+        for name in views {
+            if !tree.views.iter().any(|v| v.name == name) {
+                tree.views.push(SchemaTable {
+                    name,
+                    kind: SchemaKind::MaterializedView,
+                    rows: None,
+                    fields: Vec::new(),
+                });
+            }
+        }
+        Ok(tree)
     }
 
     async fn query_session(&self) -> Result<Vec<QueryDraft>, StudioError> {
-        Err(StudioError::NotConnected)
+        // Nothing records this backend's tabs yet, so a session restores none.
+        self.local(|_| Ok(Vec::new()))
     }
 
     async fn transaction(&self) -> Result<TxState, StudioError> {
-        Err(StudioError::NotConnected)
+        self.tx_state()
     }
 
-    async fn begin_transaction(&self, _access: TxAccess) -> Result<TxState, StudioError> {
-        Err(StudioError::NotConnected)
+    async fn begin_transaction(&self, access: TxAccess) -> Result<TxState, StudioError> {
+        match access {
+            TxAccess::ReadOnly => Err(read_only_unsupported()),
+            TxAccess::ReadWrite => self.begin_tx("", "BEGIN").await.map(|(_, tx)| tx),
+        }
     }
 
     async fn commit_transaction(&self) -> Result<TxState, StudioError> {
-        Err(StudioError::NotConnected)
+        self.end_tx(true).await.map(|(_, tx)| tx)
     }
 
     async fn rollback_transaction(&self) -> Result<TxState, StudioError> {
-        Err(StudioError::NotConnected)
+        self.end_tx(false).await.map(|(_, tx)| tx)
     }
 
     async fn query_library(&self) -> Result<QueryLibrary, StudioError> {
-        Err(StudioError::NotConnected)
+        self.local(|s| Ok(s.library()))
     }
 
-    async fn saved_query_versions(&self, _id: &str) -> Result<Vec<SavedQueryVersion>, StudioError> {
-        Err(StudioError::NotConnected)
+    async fn saved_query_versions(&self, id: &str) -> Result<Vec<SavedQueryVersion>, StudioError> {
+        self.local(|s| s.versions(id))
     }
 
-    async fn save_query(&self, _save: &SaveQuery) -> Result<SavedQuery, StudioError> {
-        Err(StudioError::NotConnected)
+    async fn save_query(&self, save: &SaveQuery) -> Result<SavedQuery, StudioError> {
+        self.local(|s| s.save(save))
     }
 
-    async fn delete_saved_query(&self, _id: &str) -> Result<(), StudioError> {
-        Err(StudioError::NotConnected)
+    async fn delete_saved_query(&self, id: &str) -> Result<(), StudioError> {
+        self.local(|s| s.delete(id))
     }
 
-    async fn create_query_folder(&self, _name: &str) -> Result<(), StudioError> {
-        Err(StudioError::NotConnected)
+    async fn create_query_folder(&self, name: &str) -> Result<(), StudioError> {
+        self.local(|s| s.create_folder(name))
     }
 
     async fn console_run(
         &self,
-        _protocol: Protocol,
-        _database: &str,
-        _text: &str,
+        protocol: Protocol,
+        database: &str,
+        text: &str,
     ) -> Result<ConsoleReply, StudioError> {
-        Err(StudioError::NotConnected)
+        let text = text.trim();
+        if text.trim_end_matches(';').trim().is_empty() {
+            return Err(StudioError::EmptyStatement);
+        }
+        // The history keeps what the user ran, whatever the server answers.
+        self.local(|s| {
+            s.record(protocol, text);
+            Ok(())
+        })?;
+        // SQL, admin commands such as `SHOW DATABASES`, and Cypher `MATCH`
+        // all reach the server as statement text, so one path runs all three.
+        let started = Instant::now();
+        let (result, tx) = self.execute(database, text, &[]).await?;
+        Ok(ConsoleReply {
+            output: console_output(&result),
+            elapsed_ms: ms_since(started),
+            tx,
+        })
     }
 
     async fn console_history(
         &self,
-        _query: &HistoryQuery,
+        query: &HistoryQuery,
     ) -> Result<Vec<HistoryEntry>, StudioError> {
-        Err(StudioError::NotConnected)
+        self.local(|s| Ok(s.history(query)))
     }
 }
 
@@ -294,20 +451,20 @@ mod tests {
 
     #[test]
     fn pages_slice_with_absolute_ids() {
-        let run = build_run(&result(5), 1, 2, 7).expect("builds");
+        let run = build_run(&result(5), 1, 2, 7, TxState::Idle).expect("builds");
         let ids: Vec<_> = run.result.rows().iter().map(|r| r.id.as_str()).collect();
         assert_eq!(ids, ["row-2", "row-3"]);
         assert_eq!(run.result.total_rows, 5);
         assert_eq!(run.result.pages(), 3);
-        let last = build_run(&result(5), 2, 2, 7).expect("builds");
+        let last = build_run(&result(5), 2, 2, 7, TxState::Idle).expect("builds");
         assert_eq!(last.result.rows().len(), 1);
     }
 
     #[test]
     fn a_page_past_the_end_is_empty_and_a_zero_page_size_is_one() {
-        let past = build_run(&result(3), 9, 2, 0).expect("builds");
+        let past = build_run(&result(3), 9, 2, 0, TxState::Idle).expect("builds");
         assert!(past.result.rows().is_empty());
-        let zero = build_run(&result(3), 0, 0, 0).expect("builds");
+        let zero = build_run(&result(3), 0, 0, 0, TxState::Idle).expect("builds");
         assert_eq!(zero.result.rows().len(), 1);
     }
 
@@ -329,7 +486,7 @@ mod tests {
             rows_affected: 3,
             command: Some("UPDATE".into()),
         };
-        let run = build_run(&done, 0, 50, 1).expect("builds");
+        let run = build_run(&done, 0, 50, 1, TxState::Idle).expect("builds");
         assert!(run.result.rows().is_empty());
         assert_eq!(run.messages.len(), 1);
         assert_eq!(run.messages[0].text, "UPDATE: 3 rows affected");
@@ -459,5 +616,330 @@ mod tests {
         // The server's plan error maps to `Setup`, never to `Syntax`.
         assert!(matches!(err, StudioError::Setup(_)), "got {err:?}");
         assert!(err.to_string().contains("parse error"), "got {err}");
+    }
+
+    /// A session that never reached a server: everything Studio keeps
+    /// itself answers, and nothing touches the network.
+    fn offline() -> NodeDbConnectionService {
+        use nodedb_client::native::pool::PoolConfig;
+        use nodedb_types::protocol::AuthMethod as WireAuth;
+        let config = PoolConfig::new(
+            "127.0.0.1:1",
+            WireAuth::Trust {
+                username: "alice".into(),
+            },
+        );
+        let svc = NodeDbConnectionService::default();
+        *svc.session.borrow_mut() = Some(crate::services::nodedb::service::Session::new(
+            config,
+            "default".into(),
+            "0.6.2".into(),
+            "alice",
+        ));
+        svc
+    }
+
+    fn save(name: &str) -> SaveQuery {
+        SaveQuery {
+            id: None,
+            name: name.into(),
+            folder: None,
+            database: "default".into(),
+            sql: "SELECT 1".into(),
+            params: Vec::new(),
+            tags: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_library_starts_empty_and_saves_as_the_signed_in_user() {
+        let svc = offline();
+        assert_eq!(
+            svc.query_library().await.expect("reads"),
+            QueryLibrary::default()
+        );
+        assert!(svc.query_session().await.expect("reads").is_empty());
+        let made = svc.save_query(&save("Weekly")).await.expect("saves");
+        assert_eq!((made.owner.as_str(), made.version), ("alice", 1));
+        let mut again = save("Weekly v2");
+        again.id = Some(made.id.clone());
+        let v2 = svc.save_query(&again).await.expect("versions");
+        assert_eq!(v2.version, 2);
+        let versions = svc.saved_query_versions(&made.id).await.expect("reads");
+        assert_eq!(
+            versions.iter().map(|v| v.version).collect::<Vec<_>>(),
+            [2, 1]
+        );
+        assert!(versions.iter().all(|v| v.author == "alice"));
+        assert!(matches!(
+            svc.save_query(&save("weekly V2")).await,
+            Err(StudioError::QueryNameTaken(_))
+        ));
+        svc.create_query_folder("Finance").await.expect("folder");
+        svc.delete_saved_query(&made.id).await.expect("deletes");
+        let lib = svc.query_library().await.expect("reads");
+        assert!(lib.queries.is_empty());
+        assert_eq!(lib.folders, ["Finance"]);
+    }
+
+    #[tokio::test]
+    async fn saved_queries_carry_the_wall_clock() {
+        let svc = offline();
+        let before = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("after the epoch")
+            .as_secs() as i64;
+        let made = svc.save_query(&save("Now")).await.expect("saves");
+        assert!((before..before + 5).contains(&made.updated_at));
+    }
+
+    #[tokio::test]
+    async fn offline_transaction_answers_need_no_server() {
+        let svc = offline();
+        assert_eq!(svc.transaction().await.expect("reads"), TxState::Idle);
+        assert!(matches!(
+            svc.commit_transaction().await,
+            Err(StudioError::NoTransaction)
+        ));
+        assert!(matches!(
+            svc.rollback_transaction().await,
+            Err(StudioError::NoTransaction)
+        ));
+        assert!(matches!(
+            svc.begin_transaction(TxAccess::ReadOnly).await,
+            Err(StudioError::Setup(_))
+        ));
+        assert!(matches!(
+            svc.explain(&q("SELECT 1", 0, 50), ExplainMode::Analyze)
+                .await,
+            Err(StudioError::Setup(_))
+        ));
+        assert!(matches!(
+            svc.console_run(Protocol::Sql, "", " ; ").await,
+            Err(StudioError::EmptyStatement)
+        ));
+    }
+
+    #[tokio::test]
+    async fn no_session_keeps_no_records() {
+        let svc = NodeDbConnectionService::default();
+        assert!(matches!(
+            svc.query_session().await,
+            Err(StudioError::NotConnected)
+        ));
+        assert!(matches!(
+            svc.console_history(&HistoryQuery {
+                protocol: None,
+                window: crate::models::console::HistoryWindow::AllTime,
+            })
+            .await,
+            Err(StudioError::NotConnected)
+        ));
+    }
+
+    #[test]
+    fn console_output_is_a_table_or_the_outcome_line() {
+        assert_eq!(
+            console_output(&result(1)),
+            ConsoleOutput::Table {
+                columns: vec!["n".into()],
+                rows: vec![vec!["0".into()]],
+            }
+        );
+        let done = QueryResult {
+            columns: Vec::new(),
+            rows: Vec::new(),
+            rows_affected: 2,
+            command: Some("DELETE".into()),
+        };
+        assert_eq!(
+            console_output(&done),
+            ConsoleOutput::Text(vec!["DELETE: 2 rows affected".into()])
+        );
+    }
+
+    fn history(protocol: Option<Protocol>) -> HistoryQuery {
+        HistoryQuery {
+            protocol,
+            window: crate::models::console::HistoryWindow::Day,
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+    async fn live_console_runs_sql_admin_and_cypher_and_keeps_history() {
+        let svc = live().await;
+        let c = svc.client(None).expect("a client");
+        let t = "studio_probe_w_graph";
+        for sql in [
+            format!("CREATE COLLECTION IF NOT EXISTS {t}"),
+            format!("UPSERT INTO {t} (id) VALUES ('ga'), ('gb')"),
+            format!("GRAPH INSERT EDGE IN '{t}' FROM 'ga' TO 'gb' TYPE 'studio_w_knows'"),
+        ] {
+            c.query(&sql).await.expect("seed runs");
+        }
+        let sql = svc
+            .console_run(Protocol::Sql, "", "SELECT 1 AS one;")
+            .await
+            .expect("runs");
+        assert_eq!(
+            sql.output,
+            ConsoleOutput::Table {
+                columns: vec!["one".into()],
+                rows: vec![vec!["1".into()]],
+            }
+        );
+        assert_eq!(sql.tx, TxState::Idle);
+        let admin = svc
+            .console_run(Protocol::Admin, "", "SHOW DATABASES")
+            .await
+            .expect("runs");
+        let ConsoleOutput::Table { rows, .. } = admin.output else {
+            panic!("SHOW DATABASES is a table");
+        };
+        assert!(
+            rows.iter()
+                .any(|r| r.first().is_some_and(|c| c == "default"))
+        );
+        let cypher = svc
+            .console_run(
+                Protocol::Cypher,
+                "",
+                "MATCH (a)-[:studio_w_knows]->(b) RETURN a, b",
+            )
+            .await
+            .expect("runs");
+        let ConsoleOutput::Table { columns, rows } = cypher.output else {
+            panic!("MATCH is a table");
+        };
+        assert_eq!(columns, ["a", "b"]);
+        assert!(rows.contains(&vec!["ga".to_string(), "gb".to_string()]));
+        assert!(svc.console_run(Protocol::Sql, "", "SELEC 1").await.is_err());
+        let all = svc.console_history(&history(None)).await.expect("reads");
+        let texts: Vec<&str> = all.iter().map(|h| h.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            [
+                "SELEC 1",
+                "MATCH (a)-[:studio_w_knows]->(b) RETURN a, b",
+                "SHOW DATABASES",
+                "SELECT 1 AS one;",
+            ]
+        );
+        let admin_only = svc
+            .console_history(&history(Some(Protocol::Admin)))
+            .await
+            .expect("reads");
+        assert_eq!(admin_only.len(), 1);
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+    async fn live_query_explain_returns_the_server_plan_and_never_runs() {
+        let svc = live().await;
+        let c = svc.client(None).expect("a client");
+        let t = "studio_probe_w_plan";
+        for sql in [
+            format!("CREATE COLLECTION IF NOT EXISTS {t}"),
+            format!("DELETE FROM {t}"),
+        ] {
+            c.query(&sql).await.expect("seed runs");
+        }
+        let mut request = q(&format!("SELECT id FROM {t} WHERE n > :n;"), 0, 50);
+        request.params = vec![ParamBinding::new("n", ParamType::Integer, "1")];
+        let err = svc
+            .explain(&request, ExplainMode::Explain)
+            .await
+            .expect_err("0.6.2 has no plan Studio can draw");
+        assert!(matches!(err, StudioError::Setup(_)), "{err:?}");
+        let text = err.to_string();
+        assert!(text.contains("Scan") && text.contains(t), "{text}");
+        let insert = q(&format!("INSERT INTO {t} (id, n) VALUES ('x', 1)"), 0, 50);
+        assert!(matches!(
+            svc.explain(&insert, ExplainMode::Analyze).await,
+            Err(StudioError::Setup(_))
+        ));
+        let rows = c
+            .query(&format!("SELECT id FROM {t}"))
+            .await
+            .expect("reads");
+        assert!(rows.rows.is_empty(), "Analyze ran nothing");
+        let bad = svc
+            .explain(&q("SELEC 1", 0, 50), ExplainMode::Explain)
+            .await
+            .expect_err("does not parse");
+        assert!(bad.to_string().contains("parse error"), "{bad}");
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+    async fn live_query_schema_tree_lists_tables_fields_and_views() {
+        let svc = live().await;
+        let c = svc.client(None).expect("a client");
+        let (strict, src, mv) = (
+            "studio_probe_w_schema",
+            "studio_probe_w_src",
+            "studio_probe_w_mv",
+        );
+        for sql in [
+            format!(
+                "CREATE COLLECTION IF NOT EXISTS {strict} (id TEXT PRIMARY KEY, qty BIGINT NOT NULL) WITH (engine='document_strict')"
+            ),
+            format!("CREATE COLLECTION IF NOT EXISTS {src}"),
+        ] {
+            c.query(&sql).await.expect("seed runs");
+        }
+        // 0.6.2 answers `DROP MATERIALIZED VIEW IF EXISTS` and keeps the view,
+        // so the plain DROP runs, and fails when there is no view yet.
+        let _ = c.query(&format!("DROP MATERIALIZED VIEW {mv}")).await;
+        c.query(&format!(
+            "CREATE MATERIALIZED VIEW {mv} ON {src} AS SELECT id FROM {src}"
+        ))
+        .await
+        .expect("the view is created");
+        // Other live tests drop and create collections meanwhile. A
+        // collection that vanishes inside the catalog read fails it.
+        let mut tree = None;
+        for _ in 0..3 {
+            match svc.schema_tree().await {
+                Ok(t) => {
+                    tree = Some(t);
+                    break;
+                }
+                Err(StudioError::NotFound(_)) => continue,
+                Err(e) => panic!("schema tree: {e}"),
+            }
+        }
+        let tree = tree.expect("a schema tree within three reads");
+        let table = tree
+            .tables
+            .iter()
+            .find(|t| t.name == strict)
+            .expect("the strict collection");
+        assert_eq!(table.kind.letter(), "S");
+        assert_eq!(table.rows, None);
+        let fields: Vec<(&str, &str, bool)> = table
+            .fields
+            .iter()
+            .map(|f| (f.name.as_str(), f.type_name.as_str(), f.key))
+            .collect();
+        assert_eq!(fields, [("id", "string", true), ("qty", "int64", false)]);
+        let view = tree
+            .views
+            .iter()
+            .find(|v| v.name == mv)
+            .expect("the materialized view");
+        assert_eq!(view.kind, SchemaKind::MaterializedView);
+        assert!(tree.tables.iter().all(|t| t.name != mv));
+        let mut names: Vec<&str> = tree
+            .tables
+            .iter()
+            .chain(&tree.views)
+            .map(|t| t.name.as_str())
+            .collect();
+        let n = names.len();
+        names.sort_unstable();
+        names.dedup();
+        assert_eq!(names.len(), n, "every name once");
     }
 }

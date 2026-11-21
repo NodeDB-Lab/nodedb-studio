@@ -19,5 +19,6 @@ pub mod topics;
 pub mod transfer;
 pub mod vector;
 pub mod workbench;
+pub mod workbench_tx;
 
 pub use service::NodeDbConnectionService;

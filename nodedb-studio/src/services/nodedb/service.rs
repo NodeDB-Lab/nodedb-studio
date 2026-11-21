@@ -2,20 +2,23 @@
 //! transport.
 //!
 //! Wired today: the connection registry, connect, test, databases, the
-//! catalog, and `run_query`. Every other seam method returns
+//! catalog, and the query workbench. Every other seam method returns
 //! `StudioError::NotConnected` until it is wired.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use nodedb_client::native::pool::PoolConfig;
 use nodedb_client::{NativeClient, NodeDbError, QueryResult};
 use nodedb_types::protocol::AuthMethod as WireAuth;
 
+use crate::data::mock::WorkbenchStore;
 use crate::models::connections::{AuthMethod, ConnectionTarget, TlsConfig};
 use crate::services::decode::Table;
 use crate::services::error::StudioError;
+use crate::services::nodedb::workbench_tx::Tx;
 use crate::state::connections_registry::SavedConnection;
 
 /// The backend that talks to a NodeDB server.
@@ -41,26 +44,55 @@ pub(super) struct LastRun {
     pub elapsed_ms: u32,
 }
 
+/// A number no other session or transaction of this process holds.
+pub(super) fn next_id() -> u64 {
+    static NEXT: AtomicU64 = AtomicU64::new(1);
+    NEXT.fetch_add(1, Ordering::Relaxed)
+}
+
 /// One open session: who and where, plus a client per database it has used.
 pub(super) struct Session {
-    config: PoolConfig,
+    /// Tells this session from the one a reconnect replaces it with.
+    pub id: u64,
+    pub config: PoolConfig,
     /// The database session-scoped reads answer for.
     pub database: String,
     pub server_version: String,
     clients: HashMap<String, Rc<NativeClient>>,
     pub last_run: Option<LastRun>,
+    /// The open transaction. Dropping the session closes its connection,
+    /// and the server rolls back what a closed connection left open.
+    pub tx: Option<Tx>,
+    /// Studio's own records: saved queries and console history.
+    // ponytail: memory only, so a reconnect or a restart starts empty.
+    // Persist it with `state::persist` when saved queries must survive.
+    pub local: WorkbenchStore,
 }
 
 impl Session {
-    pub fn new(config: PoolConfig, database: String, server_version: String) -> Self {
+    pub fn new(config: PoolConfig, database: String, server_version: String, user: &str) -> Self {
         Self {
+            id: next_id(),
             config,
             database,
             server_version,
             clients: HashMap::new(),
             last_run: None,
+            tx: None,
+            local: WorkbenchStore::empty(user, now_epoch),
         }
     }
+
+    /// `database`, or the session's database when blank.
+    pub fn database_or_default(&self, database: &str) -> String {
+        database_of(database).unwrap_or_else(|| self.database.clone())
+    }
+}
+
+fn now_epoch() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
 fn setup(detail: &str) -> StudioError {

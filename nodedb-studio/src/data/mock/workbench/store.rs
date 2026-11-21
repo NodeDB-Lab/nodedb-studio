@@ -28,6 +28,11 @@ pub struct WorkbenchStore {
     /// are deterministic.
     clock: i64,
     seq: u32,
+    /// Who saves: the owner of a new query and the author of a version.
+    owner: String,
+    /// The wall clock of a store outside the mock. `None` keeps the
+    /// minute ticks.
+    now: Option<fn() -> i64>,
 }
 
 impl WorkbenchStore {
@@ -41,11 +46,31 @@ impl WorkbenchStore {
             history: console::history(),
             clock: epoch(2026, 6, 13, 13, 30, 0),
             seq: 0,
+            owner: OWNER.to_string(),
+            now: None,
+        }
+    }
+
+    /// A store with no queries, folders, or history, owned by `owner` and
+    /// timed by `now`. The real backend keeps its saved queries here.
+    pub fn empty(owner: &str, now: fn() -> i64) -> Self {
+        Self {
+            tx: TxState::Idle,
+            library: QueryLibrary::default(),
+            versions: BTreeMap::new(),
+            history: Vec::new(),
+            clock: now(),
+            seq: 0,
+            owner: owner.to_string(),
+            now: Some(now),
         }
     }
 
     fn tick(&mut self) -> i64 {
-        self.clock += 60;
+        self.clock = match self.now {
+            Some(now) => now().max(self.clock),
+            None => self.clock + 60,
+        };
         self.clock
     }
 
@@ -265,7 +290,7 @@ impl WorkbenchStore {
                     .position(|q| &q.id == id)
                     .ok_or_else(|| StudioError::UnknownQuery(id.clone()))?;
                 let q = &mut self.library.queries[idx];
-                if q.owner != OWNER {
+                if q.owner != self.owner {
                     return Err(StudioError::Rejected {
                         reason: format!("only {} can save a new version: use Save as", q.owner),
                     });
@@ -288,7 +313,7 @@ impl WorkbenchStore {
                     name,
                     folder: save.folder.clone(),
                     scope: QueryScope::MyWorkspace,
-                    owner: OWNER.to_string(),
+                    owner: self.owner.clone(),
                     database: save.database.clone(),
                     sql: save.sql.clone(),
                     params: save.params.clone(),
@@ -306,7 +331,7 @@ impl WorkbenchStore {
             SavedQueryVersion {
                 version: saved.version,
                 saved_at: now,
-                author: OWNER.to_string(),
+                author: self.owner.clone(),
                 sql: saved.sql.clone(),
             },
         );
@@ -352,17 +377,7 @@ impl WorkbenchStore {
         database: &str,
         text: &str,
     ) -> Result<ConsoleReply, StudioError> {
-        let at = self.tick();
-        let n = 100 + self.next();
-        self.history.insert(
-            0,
-            HistoryEntry {
-                id: format!("h-{n:03}"),
-                at,
-                protocol,
-                text: text.trim().to_string(),
-            },
-        );
+        self.record(protocol, text);
         let control = if protocol == Protocol::Sql {
             match bare(text).to_uppercase().as_str() {
                 "BEGIN" | "START TRANSACTION" => Some(("BEGIN", self.begin(TxAccess::ReadWrite))),
@@ -399,8 +414,24 @@ impl WorkbenchStore {
         }
     }
 
+    /// Add a console command to the history, newest first.
+    pub fn record(&mut self, protocol: Protocol, text: &str) {
+        let at = self.tick();
+        let n = 100 + self.next();
+        self.history.insert(
+            0,
+            HistoryEntry {
+                id: format!("h-{n:03}"),
+                at,
+                protocol,
+                text: text.trim().to_string(),
+            },
+        );
+    }
+
     pub fn history(&self, query: &HistoryQuery) -> Vec<HistoryEntry> {
-        let since = query.window.seconds().map(|s| self.clock - s);
+        let now = self.now.map_or(self.clock, |now| now());
+        let since = query.window.seconds().map(|s| now - s);
         let mut out: Vec<HistoryEntry> = self
             .history
             .iter()
