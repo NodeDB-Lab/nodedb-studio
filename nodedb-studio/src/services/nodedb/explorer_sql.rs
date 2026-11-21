@@ -1,8 +1,10 @@
-//! Record SQL built from validated parts, and rows decoded into records.
+//! Record reads built from validated parts, and rows decoded into records.
+//! Writes are in `explorer_write`.
 //!
 //! Values travel as `$n` parameters. Identifiers (collection, field names)
 //! cannot be bound, so each one passes `Meta::field` or `ident` before it
-//! reaches the text. No function here touches the network.
+//! reaches the text, a name the server reports included. No function here
+//! touches the network.
 
 use std::collections::HashMap;
 
@@ -10,7 +12,6 @@ use nodedb_client::QueryResult;
 use nodedb_types::{NdbDateTime, Value};
 
 use crate::models::collection::Profile;
-use crate::models::record_json::compact;
 use crate::models::records::{Record, RecordQuery};
 use crate::models::schema::{CollectionSchema, FieldType};
 use crate::services::error::StudioError;
@@ -32,18 +33,18 @@ pub(super) struct Statement {
 
 /// Hands out `$n` placeholders and keeps the values behind them.
 #[derive(Default)]
-struct Binder {
-    params: Vec<Value>,
+pub(super) struct Binder {
+    pub params: Vec<Value>,
 }
 
 impl Binder {
-    fn push(&mut self, value: Value) -> String {
+    pub fn push(&mut self, value: Value) -> String {
         self.params.push(value);
         format!("${}", self.params.len())
     }
 }
 
-fn rejected(reason: String) -> StudioError {
+pub(super) fn rejected(reason: String) -> StudioError {
     StudioError::Rejected { reason }
 }
 
@@ -67,15 +68,16 @@ impl Meta {
         }
     }
 
-    /// The field that addresses one record. Timeseries and a collection
-    /// declared without a primary key have none.
+    /// The field that addresses one record, checked like any field name.
+    /// Timeseries has none.
     pub fn key(&self) -> Result<&str, StudioError> {
-        self.schema.id_field.as_deref().ok_or_else(|| {
+        let key = self.schema.id_field.as_deref().ok_or_else(|| {
             rejected(format!(
                 "{} has no record key, so Studio cannot address one of its records",
                 self.collection
             ))
-        })
+        })?;
+        self.field(key)
     }
 
     /// `id` as the value the key column compares against.
@@ -86,24 +88,48 @@ impl Meta {
                 .parse::<i64>()
                 .map(Value::Integer)
                 .map_err(|_| rejected(format!("`{id}` is not a number, and {key} holds numbers"))),
-            _ => Ok(Value::String(id.to_string())),
+            Some(
+                FieldType::String { .. }
+                | FieldType::Float64
+                | FieldType::Decimal { .. }
+                | FieldType::Bool
+                | FieldType::Timestamp
+                | FieldType::Datetime
+                | FieldType::Uuid
+                | FieldType::Object
+                | FieldType::Array
+                | FieldType::Json
+                | FieldType::Vector { .. }
+                | FieldType::Geometry { .. }
+                | FieldType::Bytes,
+            )
+            | None => Ok(Value::String(id.to_string())),
         }
     }
 
-    /// The fields a text search reads. A schemaless collection declares none,
-    /// so only its key is searched.
-    fn text_fields(&self) -> Vec<String> {
-        let mut fields: Vec<String> = if self.schema.typed_headers {
-            self.schema.filter_fields.clone()
-        } else {
-            Vec::new()
-        };
-        if let Some(key) = &self.schema.id_field
-            && !fields.contains(key)
-        {
-            fields.insert(0, key.clone());
+    /// The fields a text search reads, each name checked. A schemaless
+    /// collection declares no fields, and 0.6.2 has no statement that matches
+    /// text anywhere in a document: `document` reads as NULL in a filter and
+    /// `text_match` needs a full-text index (checked live).
+    fn text_fields(&self) -> Result<Vec<&str>, StudioError> {
+        if !self.schema.typed_headers {
+            return Err(rejected(format!(
+                "text search on schemaless collection {} is not available on NodeDB 0.6.2: \
+                 filter by a field instead",
+                self.collection
+            )));
         }
-        fields
+        let mut fields: Vec<&str> = Vec::new();
+        if self.schema.id_field.is_some() {
+            fields.push(self.key()?);
+        }
+        for f in &self.schema.filter_fields {
+            let name = self.field(f)?;
+            if !fields.contains(&name) {
+                fields.push(name);
+            }
+        }
+        Ok(fields)
     }
 }
 
@@ -142,7 +168,7 @@ fn where_clause(
     }
     let text = query.text.trim();
     if !text.is_empty() {
-        let fields = meta.text_fields();
+        let fields = meta.text_fields()?;
         if fields.is_empty() {
             return Err(rejected(format!(
                 "{} has no field Studio can search",
@@ -187,12 +213,25 @@ fn where_clause(
 
 /// A sort clause. The key follows the chosen field so paging stays stable.
 fn order_by(meta: &Meta, query: &RecordQuery) -> Result<String, StudioError> {
-    let key = meta.schema.id_field.as_deref();
+    let key = match meta.schema.id_field {
+        Some(_) => Some(meta.key()?),
+        None => None,
+    };
     let (first, desc) = match &query.sort {
         Some((field, desc)) => (Some(meta.field(field)?), *desc),
         None => match (meta.profile, meta.schema.time_key()) {
             (Profile::Timeseries, Some(time)) => (Some(meta.field(&time.name)?), true),
-            _ => (key, false),
+            (Profile::Timeseries, None)
+            | (
+                Profile::Document
+                | Profile::DocumentStrict
+                | Profile::KeyValue
+                | Profile::Columnar
+                | Profile::Spatial
+                | Profile::Array
+                | Profile::Vector,
+                _,
+            ) => (key, false),
         },
     };
     let direction = |d: bool| if d { "DESC" } else { "ASC" };
@@ -249,240 +288,164 @@ fn malformed(reason: &str) -> StudioError {
     }
 }
 
-/// FNV-1a over the record's JSON text. Keys print in sorted order, so equal
-/// content gives an equal number.
+/// `value` as text that changes whenever the value does: object keys in
+/// sorted order, every other value through its derived `Debug`, which prints
+/// every byte, every vector component and a float's exact value, NaN and the
+/// infinities included. The display text cannot serve: it prints bytes as
+/// `<N bytes>`, a vector as its first components and NaN as `null`.
+fn canonical(value: &Value, out: &mut String) {
+    let items = |tag: &str, items: &[Value], out: &mut String| {
+        out.push_str(tag);
+        for item in items {
+            canonical(item, out);
+            out.push(',');
+        }
+        out.push(']');
+    };
+    match value {
+        Value::Object(map) => {
+            let mut entries: Vec<(&String, &Value)> = map.iter().collect();
+            entries.sort_by(|a, b| a.0.cmp(b.0));
+            out.push('{');
+            for (k, v) in entries {
+                out.push_str(&format!("{k:?}:"));
+                canonical(v, out);
+                out.push(',');
+            }
+            out.push('}');
+        }
+        Value::Array(list) => items("A[", list, out),
+        Value::Set(list) => items("S[", list, out),
+        other => out.push_str(&format!("{other:?}")),
+    }
+}
+
+/// FNV-1a over the record's canonical text, so equal content gives an equal
+/// number.
 // ponytail: the server exposes no per-record revision in 0.6.2, so this
 // content fingerprint stands in for it. It detects any change since the read
 // and not the order of changes. Replace it when the server exposes one.
 pub(super) fn revision(value: &Value) -> u64 {
-    compact(value, &[])
-        .bytes()
-        .fold(0xcbf2_9ce4_8422_2325, |h, b| {
-            (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
-        })
+    let mut text = String::new();
+    canonical(value, &mut text);
+    text.bytes().fold(0xcbf2_9ce4_8422_2325, |h, b| {
+        (h ^ u64::from(b)).wrapping_mul(0x0100_0000_01b3)
+    })
 }
 
-fn record_of(
-    meta: &Meta,
-    columns: &[String],
-    cells: &[Value],
-    ordinal: usize,
-) -> Result<Record, StudioError> {
+/// One row as a record value. A schemaless collection reports a field one
+/// document lacks as NULL: absent and null read the same, so null cells drop.
+fn row_value(meta: &Meta, columns: &[String], cells: &[Value]) -> Result<Value, StudioError> {
     if cells.len() != columns.len() {
         return Err(malformed("a row's width differs from its header"));
     }
-    // A schemaless collection reports a field one document lacks as NULL:
-    // absent and null read the same, so null cells drop.
     let keep_null = meta.profile != Profile::Document;
-    let map: HashMap<String, Value> = columns
-        .iter()
-        .cloned()
-        .zip(cells.iter().cloned())
-        .filter(|(_, v)| keep_null || *v != Value::Null)
-        .collect();
-    let id = match meta.schema.id_field.as_deref() {
-        Some(key) => map.get(key).and_then(id_text).ok_or_else(|| {
-            malformed(&format!("a row of {} has no `{key}` key", meta.collection))
-        })?,
-        // No key: an ordinal names the row for this read only.
-        None => format!("row:{ordinal}"),
-    };
-    let value = Value::Object(map);
-    Ok(Record {
-        id,
-        revision: revision(&value),
-        value,
-    })
+    Ok(Value::Object(
+        columns
+            .iter()
+            .cloned()
+            .zip(cells.iter().cloned())
+            .filter(|(_, v)| keep_null || *v != Value::Null)
+            .collect(),
+    ))
 }
 
-/// The rows of `result` as records. `offset` is the first row's position, for
-/// a collection without a key.
-pub(super) fn records_of(
-    meta: &Meta,
-    result: &QueryResult,
-    offset: usize,
-) -> Result<Vec<Record>, StudioError> {
+/// The time a row of a collection without a key carries, in microseconds.
+fn row_time(meta: &Meta, value: &Value) -> Option<i64> {
+    let name = &meta.schema.time_key()?.name;
+    match value {
+        Value::Object(map) => match map.get(name)? {
+            Value::DateTime(t) | Value::NaiveDateTime(t) => Some(t.micros),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The rows of `result` as records.
+///
+/// A collection without a key (timeseries) names a row `t<micros>.<hex>`:
+/// its time and its content fingerprint. The n-th repeat of an identical row
+/// in one result adds `.<n>`. A new row renames no other, and
+/// `select_one` reads the id back.
+pub(super) fn records_of(meta: &Meta, result: &QueryResult) -> Result<Vec<Record>, StudioError> {
+    let mut repeats: HashMap<String, usize> = HashMap::new();
     result
         .rows
         .iter()
-        .enumerate()
-        .map(|(i, cells)| record_of(meta, &result.columns, cells, offset + i))
+        .map(|cells| {
+            let value = row_value(meta, &result.columns, cells)?;
+            let revision = revision(&value);
+            let id = match meta.schema.id_field.as_deref() {
+                Some(key) => match &value {
+                    Value::Object(map) => map.get(key).and_then(id_text),
+                    _ => None,
+                }
+                .ok_or_else(|| {
+                    malformed(&format!("a row of {} has no `{key}` key", meta.collection))
+                })?,
+                None => {
+                    let time = row_time(meta, &value)
+                        .map(|t| t.to_string())
+                        .unwrap_or_default();
+                    let base = format!("t{time}.{revision:016x}");
+                    let n = repeats.entry(base.clone()).or_insert(0);
+                    let id = if *n == 0 { base } else { format!("{base}.{n}") };
+                    *n += 1;
+                    id
+                }
+            };
+            Ok(Record {
+                id,
+                revision,
+                value,
+            })
+        })
         .collect()
 }
 
-/// A value as the server binds it faithfully. The server stores an object as
-/// JSON text, so an object binds as that text. A bound object reads back as a
-/// string of non-JSON text, and a bound geometry as debug text.
-pub(super) fn bindable(value: &Value) -> Value {
-    match value {
-        Value::Object(_) | Value::Geometry(_) => Value::String(compact(value, &[])),
-        Value::Array(items) => Value::Array(items.iter().map(bindable).collect()),
-        other => other.clone(),
-    }
-}
-
-/// The fields of a record value, in name order, each name checked.
-fn assignments(meta: &Meta, value: &Value) -> Result<Vec<(String, Value)>, StudioError> {
-    let Value::Object(map) = value else {
-        return Err(rejected("a record is an object of fields".to_string()));
-    };
-    let mut pairs: Vec<(String, Value)> = Vec::with_capacity(map.len());
-    for (name, v) in map {
-        pairs.push((meta.field(name)?.to_string(), v.clone()));
-    }
-    pairs.sort_by(|a, b| a.0.cmp(&b.0));
-    Ok(pairs)
-}
-
-/// The key a record value carries must equal the key it is addressed by.
-fn same_key(pairs: &[(String, Value)], key: &str, id: &str) -> Result<(), StudioError> {
-    match pairs.iter().find(|(n, _)| n == key) {
-        Some((_, v)) if id_text(v).as_deref() != Some(id) => Err(rejected(format!(
-            "the record names `{key}` differently from `{id}`: a key cannot change"
-        ))),
-        _ => Ok(()),
-    }
-}
-
-fn column_list(pairs: &[(String, Value)]) -> String {
-    pairs
-        .iter()
-        .map(|(n, _)| format!("\"{n}\""))
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-fn insert_like(verb: &str, meta: &Meta, pairs: Vec<(String, Value)>, returning: bool) -> Statement {
-    let mut binder = Binder::default();
-    let columns = column_list(&pairs);
-    let marks: Vec<String> = pairs
-        .iter()
-        .map(|(_, v)| binder.push(bindable(v)))
-        .collect();
-    let tail = if returning { " RETURNING *" } else { "" };
-    Statement {
-        sql: format!(
-            "{verb} INTO {} ({columns}) VALUES ({}){tail}",
-            meta.collection,
-            marks.join(", ")
-        ),
-        params: binder.params,
-    }
-}
-
-pub(super) fn insert_statement(
-    meta: &Meta,
-    id: Option<&str>,
-    value: &Value,
-) -> Result<Statement, StudioError> {
-    let mut pairs = assignments(meta, value)?;
-    if let Some(id) = id {
-        let key = meta.key()?.to_string();
-        same_key(&pairs, &key, id)?;
-        pairs.retain(|(n, _)| *n != key);
-        pairs.push((key, meta.id_value(id)?));
-        pairs.sort_by(|a, b| a.0.cmp(&b.0));
-    }
-    if pairs.is_empty() {
-        return Err(rejected("a record needs at least one field".to_string()));
-    }
-    Ok(insert_like("INSERT", meta, pairs, true))
-}
-
-fn unchanged(stored: Option<&Value>, new: &Value) -> bool {
-    match (stored, new) {
-        (None | Some(Value::Null), Value::Null) => true,
-        (Some(s), n) => s == n,
-        (None, _) => false,
-    }
-}
-
-/// The statement that makes `stored` equal `new`, or `None` when they are
-/// equal. `UPDATE` merges, so a field `new` lacks is set to NULL. A schemaless
-/// collection reads NULL as absent. A key-value entry takes `UPSERT`, because
-/// `UPDATE` refuses a bare value.
-pub(super) fn update_statement(
-    meta: &Meta,
-    id: &str,
-    stored: &Value,
-    new: &Value,
-) -> Result<Option<Statement>, StudioError> {
-    let key = meta.key()?.to_string();
-    let pairs = assignments(meta, new)?;
-    same_key(&pairs, &key, id)?;
-    let Value::Object(old) = stored else {
-        return Err(malformed("a stored record is not an object"));
-    };
-    let mut set: Vec<(String, Option<Value>)> = pairs
-        .iter()
-        .filter(|(n, v)| *n != key && !unchanged(old.get(n), v))
-        .map(|(n, v)| (n.clone(), Some(v.clone())))
-        .collect();
-    let mut gone: Vec<&String> = old
-        .keys()
-        .filter(|n| **n != key && !pairs.iter().any(|(p, _)| p == *n))
-        .collect();
-    gone.sort();
-    for name in gone {
-        set.push((meta.field(name)?.to_string(), None));
-    }
-    if set.is_empty() {
-        return Ok(None);
-    }
-    if meta.profile == Profile::KeyValue {
-        let mut all: Vec<(String, Value)> = set
-            .into_iter()
-            .map(|(n, v)| (n, v.unwrap_or(Value::Null)))
-            .collect();
-        all.push((key, meta.id_value(id)?));
-        all.sort_by(|a, b| a.0.cmp(&b.0));
-        return Ok(Some(insert_like("UPSERT", meta, all, false)));
-    }
-    let mut binder = Binder::default();
-    let assigns: Vec<String> = set
-        .iter()
-        .map(|(n, v)| match v {
-            Some(v) => format!("\"{n}\" = {}", binder.push(bindable(v))),
-            None => format!("\"{n}\" = NULL"),
-        })
-        .collect();
-    let at = binder.push(meta.id_value(id)?);
-    Ok(Some(Statement {
-        sql: format!(
-            "UPDATE {} SET {} WHERE \"{key}\" = {at}",
-            meta.collection,
-            assigns.join(", ")
-        ),
-        params: binder.params,
-    }))
-}
-
-pub(super) fn delete_statement(meta: &Meta, id: &str) -> Result<Statement, StudioError> {
-    let key = meta.key()?;
-    Ok(Statement {
-        sql: format!("DELETE FROM {} WHERE \"{key}\" = $1", meta.collection),
-        params: vec![meta.id_value(id)?],
-    })
-}
-
+/// The statement that reads record `id`: by its key, or for a collection
+/// without one, every row at the time the id names. The caller picks the row
+/// whose id `records_of` gives as `id`.
 pub(super) fn select_one(meta: &Meta, id: &str) -> Result<Statement, StudioError> {
-    let key = meta.key()?;
+    if meta.schema.id_field.is_some() {
+        let key = meta.key()?;
+        return Ok(Statement {
+            sql: format!(
+                "SELECT * FROM {} WHERE \"{key}\" = $1 LIMIT 1",
+                meta.collection
+            ),
+            params: vec![meta.id_value(id)?],
+        });
+    }
+    let time = meta.schema.time_key().ok_or_else(|| {
+        rejected(format!(
+            "{} has no record key and no time key, so Studio cannot address one of its records",
+            meta.collection
+        ))
+    })?;
+    let at = id
+        .strip_prefix('t')
+        .and_then(|rest| rest.split('.').next())
+        .and_then(|t| t.parse::<i64>().ok())
+        .ok_or_else(|| rejected(format!("`{id}` does not name a row of {}", meta.collection)))?;
     Ok(Statement {
         sql: format!(
-            "SELECT * FROM {} WHERE \"{key}\" = $1 LIMIT 1",
-            meta.collection
+            "SELECT * FROM {} WHERE \"{}\" = $1",
+            meta.collection,
+            meta.field(&time.name)?
         ),
-        params: vec![meta.id_value(id)?],
+        params: vec![Value::DateTime(NdbDateTime::from_micros(at))],
     })
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use crate::models::records::{Bbox, Filter, TimeRange};
     use crate::models::schema::SchemaField;
 
-    fn field(name: &str, ty: FieldType) -> SchemaField {
+    pub(in crate::services::nodedb) fn field(name: &str, ty: FieldType) -> SchemaField {
         SchemaField {
             name: name.into(),
             ty,
@@ -492,7 +455,7 @@ mod tests {
         }
     }
 
-    fn strict() -> Meta {
+    pub(in crate::services::nodedb) fn strict() -> Meta {
         let mut schema = CollectionSchema::new("c");
         schema.id_field = Some("id".into());
         schema.typed_headers = true;
@@ -509,7 +472,7 @@ mod tests {
         }
     }
 
-    fn schemaless() -> Meta {
+    pub(in crate::services::nodedb) fn schemaless() -> Meta {
         let mut schema = CollectionSchema::new("d");
         schema.id_field = Some("id".into());
         Meta {
@@ -519,7 +482,20 @@ mod tests {
         }
     }
 
-    fn obj(fields: &[(&str, Value)]) -> Value {
+    pub(in crate::services::nodedb) fn timeseries() -> Meta {
+        let mut schema = CollectionSchema::new("t");
+        schema.typed_headers = true;
+        let mut ts = field("ts", FieldType::Timestamp);
+        ts.time_key = true;
+        schema.fields = vec![ts, field("cpu", FieldType::Float64)];
+        Meta {
+            collection: "t".into(),
+            profile: Profile::Timeseries,
+            schema,
+        }
+    }
+
+    pub(in crate::services::nodedb) fn obj(fields: &[(&str, Value)]) -> Value {
         Value::Object(
             fields
                 .iter()
@@ -528,8 +504,17 @@ mod tests {
         )
     }
 
-    fn s(text: &str) -> Value {
+    pub(in crate::services::nodedb) fn s(text: &str) -> Value {
         Value::String(text.into())
+    }
+
+    fn result(columns: &[&str], rows: Vec<Vec<Value>>) -> QueryResult {
+        QueryResult {
+            columns: columns.iter().map(|c| c.to_string()).collect(),
+            rows,
+            rows_affected: 0,
+            command: None,
+        }
     }
 
     #[test]
@@ -543,6 +528,44 @@ mod tests {
         assert!(d.field("anything_9").is_ok());
         assert!(d.field("a b").is_err());
         assert!(d.field("a;b").is_err());
+    }
+
+    #[test]
+    fn a_name_the_server_reports_passes_the_same_check() {
+        let reason = |e: StudioError| match e {
+            StudioError::Rejected { reason } => reason,
+            other => panic!("expected a refusal, got {other:?}"),
+        };
+        let mut m = strict();
+        m.schema.id_field = Some("i\"d".into());
+        m.schema.fields[0].name = "i\"d".into();
+        let e = reason(page_statements(&m, &RecordQuery::new(5), 0).expect_err("key"));
+        assert!(e.contains("i\"d"), "{e}");
+        assert!(select_one(&m, "x").is_err());
+        assert!(m.id_value("x").is_err());
+
+        let mut m = strict();
+        m.schema.fields[1].name = "na\"me".into();
+        m.schema.filter_fields[1] = "na\"me".into();
+        let q = RecordQuery {
+            text: "a".into(),
+            ..RecordQuery::new(5)
+        };
+        let e = reason(page_statements(&m, &q, 0).expect_err("searched field"));
+        assert!(e.contains("na\"me"), "{e}");
+    }
+
+    #[test]
+    fn text_search_on_a_schemaless_collection_is_refused_not_empty() {
+        let q = RecordQuery {
+            text: "alice".into(),
+            ..RecordQuery::new(5)
+        };
+        match page_statements(&schemaless(), &q, 0) {
+            Err(StudioError::Rejected { reason }) => assert!(reason.contains("0.6.2"), "{reason}"),
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+        assert!(page_statements(&schemaless(), &RecordQuery::new(5), 0).is_ok());
     }
 
     #[test]
@@ -601,16 +624,7 @@ mod tests {
 
     #[test]
     fn a_timeseries_reads_newest_first_inside_its_range() {
-        let mut schema = CollectionSchema::new("t");
-        schema.typed_headers = true;
-        let mut ts = field("ts", FieldType::Timestamp);
-        ts.time_key = true;
-        schema.fields = vec![ts, field("cpu", FieldType::Float64)];
-        let meta = Meta {
-            collection: "t".into(),
-            profile: Profile::Timeseries,
-            schema,
-        };
+        let meta = timeseries();
         let q = RecordQuery {
             range: TimeRange::Last24Hours,
             ..RecordQuery::new(5)
@@ -630,7 +644,7 @@ mod tests {
     fn a_bbox_needs_a_geometry_field_and_counts_through_a_subquery() {
         let mut schema = CollectionSchema::new("p");
         schema.typed_headers = true;
-        schema.fields = vec![field("geom", FieldType::Geometry { srid: 4326 })];
+        schema.fields = vec![field("geom", FieldType::Geometry { srid: None })];
         let meta = Meta {
             collection: "p".into(),
             profile: Profile::Spatial,
@@ -664,14 +678,14 @@ mod tests {
             rows_affected: 2,
             command: None,
         };
-        let rows = records_of(&schemaless(), &result, 0).expect("decodes");
+        let rows = records_of(&schemaless(), &result).expect("decodes");
         assert_eq!(rows[0].id, "a");
         assert_eq!(
             rows[1].get("n"),
             None,
             "a schemaless NULL is an absent field"
         );
-        let strict_rows = records_of(&strict(), &result, 0).expect("decodes");
+        let strict_rows = records_of(&strict(), &result).expect("decodes");
         assert_eq!(strict_rows[1].get("n"), Some(&Value::Null));
         assert_ne!(rows[0].revision, rows[1].revision);
         assert_eq!(
@@ -685,28 +699,6 @@ mod tests {
     }
 
     #[test]
-    fn a_collection_without_a_key_numbers_its_rows_and_refuses_key_work() {
-        let meta = Meta {
-            collection: "t".into(),
-            profile: Profile::Timeseries,
-            schema: CollectionSchema::new("t"),
-        };
-        let result = QueryResult {
-            columns: vec!["cpu".into()],
-            rows: vec![vec![Value::Float(1.0)], vec![Value::Float(2.0)]],
-            rows_affected: 0,
-            command: None,
-        };
-        let rows = records_of(&meta, &result, 10).expect("decodes");
-        assert_eq!(
-            (rows[0].id.as_str(), rows[1].id.as_str()),
-            ("row:10", "row:11")
-        );
-        assert!(matches!(meta.key(), Err(StudioError::Rejected { .. })));
-        assert!(delete_statement(&meta, "x").is_err());
-    }
-
-    #[test]
     fn a_row_without_its_key_or_width_is_malformed() {
         let no_key = QueryResult {
             columns: vec!["name".into()],
@@ -715,7 +707,7 @@ mod tests {
             command: None,
         };
         assert!(matches!(
-            records_of(&strict(), &no_key, 0),
+            records_of(&strict(), &no_key),
             Err(StudioError::MalformedRows { .. })
         ));
         let narrow = QueryResult {
@@ -724,90 +716,56 @@ mod tests {
             rows_affected: 0,
             command: None,
         };
-        assert!(records_of(&strict(), &narrow, 0).is_err());
+        assert!(records_of(&strict(), &narrow).is_err());
     }
 
     #[test]
-    fn an_object_binds_as_json_text_and_never_enters_the_sql() {
-        let value = obj(&[
-            ("id", s("x'; DROP")),
-            ("o", obj(&[("k", Value::Integer(1))])),
-        ]);
-        let st = insert_statement(&schemaless(), None, &value).expect("builds");
+    fn a_timeseries_row_is_named_by_its_time_and_content() {
+        let meta = timeseries();
+        let at = |micros: i64| Value::NaiveDateTime(NdbDateTime::from_micros(micros));
+        let row = |t: i64, cpu: f64| vec![Value::Float(cpu), at(t)];
+        let first = records_of(
+            &meta,
+            &result(
+                &["cpu", "ts"],
+                vec![row(5_000, 1.0), row(5_000, 1.0), row(5_000, 2.0)],
+            ),
+        )
+        .expect("decodes");
+        assert!(first[0].id.starts_with("t5000."), "{}", first[0].id);
         assert_eq!(
-            st.sql,
-            "INSERT INTO d (\"id\", \"o\") VALUES ($1, $2) RETURNING *"
+            first[1].id,
+            format!("{}.1", first[0].id),
+            "a repeat gets a tiebreak"
         );
-        assert_eq!(st.params, [s("x'; DROP"), s("{\"k\": 1}")]);
-        assert!(!st.sql.contains("DROP"));
-    }
+        assert_ne!(first[2].id, first[0].id);
+        // a newer point read first renames none of the others
+        let later = records_of(
+            &meta,
+            &result(
+                &["cpu", "ts"],
+                vec![
+                    row(9_000, 3.0),
+                    row(5_000, 1.0),
+                    row(5_000, 1.0),
+                    row(5_000, 2.0),
+                ],
+            ),
+        )
+        .expect("decodes");
+        let ids = |r: &[Record]| r.iter().map(|x| x.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&later[1..]), ids(&first));
 
-    #[test]
-    fn an_insert_with_an_id_sets_the_key_and_refuses_a_different_one() {
-        let st =
-            insert_statement(&strict(), Some("k1"), &obj(&[("name", s("n"))])).expect("builds");
-        assert_eq!(st.params, [s("k1"), s("n")]);
-        let clash = insert_statement(&strict(), Some("k1"), &obj(&[("id", s("k2"))]));
-        assert!(matches!(clash, Err(StudioError::Rejected { .. })));
-        assert!(insert_statement(&strict(), None, &obj(&[])).is_err());
-        assert!(insert_statement(&strict(), None, &Value::Null).is_err());
-        assert!(insert_statement(&strict(), None, &obj(&[("zz", s("n"))])).is_err());
-    }
-
-    #[test]
-    fn an_update_sets_changed_fields_and_nulls_removed_ones() {
-        let stored = obj(&[
-            ("id", s("a")),
-            ("name", s("alice")),
-            ("n", Value::Integer(1)),
-        ]);
-        let new = obj(&[("id", s("a")), ("name", s("alice2"))]);
-        let st = update_statement(&schemaless(), "a", &stored, &new)
-            .expect("builds")
-            .expect("changes");
+        let read = select_one(&meta, &first[2].id).expect("reads by time");
+        assert_eq!(read.sql, "SELECT * FROM t WHERE \"ts\" = $1");
         assert_eq!(
-            st.sql,
-            "UPDATE d SET \"name\" = $1, \"n\" = NULL WHERE \"id\" = $2"
+            read.params,
+            [Value::DateTime(NdbDateTime::from_micros(5_000))]
         );
-        assert_eq!(st.params, [s("alice2"), s("a")]);
-        assert_eq!(
-            update_statement(&schemaless(), "a", &stored, &stored).expect("builds"),
-            None
-        );
-        // an explicit null over an absent field is no change
-        let nulled = obj(&[
-            ("id", s("a")),
-            ("name", s("alice")),
-            ("n", Value::Integer(1)),
-            ("x", Value::Null),
-        ]);
-        assert_eq!(
-            update_statement(&schemaless(), "a", &stored, &nulled).expect("builds"),
-            None
-        );
-        let renamed = obj(&[("id", s("b"))]);
-        assert!(update_statement(&schemaless(), "a", &stored, &renamed).is_err());
-    }
-
-    #[test]
-    fn a_key_value_update_upserts() {
-        let mut schema = CollectionSchema::new("kv");
-        schema.id_field = Some("key".into());
-        let meta = Meta {
-            collection: "kv".into(),
-            profile: Profile::KeyValue,
-            schema,
-        };
-        let stored = obj(&[("key", s("k")), ("value", s("v"))]);
-        let new = obj(&[("key", s("k")), ("value", s("w"))]);
-        let st = update_statement(&meta, "k", &stored, &new)
-            .expect("builds")
-            .expect("changes");
-        assert_eq!(
-            st.sql,
-            "UPSERT INTO kv (\"key\", \"value\") VALUES ($1, $2)"
-        );
-        assert_eq!(st.params, [s("k"), s("w")]);
+        assert!(matches!(meta.key(), Err(StudioError::Rejected { .. })));
+        for bad in ["row:0", "t", "tx.1", ""] {
+            assert!(select_one(&meta, bad).is_err(), "{bad}");
+        }
     }
 
     #[test]
@@ -817,7 +775,7 @@ mod tests {
         assert_eq!(meta.id_value("20").ok(), Some(Value::Integer(20)));
         assert!(meta.id_value("x").is_err());
         assert_eq!(
-            delete_statement(&meta, "20").expect("builds").params,
+            select_one(&meta, "20").expect("builds").params,
             [Value::Integer(20)]
         );
     }
@@ -830,6 +788,34 @@ mod tests {
         assert_ne!(
             revision(&a),
             revision(&obj(&[("x", Value::Integer(2)), ("y", s("v"))]))
+        );
+    }
+
+    #[test]
+    fn the_revision_sees_what_the_display_shortens() {
+        let one = |v: Value| revision(&obj(&[("v", v)]));
+        let vector = |last: f32| Value::Vector(vec![0.5, 0.25, 0.125, last].into());
+        assert_ne!(
+            one(vector(1.0)),
+            one(vector(2.0)),
+            "a change after the third component"
+        );
+        assert_ne!(
+            one(Value::Bytes(vec![1, 2])),
+            one(Value::Bytes(vec![1, 3])),
+            "bytes of one length"
+        );
+        let floats = [f64::NAN, f64::INFINITY, f64::NEG_INFINITY];
+        for (i, x) in floats.iter().enumerate() {
+            assert_ne!(one(Value::Float(*x)), one(Value::Null), "{x}");
+            for y in &floats[i + 1..] {
+                assert_ne!(one(Value::Float(*x)), one(Value::Float(*y)), "{x} {y}");
+            }
+        }
+        assert_ne!(one(Value::Float(1.0)), one(s("1.0")));
+        assert_ne!(
+            one(Value::Array(vec![Value::Integer(1)])),
+            one(Value::Set(vec![Value::Integer(1)]))
         );
     }
 }

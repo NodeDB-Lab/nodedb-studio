@@ -204,7 +204,7 @@ pub fn explorer_schema(c: &DesignCollection) -> CollectionSchema {
             name: i.name.clone(),
             kind: i.kind,
             fields: i.fields.clone(),
-            ready: true,
+            ready: Some(true),
         })
         .collect();
     schema.id_field = id_field;

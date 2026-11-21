@@ -45,9 +45,8 @@ fn text(value: &Value) -> Option<&str> {
 /// what `r` holds between `a|` and `|b`, so an id that contains `|` still
 /// splits right.
 pub(super) fn edge_keys(result: &QueryResult) -> Result<Vec<EdgeKey>, StudioError> {
-    if result.rows.is_empty() {
-        return Ok(Vec::new());
-    }
+    // The columns are checked before the rows: a result without them is the
+    // wrong answer even when it is empty.
     let at = |name: &str| {
         result
             .columns
@@ -274,7 +273,14 @@ mod tests {
             "a pipe inside a node id still splits right"
         );
         assert!(edge_keys(&listing(&[["a", "a|KNOWS|c", "b"]])).is_err());
-        assert!(edge_keys(&QueryResult::empty()).expect("empty").is_empty());
+        assert!(edge_keys(&listing(&[])).expect("no edges").is_empty());
+        assert!(
+            matches!(
+                edge_keys(&QueryResult::empty()),
+                Err(StudioError::UnexpectedColumns { .. })
+            ),
+            "an empty result without the columns is the wrong answer"
+        );
     }
 
     #[test]
@@ -402,6 +408,15 @@ mod tests {
             svc.delete_edge(name, "a|LIKES|c").await,
             Err(StudioError::RecordMissing { .. })
         ));
+        // A graph with no edges still answers with its columns.
+        for id in ["a|KNOWS|b", "b|KNOWS|c"] {
+            svc.delete_edge(name, id).await.expect("delete");
+        }
+        let empty = svc
+            .edges(name, &EdgeQuery::new(10))
+            .await
+            .expect("no edges");
+        assert_eq!((empty.total, empty.edges.len()), (0, 0));
         assert!(matches!(
             svc.edges("studio_probe_x_no_such_graph", &EdgeQuery::new(10))
                 .await,

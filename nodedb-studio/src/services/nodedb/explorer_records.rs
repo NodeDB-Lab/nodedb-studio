@@ -3,8 +3,12 @@
 //! 0.6.2 exposes no per-record revision. `Record.revision` is a fingerprint of
 //! the record's content (`explorer_sql::revision`). A write reads the record
 //! again, compares fingerprints, and refuses a stale one with
-//! `StudioError::RevisionConflict`. Another writer can still land between that
-//! read and the write: the server has no conditional write to close the gap.
+//! `StudioError::RevisionConflict`. The write itself then names, in its
+//! `WHERE`, the stored value of each field it depends on
+//! (`explorer_write`): a change another writer lands in between makes it
+//! match no row, read as a conflict. A field whose value the server cannot
+//! compare exactly, and a bare key-value entry (`UPSERT` takes no `WHERE`),
+//! keep only the fingerprint check.
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,8 +22,10 @@ use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::nodedb::explorer::{ident, profile_of_describe, schema_of};
 use crate::services::nodedb::explorer_sql::{
-    Meta, Statement, count_of, delete_statement, insert_statement, page_statements, records_of,
-    select_one, update_statement,
+    Meta, Statement, count_of, page_statements, records_of, select_one,
+};
+use crate::services::nodedb::explorer_write::{
+    delete_statement, insert_statement, update_statement,
 };
 
 /// A server error from a write, as the seam names it. A refusal of the data
@@ -43,6 +49,19 @@ pub(super) fn write_error(
         },
         // ErrorDetails is foreign and non-exhaustive: the arm is required.
         _ => StudioError::from(e),
+    }
+}
+
+/// An insert ran, but the server returned no row for it and the id is the
+/// server's: Studio cannot read the record back. A retry would insert a
+/// second record, so the error says the first one landed.
+fn inserted_unseen(collection: &str) -> StudioError {
+    StudioError::MalformedRows {
+        reason: format!(
+            "INSERT ... RETURNING * returned no row, but the record was inserted into \
+             {collection} under an id the server assigned. Refresh the list to see it: \
+             saving again inserts a second record."
+        ),
     }
 }
 
@@ -88,9 +107,8 @@ impl NodeDbConnectionService {
         let (page, count) = page_statements(&meta, query, observed)?;
         let total = count_of(&self.read(&count).await?)?;
         let result = self.read(&page).await?;
-        let offset = query.page_size.max(1).saturating_mul(query.page);
         Ok(RecordPage {
-            rows: records_of(&meta, &result, offset)?,
+            rows: records_of(&meta, &result)?,
             total,
             observed_at: observed / 1_000_000,
         })
@@ -98,9 +116,12 @@ impl NodeDbConnectionService {
 
     async fn stored(&self, meta: &Meta, id: &str) -> Result<Record, StudioError> {
         let result = self.read(&select_one(meta, id)?).await?;
-        records_of(meta, &result, 0)?
+        // A keyed read returns the one row. A keyless read returns every row
+        // at the id's time: the one `records_of` names `id` is the record.
+        let keyed = meta.schema.id_field.is_some();
+        records_of(meta, &result)?
             .into_iter()
-            .next()
+            .find(|r| keyed || r.id == id)
             .ok_or_else(|| StudioError::RecordMissing {
                 collection: meta.collection.clone(),
                 id: id.to_string(),
@@ -128,14 +149,12 @@ impl NodeDbConnectionService {
             .run(&statement)
             .await
             .map_err(|e| write_error(e, "INSERT", &meta.collection))?;
-        match records_of(&meta, &result, 0)?.into_iter().next() {
+        match records_of(&meta, &result)?.into_iter().next() {
             Some(record) => Ok(record),
             // A server that returns no row for RETURNING: read the record back.
             None => match id {
                 Some(id) => self.stored(&meta, id).await,
-                None => Err(StudioError::MalformedRows {
-                    reason: "INSERT ... RETURNING * returned no row".to_string(),
-                }),
+                None => Err(inserted_unseen(&meta.collection)),
             },
         }
     }
@@ -170,20 +189,42 @@ impl NodeDbConnectionService {
             });
         }
         let stored = self.current(&meta, id, expected_revision).await?;
-        let Some(statement) = update_statement(&meta, id, &stored.value, &value)? else {
-            return Ok(stored);
+        self.apply_update(&meta, &stored, &value).await
+    }
+
+    /// Writes `value` over `stored`, read just before. A write that matches
+    /// no row met a change made since that read, or a removal.
+    async fn apply_update(
+        &self,
+        meta: &Meta,
+        stored: &Record,
+        value: &Value,
+    ) -> Result<Record, StudioError> {
+        let Some(statement) = update_statement(meta, &stored.id, &stored.value, value)? else {
+            return Ok(stored.clone());
         };
         let result = self
             .run(&statement)
             .await
             .map_err(|e| write_error(e, "UPDATE", &meta.collection))?;
         if result.rows_affected == 0 {
-            return Err(StudioError::RecordMissing {
-                collection: meta.collection.clone(),
-                id: id.to_string(),
-            });
+            return Err(self.lost(meta, stored).await);
         }
-        self.stored(&meta, id).await
+        self.stored(meta, &stored.id).await
+    }
+
+    /// Why a write guarded by `stored` matched no row: the record changed
+    /// since that read, or it is gone.
+    async fn lost(&self, meta: &Meta, stored: &Record) -> StudioError {
+        match self.stored(meta, &stored.id).await {
+            Ok(now) => StudioError::RevisionConflict {
+                collection: meta.collection.clone(),
+                id: stored.id.clone(),
+                expected: stored.revision,
+                stored: now.revision,
+            },
+            Err(e) => e,
+        }
     }
 
     pub(super) async fn remove_record(
@@ -199,16 +240,18 @@ impl NodeDbConnectionService {
                     .to_string(),
             });
         }
-        self.current(&meta, id, expected_revision).await?;
+        let stored = self.current(&meta, id, expected_revision).await?;
+        self.apply_delete(&meta, &stored).await
+    }
+
+    /// Removes `stored`, read just before, while it still reads that way.
+    async fn apply_delete(&self, meta: &Meta, stored: &Record) -> Result<(), StudioError> {
         let result = self
-            .run(&delete_statement(&meta, id)?)
+            .run(&delete_statement(meta, &stored.id, &stored.value)?)
             .await
             .map_err(|e| write_error(e, "DELETE", &meta.collection))?;
         if result.rows_affected == 0 {
-            return Err(StudioError::RecordMissing {
-                collection: meta.collection.clone(),
-                id: id.to_string(),
-            });
+            return Err(self.lost(meta, stored).await);
         }
         Ok(())
     }
@@ -459,6 +502,14 @@ mod tests {
             .expect("page");
         let row = page.rows.iter().find(|r| r.id == "d1").expect("d1 listed");
         assert_eq!(row, &saved, "a list read and a single read agree");
+        let search = RecordQuery {
+            text: "dee".into(),
+            ..RecordQuery::new(10)
+        };
+        match svc.records(name, &search).await {
+            Err(StudioError::Rejected { reason }) => assert!(reason.contains("0.6.2"), "{reason}"),
+            other => panic!("text search on a schemaless collection must refuse, got {other:?}"),
+        }
     }
 
     #[tokio::test]
@@ -556,20 +607,58 @@ mod tests {
             Some(&Value::Float(1.0)),
             "newest first"
         );
-        assert!(week.rows[0].id.starts_with("row:"));
         q.range = crate::models::records::TimeRange::Last30Days;
         assert_eq!(svc.records(name, &q).await.expect("30d").total, 2);
+
+        // The inspector opens the first row: it reads back by its id.
+        let first = &week.rows[0];
+        assert_eq!(
+            &svc.record(name, &first.id).await.expect("first row"),
+            first
+        );
+        // An identical point gets its own id. A newer point renames nothing.
+        let point = |at: i64, cpu: f64| {
+            obj(&[
+                (
+                    "ts",
+                    Value::DateTime(nodedb_types::NdbDateTime::from_micros(at * 1_000_000)),
+                ),
+                ("cpu", Value::Float(cpu)),
+            ])
+        };
+        svc.insert_record(name, None, point(now - 3_600, 1.0))
+            .await
+            .expect("insert a repeat");
+        q.range = crate::models::records::TimeRange::Last7Days;
+        let before = svc.records(name, &q).await.expect("7d").rows;
+        svc.insert_record(name, None, point(now - 60, 9.0))
+            .await
+            .expect("insert a newer point");
+        let after = svc.records(name, &q).await.expect("7d").rows;
+        let ids = |rows: &[Record]| rows.iter().map(|r| r.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&after[1..]), ids(&before), "{:?}", ids(&after));
+        assert_ne!(before[0].id, before[1].id, "a repeat has its own id");
+        assert_eq!(
+            &svc.record(name, &before[1].id).await.expect("repeat"),
+            &before[1]
+        );
+
         assert!(matches!(
             svc.record(name, "row:0").await,
             Err(StudioError::Rejected { .. })
         ));
         assert!(matches!(
-            svc.update_record(name, "row:0", 0, obj(&[("cpu", Value::Float(9.0))]))
-                .await,
+            svc.update_record(
+                name,
+                &first.id,
+                first.revision,
+                obj(&[("cpu", Value::Float(9.0))])
+            )
+            .await,
             Err(StudioError::Rejected { .. })
         ));
         assert!(matches!(
-            svc.delete_record(name, "row:0", 0).await,
+            svc.delete_record(name, &first.id, first.revision).await,
             Err(StudioError::Rejected { .. })
         ));
     }
@@ -582,6 +671,233 @@ mod tests {
                 .as_secs(),
         )
         .expect("fits")
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live server: NODEDB_PROBE_ADDR"]
+    async fn live_explorer_kv_edit_keeps_the_fields_it_does_not_change() {
+        let svc = live().await;
+        let kv = "studio_probe_x_rec_kv2";
+        fresh(
+            &svc,
+            kv,
+            &format!(
+                "CREATE COLLECTION {kv} (key TEXT PRIMARY KEY, name TEXT, email TEXT) WITH (engine='kv')"
+            ),
+        )
+        .await;
+        let made = svc
+            .insert_record(
+                kv,
+                None,
+                obj(&[("key", s("k1")), ("name", s("n1")), ("email", s("e1"))]),
+            )
+            .await
+            .expect("insert");
+        let saved = svc
+            .update_record(
+                kv,
+                "k1",
+                made.revision,
+                obj(&[("key", s("k1")), ("name", s("n2")), ("email", s("e1"))]),
+            )
+            .await
+            .expect("update");
+        assert_eq!(saved.get("name"), Some(&s("n2")));
+        assert_eq!(
+            saved.get("email"),
+            Some(&s("e1")),
+            "an edit of name keeps email"
+        );
+        let cleared = svc
+            .update_record(
+                kv,
+                "k1",
+                saved.revision,
+                obj(&[("key", s("k1")), ("name", s("n2"))]),
+            )
+            .await
+            .expect("update");
+        assert!(matches!(cleared.get("email"), None | Some(Value::Null)));
+        assert_eq!(cleared.get("name"), Some(&s("n2")));
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live server: NODEDB_PROBE_ADDR"]
+    async fn live_explorer_an_edit_leaves_untouched_fields_byte_identical() {
+        use crate::models::record_check::set_field;
+        use crate::state::record_editor::RecordEditor;
+        let svc = live().await;
+        let name = "studio_probe_x_rec_bytes";
+        fresh(
+            &svc,
+            name,
+            &format!(
+                "CREATE COLLECTION {name} (id TEXT PRIMARY KEY, name TEXT, b BYTES, v VECTOR(5), \
+                 at TIMESTAMP) WITH (engine='document_strict')"
+            ),
+        )
+        .await;
+        svc.client(None)
+            .expect("a client")
+            .execute_sql(
+                &format!("INSERT INTO {name} (id, name, b, v, at) VALUES ($1, $2, $3, $4, $5)"),
+                &[
+                    s("r1"),
+                    s("one"),
+                    Value::Bytes((0u8..16).collect()),
+                    Value::Vector(vec![0.1, 0.2, 0.3, 0.4, 0.5].into()),
+                    Value::DateTime(nodedb_types::NdbDateTime::from_micros(
+                        1_781_356_860_000_001,
+                    )),
+                ],
+            )
+            .await
+            .expect("seeds");
+        let before = svc.record(name, "r1").await.expect("record");
+        assert!(
+            matches!(before.get("b"), Some(Value::Bytes(_))),
+            "{before:?}"
+        );
+        let schema = svc.collection_schema(name).await.expect("schema");
+        let mut editor = RecordEditor::edit(
+            name,
+            Profile::DocumentStrict,
+            schema.clone(),
+            before.clone(),
+        );
+        assert!(editor.text.contains(" bytes>\""), "{}", editor.text);
+        editor.text = set_field(&editor.text, &schema.fields, "name", "uno").expect("edits");
+        assert_eq!(editor.changes().len(), 1, "the review shows one change");
+        let saved = svc
+            .update_record(name, "r1", before.revision, editor.draft().expect("parses"))
+            .await
+            .expect("update");
+        assert_eq!(saved.get("name"), Some(&s("uno")));
+        for f in ["b", "v", "at"] {
+            assert_eq!(saved.get(f), before.get(f), "{f} is untouched");
+        }
+        let mut placeholder = saved.value.clone();
+        if let Value::Object(m) = &mut placeholder {
+            m.insert("b".into(), s("<3 bytes>"));
+        }
+        assert!(matches!(
+            svc.update_record(name, "r1", saved.revision, placeholder)
+                .await,
+            Err(StudioError::Rejected { .. })
+        ));
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live server: NODEDB_PROBE_ADDR"]
+    async fn live_explorer_a_write_after_another_writer_conflicts() {
+        let svc = live().await;
+        for (name, columns, key) in [
+            (
+                "studio_probe_x_rec_g_st",
+                "(id TEXT PRIMARY KEY, name TEXT, at TIMESTAMP, f FLOAT) WITH (engine='document_strict')",
+                "id",
+            ),
+            ("studio_probe_x_rec_g_doc", "", "id"),
+            (
+                "studio_probe_x_rec_g_kv",
+                "(key TEXT PRIMARY KEY, name TEXT, f FLOAT) WITH (engine='kv')",
+                "key",
+            ),
+            (
+                "studio_probe_x_rec_g_col",
+                "(id BIGINT PRIMARY KEY, name TEXT, at TIMESTAMP, f FLOAT) WITH (engine='columnar')",
+                "id",
+            ),
+            (
+                "studio_probe_x_rec_g_sp",
+                "(id BIGINT PRIMARY KEY, name TEXT, geom GEOMETRY SPATIAL_INDEX) WITH (engine='spatial')",
+                "id",
+            ),
+        ] {
+            fresh(&svc, name, &format!("CREATE COLLECTION {name} {columns}")).await;
+            let mut fields = vec![("name", s("a")), ("f", Value::Float(0.1))];
+            if columns.contains("at TIMESTAMP") || columns.is_empty() {
+                fields.push((
+                    "at",
+                    Value::DateTime(nodedb_types::NdbDateTime::from_micros(
+                        1_781_356_860_000_001,
+                    )),
+                ));
+            }
+            if columns.contains("GEOMETRY") {
+                fields.retain(|(f, _)| *f == "name");
+            }
+            let read = svc
+                .insert_record(name, Some("1"), obj(&fields))
+                .await
+                .unwrap_or_else(|e| panic!("{name}: insert: {e}"));
+            let meta = svc.meta(name).await.expect("meta");
+            let mut edit = read.value.clone();
+            if let Value::Object(m) = &mut edit {
+                m.insert("name".into(), s("mine"));
+            }
+            // An unchanged record takes the guarded write.
+            let mine = svc
+                .apply_update(&meta, &read, &edit)
+                .await
+                .unwrap_or_else(|e| panic!("{name}: guarded update: {e}"));
+            assert_eq!(mine.get("name"), Some(&s("mine")), "{name}");
+            // Another writer lands after the read: the write matches no row.
+            svc.client(None)
+                .expect("a client")
+                .execute_sql(
+                    &format!("UPDATE {name} SET \"name\" = 'theirs' WHERE \"{key}\" = $1"),
+                    &[meta.id_value("1").expect("id")],
+                )
+                .await
+                .expect("their write");
+            let mut again = mine.value.clone();
+            if let Value::Object(m) = &mut again {
+                m.insert("name".into(), s("mine again"));
+            }
+            match svc.apply_update(&meta, &mine, &again).await {
+                Err(StudioError::RevisionConflict {
+                    expected, stored, ..
+                }) => {
+                    assert_eq!(expected, mine.revision, "{name}");
+                    assert_ne!(stored, mine.revision, "{name}");
+                }
+                other => panic!("{name}: expected a conflict, got {other:?}"),
+            }
+            assert!(
+                matches!(
+                    svc.apply_delete(&meta, &mine).await,
+                    Err(StudioError::RevisionConflict { .. })
+                ),
+                "{name}"
+            );
+            let theirs = svc.record(name, "1").await.expect("their record");
+            assert_eq!(
+                theirs.get("name"),
+                Some(&s("theirs")),
+                "{name}: nothing overwritten"
+            );
+            svc.apply_delete(&meta, &theirs)
+                .await
+                .unwrap_or_else(|e| panic!("{name}: guarded delete: {e}"));
+            assert!(
+                matches!(
+                    svc.apply_update(&meta, &theirs, &again).await,
+                    Err(StudioError::RecordMissing { .. })
+                ),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_insert_the_server_does_not_return_says_it_landed() {
+        let text = inserted_unseen("c").to_string();
+        assert!(
+            text.contains("was inserted") && text.contains("Refresh"),
+            "{text}"
+        );
     }
 
     #[tokio::test]

@@ -30,7 +30,7 @@ fn index(name: &str, kind: IndexKind, fields: &[&str]) -> IndexDef {
         name: name.to_string(),
         kind,
         fields: fields.iter().map(|f| f.to_string()).collect(),
-        ready: true,
+        ready: Some(true),
     }
 }
 
@@ -162,7 +162,7 @@ fn places() -> CollectionSchema {
             field("feature_id", text(None), true),
             field("name", text(None), true),
             field("category", text(None), false),
-            field("geometry", FieldType::Geometry { srid: 4326 }, true),
+            field("geometry", FieldType::Geometry { srid: Some(4326) }, true),
         ],
         columns: vec![
             col("feature_id", "feature_id", CellFormat::Text),
@@ -217,7 +217,7 @@ fn articles() -> CollectionSchema {
                 ("title".into(), "English".into()),
                 ("body".into(), "English".into()),
             ],
-            ready: true,
+            ready: Some(true),
             coverage_percent: None,
         }),
         vector: Some(VectorField {

@@ -17,11 +17,12 @@ use crate::state::search::SearchUi;
 use crate::views::explorer::cells::{text_label, time_label};
 use crate::views::explorer::links::OpenLink;
 
-fn status(ready: bool) -> Element {
-    let (dot, label) = if ready {
-        ("status-dot ok", "Ready")
-    } else {
-        ("status-dot warn", "Building")
+/// An index's build state. `None` is a state the server does not report.
+fn status(ready: Option<bool>) -> Element {
+    let (dot, label) = match ready {
+        Some(true) => ("status-dot ok", "Ready"),
+        Some(false) => ("status-dot warn", "Building"),
+        None => ("status-dot idle", "Not reported"),
     };
     rsx! { span { class: "status", span { class: "{dot}" } "{label}" } }
 }
@@ -187,5 +188,32 @@ pub fn VectorTabBody(schema: CollectionSchema, record: Record) -> Element {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::schema::IndexKind;
+
+    #[test]
+    fn an_index_state_the_server_does_not_report_reads_not_reported() {
+        fn app() -> Element {
+            let index = |name: &str, ready| IndexDef {
+                name: name.into(),
+                kind: IndexKind::Secondary,
+                fields: vec!["f".into()],
+                ready,
+            };
+            rsx! { IndexList { indexes: vec![index("a", None), index("b", Some(true))] } }
+        }
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+        assert!(
+            html.contains("Not reported") && html.contains("Ready"),
+            "{html}"
+        );
+        assert!(!html.contains("Building"), "{html}");
     }
 }

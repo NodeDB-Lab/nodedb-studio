@@ -82,7 +82,7 @@ fn sources(overlay: &Overlay) -> Vec<GeoSource> {
                 source: SourceRef::new(&c.name, &field.name),
                 id_field,
                 label_field,
-                srid: Some(srid),
+                srid,
                 storage: c.profile.storage_label().to_string(),
                 ordinates: "XY".to_string(),
                 geometry_count: Some(shapes.len() as u64),

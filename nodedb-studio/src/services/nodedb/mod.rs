@@ -13,6 +13,7 @@ pub mod explorer_arrays;
 pub mod explorer_graph;
 pub mod explorer_records;
 pub mod explorer_sql;
+pub mod explorer_write;
 pub mod feeds;
 pub mod graph;
 pub mod jobs;

@@ -7,6 +7,7 @@
 use async_trait::async_trait;
 use nodedb_client::NodeDbError;
 use nodedb_types::Value;
+use nodedb_types::columnar::ColumnType;
 
 use crate::models::array_data::{ArraySchema, SliceRequest, SliceResult};
 use crate::models::collection::{Attached, Collection, Profile};
@@ -125,44 +126,51 @@ fn attached_of(indexes: &[IndexRow], collection: &str) -> Vec<Attached> {
 }
 
 /// The declared type of a `DESCRIBE` type string such as `TEXT NOT NULL`,
-/// `VECTOR(3)` or `TIMESTAMP TIME_KEY`. A type Studio does not know reads as
-/// `Json` (any value), and the geometry SRID, which the server does not
-/// report, reads as 4326.
+/// `VECTOR(3)` or `TIMESTAMP TIME_KEY`, resolved by the server's own parser
+/// (`ColumnType::from_declared_type`), so every spelling the server accepts
+/// maps. A type with no Studio counterpart reads as `Json` (any value). The
+/// server reports no geometry SRID, so it reads as `None`.
 fn parse_type(raw: &str) -> FieldType {
-    let head = raw.split_whitespace().next().unwrap_or("");
-    let (name, args) = match head.split_once('(') {
-        Some((n, rest)) => (n, rest.trim_end_matches(')')),
-        None => (head, ""),
+    let Some(ty) = ColumnType::from_declared_type(raw) else {
+        return FieldType::Json;
     };
-    let nums: Vec<u32> = args
-        .split(',')
-        .filter_map(|a| a.trim().parse().ok())
-        .collect();
-    match name.to_ascii_uppercase().as_str() {
-        "TEXT" | "STRING" => FieldType::String { max: None },
-        "VARCHAR" | "CHAR" => FieldType::String {
-            max: nums.first().copied(),
+    match ty {
+        // The server stores every string unbounded: the length is the
+        // declared one, read back from the text.
+        ColumnType::String => FieldType::String {
+            max: raw
+                .trim_start()
+                .to_ascii_uppercase()
+                .strip_prefix("VARCHAR(")
+                .and_then(|rest| rest.split_once(')'))
+                .and_then(|(n, _)| n.trim().parse().ok()),
         },
-        "INT" | "INTEGER" | "BIGINT" | "SMALLINT" | "INT64" | "INT4" | "INT8" => FieldType::Int64,
-        "FLOAT" | "DOUBLE" | "REAL" | "FLOAT64" | "FLOAT8" => FieldType::Float64,
-        "DECIMAL" | "NUMERIC" => FieldType::Decimal {
-            precision: nums
-                .first()
-                .and_then(|n| u8::try_from(*n).ok())
-                .unwrap_or(38),
-            scale: nums.get(1).and_then(|n| u8::try_from(*n).ok()).unwrap_or(0),
+        ColumnType::Int64 => FieldType::Int64,
+        ColumnType::Float64 => FieldType::Float64,
+        ColumnType::Decimal(Some(typmod)) => FieldType::Decimal {
+            precision: typmod.precision(),
+            scale: typmod.scale(),
         },
-        "BOOL" | "BOOLEAN" => FieldType::Bool,
-        "TIMESTAMP" | "TIMESTAMPTZ" => FieldType::Timestamp,
-        "DATETIME" => FieldType::Datetime,
-        "UUID" => FieldType::Uuid,
-        "OBJECT" => FieldType::Object,
-        "ARRAY" => FieldType::Array,
-        "BYTES" | "BYTEA" | "BLOB" => FieldType::Bytes,
-        "VECTOR" => FieldType::Vector {
-            dimensions: nums.first().copied().unwrap_or(0),
+        ColumnType::Decimal(None) => FieldType::Decimal {
+            precision: 38,
+            scale: 0,
         },
-        "GEOMETRY" => FieldType::Geometry { srid: 4326 },
+        ColumnType::Bool => FieldType::Bool,
+        ColumnType::Timestamp | ColumnType::Timestamptz | ColumnType::SystemTimestamp => {
+            FieldType::Timestamp
+        }
+        ColumnType::Uuid => FieldType::Uuid,
+        ColumnType::Ulid | ColumnType::Regex => FieldType::String { max: None },
+        ColumnType::Array | ColumnType::Set => FieldType::Array,
+        ColumnType::Bytes => FieldType::Bytes,
+        ColumnType::Vector(dimensions) => FieldType::Vector { dimensions },
+        ColumnType::Geometry => FieldType::Geometry { srid: None },
+        ColumnType::Json
+        | ColumnType::SparseVector
+        | ColumnType::Duration
+        | ColumnType::Range
+        | ColumnType::Record => FieldType::Json,
+        // ColumnType is foreign and non-exhaustive: the arm is required.
         _ => FieldType::Json,
     }
 }
@@ -198,7 +206,7 @@ fn index_kind(kind: &str) -> IndexKind {
 /// The server does not report: references, the default sort, a page size,
 /// the graph binding, the analyzer of a full-text field, index build state or
 /// coverage, a vector's model, revision and normalization, or a geometry's
-/// SRID. Each reads as its empty value (or 4326 for the SRID).
+/// SRID. Each reads as its empty value, and build state and SRID as `None`.
 pub(super) fn schema_of(
     collection: &str,
     profile: Profile,
@@ -278,20 +286,20 @@ pub(super) fn schema_of(
             name: "primary".to_string(),
             kind: IndexKind::Primary,
             fields: vec![id.clone()],
-            ready: true,
+            ready: None,
         });
     }
     let mine: Vec<&IndexRow> = indexes
         .iter()
         .filter(|i| i.collection == collection)
         .collect();
-    // The server lists an index once it exists and reports no build state:
-    // every listed index reads as ready.
+    // The server lists an index once it exists. It has a building state but
+    // `SHOW INDEXES` does not report it.
     schema.indexes.extend(mine.iter().map(|i| IndexDef {
         name: i.name.clone(),
         kind: index_kind(&i.kind),
         fields: i.fields.clone(),
-        ready: true,
+        ready: None,
     }));
     schema.text_index = mine
         .iter()
@@ -303,7 +311,7 @@ pub(super) fn schema_of(
                 .iter()
                 .map(|f| (f.clone(), String::new()))
                 .collect(),
-            ready: true,
+            ready: None,
             coverage_percent: None,
         });
     schema.vector = mine.iter().find(|i| i.kind == "vector").and_then(|i| {
@@ -470,9 +478,44 @@ mod tests {
         assert_eq!(parse_type("TIMESTAMP TIME_KEY"), FieldType::Timestamp);
         assert_eq!(
             parse_type("GEOMETRY SPATIAL_INDEX"),
-            FieldType::Geometry { srid: 4326 }
+            FieldType::Geometry { srid: None },
+            "the server reports no SRID"
         );
         assert_eq!(parse_type("SOMETHING_NEW"), FieldType::Json);
+    }
+
+    #[test]
+    fn every_type_the_server_declares_maps() {
+        use nodedb_types::columnar::{DECLARED_FLOAT_KEYWORDS, DECLARED_INT_KEYWORDS};
+        for k in DECLARED_INT_KEYWORDS {
+            assert_eq!(
+                parse_type(&format!("{k} NOT NULL")),
+                FieldType::Int64,
+                "{k}"
+            );
+        }
+        for k in DECLARED_FLOAT_KEYWORDS {
+            assert_eq!(parse_type(k), FieldType::Float64, "{k}");
+        }
+        for (raw, ty) in [
+            ("INT2 PRIMARY KEY", FieldType::Int64),
+            ("SYSTEM_TIMESTAMP", FieldType::Timestamp),
+            ("TIMESTAMPTZ", FieldType::Timestamp),
+            ("JSONB", FieldType::Json),
+            ("ULID", FieldType::String { max: None }),
+            ("UUID", FieldType::Uuid),
+            ("BYTEA", FieldType::Bytes),
+            ("varchar(8)", FieldType::String { max: Some(8) }),
+            (
+                "NUMERIC(6, 3)",
+                FieldType::Decimal {
+                    precision: 6,
+                    scale: 3,
+                },
+            ),
+        ] {
+            assert_eq!(parse_type(raw), ty, "{raw}");
+        }
     }
 
     #[test]
@@ -531,6 +574,11 @@ mod tests {
         assert_eq!(s.indexes.len(), 3, "primary plus the two of `c`");
         assert_eq!(s.vector.as_ref().map(|v| v.dimensions), Some(3));
         assert_eq!(s.text_index.as_ref().map(|t| t.name.as_str()), Some("f"));
+        assert!(
+            s.indexes.iter().all(|i| i.ready.is_none())
+                && s.text_index.as_ref().is_some_and(|t| t.ready.is_none()),
+            "the server reports no build state"
+        );
     }
 
     #[test]
