@@ -16,6 +16,7 @@ use crate::modals::record_editor::body::{EditorTabs, FormEditor, JsonEditor};
 use crate::modals::record_editor::side::{ChangesTable, SaveError, ValidationPanel};
 use crate::services::backend::Backend;
 use crate::state::explorer::{RecordView, RecordsEpoch};
+use crate::state::gates::{shows_revisions, use_caps};
 use crate::state::record_editor::{EditorError, EditorMode, EditorTab, RecordEditor, Stage};
 use crate::state::ui::ModalKind;
 
@@ -99,13 +100,15 @@ pub fn RecordEditorDialog() -> Element {
     };
     // A closed dialog keeps no edit.
     use_drop(move || editor.set(None));
+    // A hook: read before the early return below.
+    let revisions = shows_revisions(use_caps().as_ref());
 
     let Some(e) = editor.read().clone() else {
         return rsx! {};
     };
     let reviewing = e.stage == Stage::Reviewing;
     let insert = e.mode == EditorMode::Insert;
-    let title = e.title();
+    let title = e.title(revisions);
 
     let save = {
         let backend = backend.clone();
