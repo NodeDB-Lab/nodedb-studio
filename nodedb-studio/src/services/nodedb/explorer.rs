@@ -1,7 +1,8 @@
 //! Catalog, record, and array access.
 //!
-//! Live today: `catalog` and `collection_schema`. Every other method is a
-//! `NotConnected` stub.
+//! The catalog and schema live here. Records, access, graph edges and arrays
+//! are in `explorer_records`, `explorer_access`, `explorer_graph` and
+//! `explorer_arrays`, called from the one `ExplorerData` impl below.
 
 use async_trait::async_trait;
 use nodedb_client::NodeDbError;
@@ -19,13 +20,14 @@ use crate::services::decode::{Table, decode_rows};
 use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::nodedb::NodeDbConnectionService;
+use crate::services::nodedb::explorer_arrays::no_array_source;
 
 /// `SHOW COLLECTIONS` reports an array with this `partition_strategy`.
 const ARRAY_STRATEGY: &str = "array";
 
 /// `name` as a bare SQL identifier, or the server's not-found error. A name
 /// outside `[A-Za-z0-9_]` never reaches the SQL text.
-fn ident(name: &str) -> Result<&str, StudioError> {
+pub(super) fn ident(name: &str) -> Result<&str, StudioError> {
     let ok = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
     if ok {
         Ok(name)
@@ -56,7 +58,10 @@ fn profile_of_storage(storage: &str) -> Option<Profile> {
 }
 
 /// The `__storage` row of a `DESCRIBE`. A document collection may omit it.
-fn profile_of_describe(collection: &str, describe: &Table) -> Result<Profile, StudioError> {
+pub(super) fn profile_of_describe(
+    collection: &str,
+    describe: &Table,
+) -> Result<Profile, StudioError> {
     let rows = decode_rows(describe, &["field", "type"], |r| {
         Ok((r.field("field")?.to_string(), r.field("type")?.to_string()))
     })?;
@@ -72,7 +77,7 @@ fn profile_of_describe(collection: &str, describe: &Table) -> Result<Profile, St
 
 /// One `SHOW INDEXES` row.
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct IndexRow {
+pub(super) struct IndexRow {
     name: String,
     kind: String,
     collection: String,
@@ -194,7 +199,7 @@ fn index_kind(kind: &str) -> IndexKind {
 /// the graph binding, the analyzer of a full-text field, index build state or
 /// coverage, a vector's model, revision and normalization, or a geometry's
 /// SRID. Each reads as its empty value (or 4326 for the SRID).
-fn schema_of(
+pub(super) fn schema_of(
     collection: &str,
     profile: Profile,
     describe: &Table,
@@ -363,59 +368,60 @@ impl ExplorerData for NodeDbConnectionService {
         let indexes = decode_indexes(&self.table(&format!("SHOW INDEXES ON {collection}")).await?)?;
         schema_of(collection, profile, &describe, &indexes)
     }
-    async fn collection_access(&self, _collection: &str) -> Result<CollectionAccess, StudioError> {
-        Err(StudioError::NotConnected)
+    async fn collection_access(&self, collection: &str) -> Result<CollectionAccess, StudioError> {
+        self.access_of(collection).await
     }
     async fn records(
         &self,
-        _collection: &str,
-        _query: &RecordQuery,
+        collection: &str,
+        query: &RecordQuery,
     ) -> Result<RecordPage, StudioError> {
-        Err(StudioError::NotConnected)
+        self.read_records(collection, query).await
     }
-    async fn record(&self, _collection: &str, _id: &str) -> Result<Record, StudioError> {
-        Err(StudioError::NotConnected)
+    async fn record(&self, collection: &str, id: &str) -> Result<Record, StudioError> {
+        self.read_record(collection, id).await
     }
     async fn insert_record(
         &self,
-        _collection: &str,
-        _id: Option<&str>,
-        _value: Value,
+        collection: &str,
+        id: Option<&str>,
+        value: Value,
     ) -> Result<Record, StudioError> {
-        Err(StudioError::NotConnected)
+        self.write_record(collection, id, value).await
     }
     async fn update_record(
         &self,
-        _collection: &str,
-        _id: &str,
-        _expected_revision: u64,
-        _value: Value,
+        collection: &str,
+        id: &str,
+        expected_revision: u64,
+        value: Value,
     ) -> Result<Record, StudioError> {
-        Err(StudioError::NotConnected)
+        self.replace_record(collection, id, expected_revision, value)
+            .await
     }
     async fn delete_record(
         &self,
-        _collection: &str,
-        _id: &str,
-        _expected_revision: u64,
+        collection: &str,
+        id: &str,
+        expected_revision: u64,
     ) -> Result<(), StudioError> {
-        Err(StudioError::NotConnected)
+        self.remove_record(collection, id, expected_revision).await
     }
-    async fn edges(&self, _graph: &str, _query: &EdgeQuery) -> Result<EdgePage, StudioError> {
-        Err(StudioError::NotConnected)
+    async fn edges(&self, graph: &str, query: &EdgeQuery) -> Result<EdgePage, StudioError> {
+        self.read_edges(graph, query).await
     }
-    async fn delete_edge(&self, _graph: &str, _id: &str) -> Result<(), StudioError> {
-        Err(StudioError::NotConnected)
+    async fn delete_edge(&self, graph: &str, id: &str) -> Result<(), StudioError> {
+        self.remove_edge(graph, id).await
     }
-    async fn array_schema(&self, _array: &str) -> Result<ArraySchema, StudioError> {
-        Err(StudioError::NotConnected)
+    async fn array_schema(&self, array: &str) -> Result<ArraySchema, StudioError> {
+        Err(no_array_source(array))
     }
     async fn array_slice(
         &self,
-        _array: &str,
+        array: &str,
         _request: &SliceRequest,
     ) -> Result<SliceResult, StudioError> {
-        Err(StudioError::NotConnected)
+        Err(no_array_source(array))
     }
 }
 
