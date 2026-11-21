@@ -146,6 +146,11 @@ fn definition(
         Profile::Timeseries => Some("timeseries"),
         Profile::Spatial => Some("spatial"),
         Profile::Array => return vec![format!("-- {name}: arrays use CREATE ARRAY.")],
+        Profile::Vector => {
+            return vec![format!(
+                "-- {name}: a vector collection needs vector_field and dim. Write its DDL by hand."
+            )];
+        }
     };
     let Some(engine) = engine else {
         // A flexible document stores any field. A typeguard enforces the

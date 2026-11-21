@@ -24,6 +24,9 @@ pub enum Profile {
     Spatial,
     /// An N-dimensional array of cells.
     Array,
+    /// Records stored by a primary vector field (`engine='vector'`). This
+    /// is a storage engine, not the `Attached::Vector` index on a field.
+    Vector,
 }
 
 impl Profile {
@@ -37,6 +40,7 @@ impl Profile {
             Profile::Timeseries => "Timeseries",
             Profile::Spatial => "Spatial",
             Profile::Array => "Array",
+            Profile::Vector => "Vector",
         }
     }
 
@@ -50,6 +54,7 @@ impl Profile {
             Profile::Timeseries => "green",
             Profile::Spatial => "violet",
             Profile::Array => "blue",
+            Profile::Vector => "green",
         }
     }
 
@@ -63,6 +68,7 @@ impl Profile {
             Profile::Timeseries => "Columnar / Timeseries",
             Profile::Spatial => "Columnar / Spatial",
             Profile::Array => "Array",
+            Profile::Vector => "Vector",
         }
     }
 
@@ -77,6 +83,7 @@ impl Profile {
             Profile::Timeseries => &["Columnar", "Timeseries"],
             Profile::Spatial => &["Columnar", "Spatial"],
             Profile::Array => &["Array"],
+            Profile::Vector => &["Vector"],
         }
     }
 
@@ -90,6 +97,7 @@ impl Profile {
             Profile::Timeseries => "T",
             Profile::Spatial => "P",
             Profile::Array => "A",
+            Profile::Vector => "V",
         }
     }
 
@@ -101,6 +109,7 @@ impl Profile {
             Profile::Columnar | Profile::Timeseries => "rows",
             Profile::Spatial => "features",
             Profile::Array => "cells",
+            Profile::Vector => "vectors",
         }
     }
 
@@ -112,6 +121,7 @@ impl Profile {
             Profile::Columnar | Profile::Timeseries => "rows",
             Profile::Spatial => "features",
             Profile::Array => "cells",
+            Profile::Vector => "vectors",
         }
     }
 
@@ -125,6 +135,7 @@ impl Profile {
             Profile::Timeseries => Icon::ChartColumn,
             Profile::Spatial => Icon::MapPin,
             Profile::Array => Icon::Box,
+            Profile::Vector => Icon::Box,
         }
     }
 
@@ -137,7 +148,8 @@ impl Profile {
             | Profile::KeyValue
             | Profile::Columnar
             | Profile::Timeseries
-            | Profile::Array => "Insert",
+            | Profile::Array
+            | Profile::Vector => "Insert",
         }
     }
 
@@ -150,14 +162,17 @@ impl Profile {
             | Profile::KeyValue
             | Profile::Columnar
             | Profile::Spatial
-            | Profile::Array => false,
+            | Profile::Array
+            | Profile::Vector => false,
         }
     }
 
     /// Whether the server rejects a field outside the schema.
     pub fn enforces_schema(self) -> bool {
         match self {
-            Profile::Document | Profile::KeyValue => false,
+            // Vector: the metadata sits in a document store. Unchecked
+            // against a live vector collection.
+            Profile::Document | Profile::KeyValue | Profile::Vector => false,
             Profile::DocumentStrict
             | Profile::Columnar
             | Profile::Timeseries
@@ -169,7 +184,7 @@ impl Profile {
     /// The schema line of the editor's validation panel.
     pub fn schema_label(self) -> &'static str {
         match self {
-            Profile::Document => "Flexible (schemaless)",
+            Profile::Document | Profile::Vector => "Flexible (schemaless)",
             Profile::KeyValue => "Free-form value",
             Profile::DocumentStrict => "Strict (enforced)",
             Profile::Columnar | Profile::Timeseries | Profile::Spatial | Profile::Array => {

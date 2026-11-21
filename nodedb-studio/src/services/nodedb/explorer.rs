@@ -41,7 +41,7 @@ fn malformed(reason: String) -> StudioError {
 }
 
 /// The profile a `__storage` value names. `None` for a value Studio has no
-/// profile for (the server also has a `vector` storage).
+/// profile for.
 fn profile_of_storage(storage: &str) -> Option<Profile> {
     match storage {
         "document_schemaless" => Some(Profile::Document),
@@ -50,6 +50,7 @@ fn profile_of_storage(storage: &str) -> Option<Profile> {
         "columnar" => Some(Profile::Columnar),
         "timeseries" => Some(Profile::Timeseries),
         "spatial" => Some(Profile::Spatial),
+        "vector" => Some(Profile::Vector),
         _ => None,
     }
 }
@@ -478,7 +479,12 @@ mod tests {
             Some(Profile::Document)
         );
         let vector = table(DESCRIBE, &[&["__storage", "vector", "false", "false"]]);
-        assert!(profile_of_describe("c", &vector).is_err());
+        assert_eq!(
+            profile_of_describe("c", &vector).ok(),
+            Some(Profile::Vector)
+        );
+        let unknown = table(DESCRIBE, &[&["__storage", "new_engine", "false", "false"]]);
+        assert!(profile_of_describe("c", &unknown).is_err());
     }
 
     #[test]
@@ -617,6 +623,32 @@ mod tests {
             [Attached::FullText, Attached::Vector]
         );
         assert!(of("studio_probe_doc").attached.is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live server: NODEDB_PROBE_ADDR"]
+    async fn live_explorer_vector_storage_reads_as_the_vector_profile() {
+        let svc = crate::services::nodedb::service::live().await;
+        svc.client(None)
+            .expect("a session")
+            .query(
+                "CREATE COLLECTION IF NOT EXISTS studio_probe_vprim \
+                 (id TEXT PRIMARY KEY, emb VECTOR(3)) \
+                 WITH (engine='vector', vector_field='emb', dim=3)",
+            )
+            .await
+            .expect("the vector collection creates");
+        let all = svc.catalog().await.expect("catalog reads");
+        let found = all.iter().find(|c| c.name == "studio_probe_vprim");
+        assert_eq!(found.map(|c| c.profile), Some(Profile::Vector));
+        let schema = svc
+            .collection_schema("studio_probe_vprim")
+            .await
+            .expect("schema reads");
+        assert_eq!(
+            schema.field("emb").map(|f| f.ty),
+            Some(FieldType::Vector { dimensions: 3 })
+        );
     }
 
     #[tokio::test]

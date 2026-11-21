@@ -120,7 +120,7 @@ impl DetailsTab {
                 tabs.push(DetailsTab::Indexes);
                 tabs
             }
-            Profile::Document => vec![DetailsTab::Json, DetailsTab::Raw],
+            Profile::Document | Profile::Vector => vec![DetailsTab::Json, DetailsTab::Raw],
             Profile::Columnar => vec![DetailsTab::Fields, DetailsTab::Json, DetailsTab::History],
             Profile::Spatial => vec![
                 DetailsTab::Properties,

@@ -39,7 +39,7 @@ pub fn controls_for(c: &Collection) -> Controls {
             text: Some("Filter documents…"),
             ..none
         },
-        Profile::Document => Controls {
+        Profile::Document | Profile::Vector => Controls {
             filter: true,
             sort: true,
             ..none

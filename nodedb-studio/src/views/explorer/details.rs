@@ -31,7 +31,7 @@ pub fn details_title(c: &Collection) -> &'static str {
         Profile::Document if c.has(Attached::FullText) || c.has(Attached::Vector) => {
             "Document details"
         }
-        Profile::Document => "Document",
+        Profile::Document | Profile::Vector => "Document",
         Profile::DocumentStrict => "Document details",
         Profile::KeyValue => "Value",
         Profile::Columnar => "Row",
@@ -116,7 +116,9 @@ pub fn RecordDetails(
         {
             rsx! { RichDocument { collection, schema, record, access, prev, next } }
         }
-        Profile::Document => rsx! { PlainDocument { collection, schema, record, access } },
+        Profile::Document | Profile::Vector => {
+            rsx! { PlainDocument { collection, schema, record, access } }
+        }
         Profile::DocumentStrict => {
             rsx! { StrictDetails { collection, schema, record, access, catalog } }
         }
