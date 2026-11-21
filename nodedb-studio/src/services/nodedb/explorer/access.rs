@@ -10,8 +10,6 @@
 //! A grant to `INSERT`, `UPDATE` or `DELETE` is one `Write` permission on the
 //! server: the three move together.
 
-use nodedb_client::NodeDbError;
-
 use crate::models::collection::Profile;
 use crate::models::records::{CollectionAccess, Denial, Grant};
 use crate::services::decode::decode_rows;
@@ -29,10 +27,12 @@ const WRITERS: [&str; 2] = ["readwrite", "tenant_admin"];
 const READER: &str = "readonly";
 
 fn undetermined(roles: &str) -> StudioError {
-    StudioError::from(NodeDbError::config(format!(
-        "the session's rights cannot be read: roles `{roles}` include a role whose \
-         permissions NodeDB 0.6.2 does not report to a non-superuser"
-    )))
+    StudioError::Unsupported {
+        what: format!(
+            "reading the session's rights: roles `{roles}` include a role whose \
+             permissions NodeDB 0.6.2 does not report to a non-superuser"
+        ),
+    }
 }
 
 /// The role names of a `SHOW SESSION` role line.

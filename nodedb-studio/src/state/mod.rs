@@ -4,6 +4,7 @@
 //! global statics.
 
 pub mod admin;
+pub mod caps;
 pub mod cluster;
 pub mod connection;
 pub mod connection_form;

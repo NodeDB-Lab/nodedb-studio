@@ -7,15 +7,14 @@
 //! instead of refusing it. `ArraySchema` and `SliceResult` need all of those,
 //! so both methods return a typed error instead of a guessed shape.
 
-use nodedb_client::NodeDbError;
-
 use crate::services::error::StudioError;
 
 pub(in crate::services::nodedb) fn no_array_source(array: &str) -> StudioError {
-    StudioError::from(NodeDbError::array(
-        array,
-        "NodeDB 0.6.2 has no statement that reports an array's dimensions, extents or attributes",
-    ))
+    StudioError::Unsupported {
+        what: format!(
+            "describing array `{array}`: NodeDB 0.6.2 has no statement that reports an array's dimensions, extents or attributes"
+        ),
+    }
 }
 
 #[cfg(test)]
@@ -24,6 +23,8 @@ mod tests {
 
     #[test]
     fn the_error_names_the_array() {
-        assert!(no_array_source("climate").to_string().contains("climate"));
+        let e = no_array_source("climate");
+        assert!(matches!(e, StudioError::Unsupported { .. }), "{e:?}");
+        assert!(e.to_string().contains("climate"));
     }
 }

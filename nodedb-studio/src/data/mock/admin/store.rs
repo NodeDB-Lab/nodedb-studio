@@ -188,7 +188,7 @@ impl AdminStore {
             });
         }
         if let Some(reason) = review.errors.first() {
-            return Err(StudioError::Rejected {
+            return Err(StudioError::Refused {
                 reason: reason.clone(),
             });
         }

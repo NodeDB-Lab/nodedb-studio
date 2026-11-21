@@ -111,9 +111,9 @@ pub(in crate::services::nodedb) fn no_answer(detail: impl std::fmt::Display) -> 
 
 /// A second call while one runs on the same statement connection.
 pub(in crate::services::nodedb) fn busy() -> StudioError {
-    StudioError::Setup(NodeDbError::bad_request(
-        "a statement is still running on this database's connection: wait for it to finish, then try again",
-    ))
+    StudioError::Refused {
+        reason: "A statement is still running on this database's connection. Wait for it to finish, then try again.".to_string(),
+    }
 }
 
 /// A connect replaced the session while a call ran on its connection.

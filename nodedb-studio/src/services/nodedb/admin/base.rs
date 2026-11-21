@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use async_trait::async_trait;
-use nodedb_client::{NodeDb, NodeDbError};
+use nodedb_client::NodeDb;
 use nodedb_types::Value;
 
 use crate::models::admin::access::{AccessDirectory, AccessSubject, SubjectAccess};
@@ -24,10 +24,13 @@ use crate::services::nodedb::admin::plan::plan;
 use crate::services::nodedb::admin::policy;
 use crate::services::nodedb::admin::user::Statement;
 use crate::services::nodedb::service::{next_id, to_table};
+use crate::services::nodedb::sql::ident;
 
 /// A typed error for something NodeDB 0.6.2 cannot supply.
 fn unavailable(what: &str) -> StudioError {
-    StudioError::from(NodeDbError::bad_request(format!("NodeDB 0.6.2 {what}")))
+    StudioError::Unsupported {
+        what: format!("NodeDB 0.6.2 {what}"),
+    }
 }
 
 fn now() -> i64 {
@@ -135,7 +138,7 @@ impl NodeDbConnectionService {
         let mut names: Vec<&str> = bare
             .iter()
             .map(|p| p.target.as_str())
-            .filter(|n| access::ident(n, "collection").is_ok())
+            .filter(|n| ident(n, "collection").is_ok())
             .collect();
         names.sort_unstable();
         names.dedup();
@@ -152,7 +155,7 @@ impl NodeDbConnectionService {
             per_db.push((db.clone(), rows));
         }
         let mut wide = Vec::new();
-        for role in wanted.iter().filter(|g| access::ident(g, "role").is_ok()) {
+        for role in wanted.iter().filter(|g| ident(g, "role").is_ok()) {
             let t = self.table(&format!("SHOW PERMISSIONS FOR {role}")).await?;
             wide.extend(ours(access::permissions(&t)?));
         }
@@ -408,7 +411,11 @@ impl AdminData for NodeDbConnectionService {
             AdminChange::Backup(_) => Err(unavailable(NO_BACKUPS)),
             AdminChange::Config(_) => Err(unavailable(NO_CONFIG)),
             AdminChange::Credential(_) => Err(unavailable(NO_CREDENTIALS)),
-            AdminChange::Access(_) => Err(unavailable("access change was not planned")),
+            // `access_changes` took every access change above.
+            AdminChange::Access(_) => Err(StudioError::Refused {
+                reason: "Studio could not plan this access change. Close the review and stage the change again."
+                    .to_string(),
+            }),
         }
     }
 
@@ -418,9 +425,9 @@ impl AdminData for NodeDbConnectionService {
         revision_seen: u64,
     ) -> Result<OpResult, StudioError> {
         let Some(changes) = access::access_changes(change) else {
-            return Err(StudioError::Rejected {
-                reason: "NodeDB 0.6.2 cannot apply this change: the review lists why".to_string(),
-            });
+            return Err(unavailable(
+                "cannot apply this change: the review lists why",
+            ));
         };
         let rows = self.tenant_rows().await?;
         if rows.revision != revision_seen {
@@ -433,7 +440,7 @@ impl AdminData for NodeDbConnectionService {
         let planned = plan(changes, &rows.users, &rows.roles);
         let errors: Vec<String> = planned.iter().flat_map(|p| p.errors.clone()).collect();
         if !errors.is_empty() {
-            return Err(StudioError::Rejected {
+            return Err(StudioError::Refused {
                 reason: errors.join(" "),
             });
         }
@@ -541,9 +548,12 @@ mod tests {
     #[tokio::test]
     async fn what_the_server_cannot_supply_is_a_typed_error() {
         let svc = NodeDbConnectionService::default();
-        assert!(svc.backup_overview().await.is_err());
-        assert!(svc.credentials().await.is_err());
+        assert!(matches!(
+            svc.backup_overview().await,
+            Err(StudioError::Unsupported { .. })
+        ));
         let e = svc.credentials().await.expect_err("no credentials");
+        assert!(matches!(e, StudioError::Unsupported { .. }), "{e:?}");
         assert!(e.to_string().contains("0.6.2"), "{e}");
     }
 
@@ -690,11 +700,10 @@ mod tests {
         )));
         let review = svc.preview_admin_change(&change).await.expect("preview");
         assert!(!review.can_apply(), "{:?}", review.errors);
-        assert!(
-            svc.apply_admin_change(&change, review.revision)
-                .await
-                .is_err()
-        );
+        assert!(matches!(
+            svc.apply_admin_change(&change, review.revision).await,
+            Err(StudioError::Unsupported { .. })
+        ));
         quietly_in(
             &svc,
             Some(DB2),

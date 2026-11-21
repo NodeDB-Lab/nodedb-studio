@@ -11,7 +11,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use nodedb_client::native::pool::PoolConfig;
-use nodedb_client::{NativeClient, NodeDbError, QueryResult};
+use nodedb_client::{NativeClient, QueryResult};
 use nodedb_types::protocol::AuthMethod as WireAuth;
 
 use crate::models::connections::{AuthMethod, ConnectionTarget, TlsConfig};
@@ -122,8 +122,10 @@ fn now_epoch() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
-fn setup(detail: &str) -> StudioError {
-    StudioError::from(NodeDbError::config(detail))
+fn unsupported(what: &str) -> StudioError {
+    StudioError::Unsupported {
+        what: what.to_string(),
+    }
 }
 
 /// The pool config a target and an identity describe. `database` blank means
@@ -137,7 +139,9 @@ pub(super) fn pool_config(
     database: &str,
 ) -> Result<PoolConfig, StudioError> {
     let ConnectionTarget::Origin { host, port } = target else {
-        return Err(setup("NodeDB-Lite files cannot be opened yet"));
+        return Err(unsupported(
+            "NodeDB-Lite files: Studio cannot open one yet. Connect to an Origin server instead.",
+        ));
     };
     let secret = secret.filter(|s| !s.is_empty());
     let wire = match auth {
@@ -159,17 +163,24 @@ pub(super) fn pool_config(
         }
         AuthMethod::Token => WireAuth::ApiKey {
             token: secret
-                .ok_or_else(|| setup("this connection needs a token"))?
+                .ok_or_else(|| StudioError::Refused {
+                    reason: "This connection needs a token. Edit the connection and enter one."
+                        .to_string(),
+                })?
                 .to_string(),
         },
         AuthMethod::SystemCredentials => {
-            return Err(setup("system credentials cannot be used yet"));
+            return Err(unsupported(
+                "system credentials: Studio cannot sign in with them yet. Use a password or a token.",
+            ));
         }
     };
     // The client has no client-certificate support. Refuse instead of
     // connecting without the certificate the user asked for.
     if !tls.client_cert.is_empty() || !tls.client_key.is_empty() {
-        return Err(setup("client certificates cannot be used yet"));
+        return Err(unsupported(
+            "client certificates: Studio's NodeDB client cannot present one, so Studio does not connect without it.",
+        ));
     }
     let mut config = PoolConfig::new(format!("{host}:{port}"), wire);
     config.max_size = 4;
@@ -498,14 +509,18 @@ mod tests {
             Some("pw"),
             &TlsConfig::default(),
         );
-        assert!(r.is_err());
+        assert!(matches!(r, Err(StudioError::Unsupported { .. })));
     }
 
     #[test]
     fn pool_config_token_needs_a_token() {
         let tls = TlsConfig::default();
-        assert!(config_of(&origin(), AuthMethod::Token, "", None, &tls).is_err());
-        assert!(config_of(&origin(), AuthMethod::Token, "", Some(""), &tls).is_err());
+        for secret in [None, Some("")] {
+            assert!(matches!(
+                config_of(&origin(), AuthMethod::Token, "", secret, &tls),
+                Err(StudioError::Refused { .. })
+            ));
+        }
         assert!(config_of(&origin(), AuthMethod::Token, "", Some("tok"), &tls).is_ok());
     }
 
@@ -523,7 +538,7 @@ mod tests {
             Some("pw"),
             &tls,
         );
-        assert!(r.is_err());
+        assert!(matches!(r, Err(StudioError::Unsupported { .. })));
     }
 
     #[test]

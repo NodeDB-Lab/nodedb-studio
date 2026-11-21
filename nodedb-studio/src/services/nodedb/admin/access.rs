@@ -19,7 +19,7 @@
 //!   roles (only those the user holds itself, not a custom role's parent),
 //!   then explicit grants to `user:<name>` or to a role and its parents.
 //! - Role and user names cannot be bound as `$n`: DDL takes identifiers as
-//!   text, so `ident` validates them first.
+//!   text, so `sql::ident` validates them first.
 
 use crate::models::admin::AdminChange;
 use crate::models::admin::access::{
@@ -28,7 +28,6 @@ use crate::models::admin::access::{
 use crate::services::decode::{Row, Table, decode_rows};
 use crate::services::error::StudioError;
 
-use nodedb_client::NodeDbError;
 use nodedb_types::error::ErrorDetails;
 
 /// The roles the server has built in. `SHOW ROLES` never lists them.
@@ -45,24 +44,6 @@ pub(in crate::services::nodedb) const BUILTIN_ROLES: [&str; 6] = [
 
 /// What a membership row shows: role membership applies in every database.
 pub(in crate::services::nodedb) const NO_DATABASE: &str = "";
-
-/// A name the server accepts as SQL text: ASCII letters, digits, and
-/// underscores, 1 to 63 characters.
-pub(in crate::services::nodedb) fn ident<'a>(
-    name: &'a str,
-    what: &str,
-) -> Result<&'a str, StudioError> {
-    let ok = !name.is_empty()
-        && name.len() <= 63
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
-    if ok {
-        Ok(name)
-    } else {
-        Err(StudioError::from(NodeDbError::bad_request(format!(
-            "{what} `{name}` cannot be used in a statement: use letters, digits and underscores, up to 63 characters"
-        ))))
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(in crate::services::nodedb) struct UserRow {
@@ -364,6 +345,7 @@ mod tests {
     use super::*;
     use crate::models::admin::password::Secret;
     use crate::services::nodedb::admin::plan::{Planned, plan};
+    use nodedb_client::NodeDbError;
 
     fn table(cols: &[&str], rows: &[&[&str]]) -> Table {
         Table {
@@ -389,14 +371,6 @@ mod tests {
             grantee: grantee.into(),
             permission: permission.into(),
             target: target.into(),
-        }
-    }
-
-    #[test]
-    fn identifiers_take_letters_digits_and_underscores_only() {
-        assert!(ident("studio_probe_a_r1", "role").is_ok());
-        for bad in ["", "a b", "a;b", "a-b", "a'b", "é", &"x".repeat(64)] {
-            assert!(ident(bad, "role").is_err(), "{bad}");
         }
     }
 

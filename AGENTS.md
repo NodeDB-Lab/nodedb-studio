@@ -93,10 +93,16 @@ The live tests are `#[ignore]` and need a NodeDB 0.6.2 server:
 
 ```bash
 NODEDB_PROBE_ADDR=host:port NODEDB_PROBE_USER=... NODEDB_PROBE_PASSWORD=... \
-  cargo nextest run --run-ignored ignored-only -E 'test(live_)' -j 2
+  cargo nextest run --run-ignored ignored-only -E 'test(live_)'
 ```
 
-Keep `-j 2`. Every live test logs in, and the server limits login attempts.
+`.config/nextest.toml` runs every `live_` test one at a time: each one logs in,
+and the server limits login attempts per IP per minute.
+
+Shared SQL helpers (identifiers, quoted names, string literals) live in
+`services/nodedb/sql.rs`.
+A Studio-side refusal uses `StudioError::Refused`, and a feature the server
+lacks uses `StudioError::Unsupported`, never a hand-built client error.
 
 ## Project structure
 

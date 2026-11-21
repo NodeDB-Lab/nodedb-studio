@@ -2,7 +2,7 @@
 //!
 //! `CREATE USER <name> WITH PASSWORD '<pw>' [ROLE <role>]` is the only way
 //! to create a user. It takes no bound `$n`, so the password enters the
-//! statement text through `sql_string`. Without `ROLE` the server gives the
+//! statement text through `sql::literal`. Without `ROLE` the server gives the
 //! user `readwrite`.
 
 use std::collections::HashSet;
@@ -11,8 +11,9 @@ use crate::models::admin::ReviewLine;
 use crate::models::admin::access::{AccessChange, PrincipalKind};
 use crate::models::admin::password::{Secret, password_issue};
 use crate::services::error::StudioError;
-use crate::services::nodedb::admin::access::{UserRow, ident};
+use crate::services::nodedb::admin::access::UserRow;
 use crate::services::nodedb::admin::plan::Planned;
+use crate::services::nodedb::sql::{ident, literal};
 
 /// The role the server gives a new user that names none.
 const DEFAULT_ROLE: &str = "readwrite";
@@ -49,7 +50,7 @@ impl Statement {
         let text = error.to_string();
         let clean = text.replace(self.sql(), &self.label);
         let secret = password.expose();
-        let leaks = clean.contains(secret) || clean.contains(&sql_string(secret));
+        let leaks = clean.contains(secret) || clean.contains(&literal(secret));
         if !leaks && clean == text {
             return error;
         }
@@ -65,22 +66,12 @@ impl Statement {
     }
 }
 
-/// `text` as a SQL string literal for NodeDB 0.6.2.
-///
-/// The server's lexer (`nodedb-sql`, `ddl_ast/parse/clause/token.rs`) reads
-/// `'...'` with one escape: a doubled `''` is one quote. A backslash is an
-/// ordinary character. Only an `E'...'` string decodes backslashes, and this
-/// never writes the `E` prefix.
-pub(in crate::services::nodedb) fn sql_string(text: &str) -> String {
-    format!("'{}'", text.replace('\'', "''"))
-}
-
 /// The statement that creates `name`. `name` and `role` must pass `ident`.
 fn create_user(name: &str, password: &Secret, role: Option<&str>) -> Statement {
     let head = format!("CREATE USER {name} WITH PASSWORD ");
     let tail = role.map(|r| format!(" ROLE {r}")).unwrap_or_default();
     Statement {
-        sql: Secret::new(format!("{head}{}{tail}", sql_string(password.expose()))),
+        sql: Secret::new(format!("{head}{}{tail}", literal(password.expose()))),
         password: Some(password.clone()),
         label: format!("CREATE USER {name}{tail}"),
     }
@@ -208,16 +199,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_literal_doubles_the_quote_and_leaves_the_rest() {
-        assert_eq!(sql_string("abc"), "'abc'");
-        assert_eq!(sql_string("a'b"), "'a''b'");
-        assert_eq!(sql_string("''"), "''''''");
-        assert_eq!(sql_string(r"a\b"), r"'a\b'", "a backslash is plain text");
-        assert_eq!(sql_string("x\"y;z--w\n é"), "'x\"y;z--w\n é'");
-        assert_eq!(sql_string(""), "''");
-    }
-
-    #[test]
     fn the_statement_text_stays_out_of_its_label_and_debug_free_output() {
         let s = create_user("ann", &Secret::new("p'w"), Some("readonly"));
         assert_eq!(
@@ -306,7 +287,7 @@ pub(in crate::services::nodedb) mod live {
         let change = AdminChange::Access(changes);
         let review = svc.preview_admin_change(&change).await?;
         if !review.can_apply() {
-            return Err(StudioError::Rejected {
+            return Err(StudioError::Refused {
                 reason: review.errors.join(" "),
             });
         }

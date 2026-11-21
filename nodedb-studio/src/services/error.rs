@@ -89,6 +89,14 @@ pub enum StudioError {
     /// The server's own validation refused a write.
     #[error("the server rejected the write: {reason}")]
     Rejected { reason: String },
+    /// The connected server, or Studio's client for it, has no way to do
+    /// this. `what` names the feature and the gap.
+    #[error("not supported: {what}")]
+    Unsupported { what: String },
+    /// Studio declines to do this, for the user's protection or because of
+    /// local state. `reason` is a full sentence that says what to do.
+    #[error("{reason}")]
+    Refused { reason: String },
     /// A save would give two saved queries one name.
     #[error("a saved query named `{0}` already exists: choose another name")]
     QueryNameTaken(String),
@@ -143,6 +151,8 @@ impl StudioError {
             | StudioError::RecordMissing { .. }
             | StudioError::PermissionDenied { .. }
             | StudioError::Rejected { .. }
+            | StudioError::Unsupported { .. }
+            | StudioError::Refused { .. }
             | StudioError::QueryNameTaken(_)
             | StudioError::UnknownQuery(_)
             | StudioError::UnknownChange(_)
@@ -503,6 +513,21 @@ mod tests {
     }
 
     #[test]
+    fn a_refusal_reads_as_its_reason_and_names_no_server() {
+        let refused = StudioError::Refused {
+            reason: "Wait for it to finish, then try again.".into(),
+        };
+        assert_eq!(
+            refused.to_string(),
+            "Wait for it to finish, then try again."
+        );
+        let unsupported = StudioError::Unsupported {
+            what: "EXPLAIN ANALYZE".into(),
+        };
+        assert_eq!(unsupported.to_string(), "not supported: EXPLAIN ANALYZE");
+    }
+
+    #[test]
     fn studio_originated_errors_are_not_retriable() {
         for e in [
             StudioError::NotConnected,
@@ -533,6 +558,8 @@ mod tests {
                 collection: "c".into(),
             },
             StudioError::Rejected { reason: "r".into() },
+            StudioError::Unsupported { what: "w".into() },
+            StudioError::Refused { reason: "r".into() },
             StudioError::QueryNameTaken("q".into()),
             StudioError::UnknownQuery("q".into()),
             StudioError::UnknownChange("x".into()),

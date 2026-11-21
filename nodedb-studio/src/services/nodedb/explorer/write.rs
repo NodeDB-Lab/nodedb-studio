@@ -16,7 +16,7 @@ use crate::models::records::check::changes;
 use crate::models::records::json::{compact, normalize};
 use crate::models::schema::FieldType;
 use crate::services::error::StudioError;
-use crate::services::nodedb::explorer::sql::{Binder, Meta, Statement, id_text, rejected};
+use crate::services::nodedb::explorer::sql::{Binder, Meta, Statement, id_text, refused};
 
 /// A value as the server binds it faithfully. The server stores an object as
 /// JSON text, so an object binds as that text. A bound object reads back as a
@@ -88,16 +88,16 @@ fn check_written(meta: &Meta, name: &str, value: &Value, fix: &str) -> Result<()
         Some(FieldType::Bytes)
     );
     if find(value, &|v| matches!(v, Value::Bytes(_))).is_some() {
-        return Err(rejected(format!("`{name}` holds bytes. {NO_BYTES} {fix}")));
+        return Err(refused(format!("`{name}` holds bytes. {NO_BYTES} {fix}")));
     }
     if declared_bytes && *value != Value::Null {
-        return Err(rejected(format!(
+        return Err(refused(format!(
             "`{name}` is a BYTES field, so the server stores any value written to it as bytes. \
              {NO_BYTES} {fix}"
         )));
     }
     match find(value, &placeholder) {
-        Some(text) => Err(rejected(format!(
+        Some(text) => Err(refused(format!(
             "`{name}` holds {}, the text Studio shows for a value it cannot display: \
              Studio does not write it. {fix}",
             compact(text, &[])
@@ -109,7 +109,7 @@ fn check_written(meta: &Meta, name: &str, value: &Value, fix: &str) -> Result<()
 /// The fields of a record value, in name order, each name checked.
 fn assignments(meta: &Meta, value: &Value) -> Result<Vec<(String, Value)>, StudioError> {
     let Value::Object(map) = value else {
-        return Err(rejected("a record is an object of fields".to_string()));
+        return Err(refused("A record must be an object of fields.".to_string()));
     };
     let mut pairs: Vec<(String, Value)> = Vec::with_capacity(map.len());
     for (name, v) in map {
@@ -122,11 +122,11 @@ fn assignments(meta: &Meta, value: &Value) -> Result<Vec<(String, Value)>, Studi
 /// The key a record value carries must equal the key it is addressed by.
 fn same_key(value: &Value, key: &str, id: &str) -> Result<(), StudioError> {
     let Value::Object(map) = value else {
-        return Err(rejected("a record is an object of fields".to_string()));
+        return Err(refused("A record must be an object of fields.".to_string()));
     };
     match map.get(key) {
-        Some(v) if id_text(v).as_deref() != Some(id) => Err(rejected(format!(
-            "the record names `{key}` differently from `{id}`: a key cannot change"
+        Some(v) if id_text(v).as_deref() != Some(id) => Err(refused(format!(
+            "The record names `{key}` differently from `{id}`, and a key cannot change. Set `{key}` back to `{id}`."
         ))),
         Some(_) | None => Ok(()),
     }
@@ -173,7 +173,9 @@ pub(in crate::services::nodedb) fn insert_statement(
         pairs.sort_by(|a, b| a.0.cmp(&b.0));
     }
     if pairs.is_empty() {
-        return Err(rejected("a record needs at least one field".to_string()));
+        return Err(refused(
+            "A record needs at least one field. Add a field.".to_string(),
+        ));
     }
     for (name, v) in &pairs {
         check_written(
@@ -201,7 +203,7 @@ fn changed(
 ) -> Result<Vec<(String, Option<Value>)>, StudioError> {
     let fields = &meta.schema.fields;
     let Value::Object(draft) = normalize(new, fields) else {
-        return Err(rejected("a record is an object of fields".to_string()));
+        return Err(refused("A record must be an object of fields.".to_string()));
     };
     let mut out = Vec::new();
     for change in changes(stored, new, fields) {
@@ -440,7 +442,7 @@ mod tests {
 
     fn refusal(result: Result<impl std::fmt::Debug, StudioError>) -> String {
         match result {
-            Err(StudioError::Rejected { reason }) => reason,
+            Err(StudioError::Refused { reason }) => reason,
             other => panic!("expected a refusal, got {other:?}"),
         }
     }
@@ -466,7 +468,7 @@ mod tests {
             insert_statement(&strict(), Some("k1"), &obj(&[("name", s("n"))])).expect("builds");
         assert_eq!(st.params, [s("k1"), s("n")]);
         let clash = insert_statement(&strict(), Some("k1"), &obj(&[("id", s("k2"))]));
-        assert!(matches!(clash, Err(StudioError::Rejected { .. })));
+        assert!(matches!(clash, Err(StudioError::Refused { .. })));
         assert!(insert_statement(&strict(), None, &obj(&[])).is_err());
         assert!(insert_statement(&strict(), None, &Value::Null).is_err());
         assert!(insert_statement(&strict(), None, &obj(&[("zz", s("n"))])).is_err());
@@ -584,7 +586,7 @@ mod tests {
         for text in ["<3 bytes>", "[0.5, 0.25, 0.125, … 768 values]"] {
             let draft = obj(&[("id", s("a")), ("b", s(text))]);
             match update_statement(&schemaless(), "a", &stored, &draft) {
-                Err(StudioError::Rejected { reason }) => {
+                Err(StudioError::Refused { reason }) => {
                     assert!(reason.contains("`b`"), "{reason}")
                 }
                 other => panic!("expected a refusal for {text}, got {other:?}"),

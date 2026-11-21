@@ -21,6 +21,24 @@ fn not_found(collection: &str) -> StudioError {
     StudioError::NotFound(NodeDbError::collection_not_found(collection))
 }
 
+/// `Ok` when `grant` allows `privilege` on `collection`. A denial by policy
+/// (timeseries is append-only) is the refusal the real backend gives: no
+/// privilege would allow it.
+fn permitted(grant: &Grant, privilege: &'static str, collection: &str) -> Result<(), StudioError> {
+    match grant {
+        Grant::Allowed => Ok(()),
+        Grant::Denied(Denial::Privilege) => Err(StudioError::PermissionDenied {
+            privilege,
+            collection: collection.to_string(),
+        }),
+        Grant::Denied(Denial::Policy(why)) => Err(StudioError::Refused {
+            reason: format!(
+                "{why}: {collection} takes no {privilege}. Insert a new record instead."
+            ),
+        }),
+    }
+}
+
 fn missing(collection: &str, id: &str) -> StudioError {
     StudioError::RecordMissing {
         collection: collection.to_string(),
@@ -242,13 +260,7 @@ impl ExplorerData for MockConnectionService {
         value: Value,
     ) -> Result<Record, StudioError> {
         self.gate().await?;
-        let access = self.access(collection)?;
-        if !access.update.allowed() {
-            return Err(StudioError::PermissionDenied {
-                privilege: "UPDATE",
-                collection: collection.to_string(),
-            });
-        }
+        permitted(&self.access(collection)?.update, "UPDATE", collection)?;
         let profile = self.profile(collection)?;
         let schema = mock::collection_schema(collection).ok_or_else(|| not_found(collection))?;
         let mut overlay = self.records.borrow_mut();
@@ -293,12 +305,7 @@ impl ExplorerData for MockConnectionService {
         expected_revision: u64,
     ) -> Result<(), StudioError> {
         self.gate().await?;
-        if !self.access(collection)?.delete.allowed() {
-            return Err(StudioError::PermissionDenied {
-                privilege: "DELETE",
-                collection: collection.to_string(),
-            });
-        }
+        permitted(&self.access(collection)?.delete, "DELETE", collection)?;
         let mut overlay = self.records.borrow_mut();
         let stored =
             mock::stored_record(collection, id, &overlay).ok_or_else(|| missing(collection, id))?;

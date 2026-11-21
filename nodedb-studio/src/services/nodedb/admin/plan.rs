@@ -5,8 +5,9 @@ use std::collections::HashSet;
 
 use crate::models::admin::ReviewLine;
 use crate::models::admin::access::AccessChange;
-use crate::services::nodedb::admin::access::{BUILTIN_ROLES, RoleRow, UserRow, ident};
+use crate::services::nodedb::admin::access::{BUILTIN_ROLES, RoleRow, UserRow};
 use crate::services::nodedb::admin::user::{NewUser, Statement, plan_create};
+use crate::services::nodedb::sql::ident;
 
 /// What one access change does: its review line, any errors and warnings,
 /// and the statement that applies it. `users` and `roles` are the state

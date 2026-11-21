@@ -427,7 +427,7 @@ mod tests {
         assert_eq!(svc.transaction().await.expect("state"), TxState::Failed);
         assert!(matches!(
             svc.run_query(&request(EVENTS)).await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
         assert_eq!(
             svc.rollback_transaction().await.expect("rollback"),
@@ -537,7 +537,7 @@ mod tests {
         ));
         assert!(matches!(
             svc.save_query(&save("  ")).await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
         let mut rename = save("Customer spend");
         rename.id = Some("q-customer-spend".to_string());
@@ -554,7 +554,7 @@ mod tests {
         s.id = Some("q-product-performance".to_string());
         assert!(matches!(
             svc.save_query(&s).await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
     }
 

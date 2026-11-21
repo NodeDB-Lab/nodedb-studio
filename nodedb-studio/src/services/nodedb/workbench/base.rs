@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
-use nodedb_client::{NodeDb, NodeDbError, QueryResult};
+use nodedb_client::{NodeDb, QueryResult};
 use nodedb_types::Value;
 
 use crate::models::collection::Profile;
@@ -63,17 +63,17 @@ fn ms_since(started: Instant) -> u32 {
 /// A page of a statement whose rows Studio no longer holds, and that can
 /// write. Running it again to read the page would repeat the write.
 fn run_again_first() -> StudioError {
-    StudioError::Setup(NodeDbError::bad_request(
-        "Studio no longer holds the rows of this statement, and running it again can repeat a write: run the statement again, then change the page",
-    ))
+    StudioError::Refused {
+        reason: "Studio no longer holds the rows of this statement, and running it again can repeat a write. Run the statement again, then change the page.".to_string(),
+    }
 }
 
 /// 0.6.2 has no EXPLAIN ANALYZE: it reports a parse error. Studio does not
 /// run the statement itself to time it.
 fn analyze_unsupported() -> StudioError {
-    StudioError::Setup(NodeDbError::config(
-        "NodeDB 0.6.2 has no EXPLAIN ANALYZE, so nothing measures this plan. Studio did not run the statement.",
-    ))
+    StudioError::Unsupported {
+        what: "EXPLAIN ANALYZE: NodeDB 0.6.2 has none, so nothing measures this plan. Studio did not run the statement.".to_string(),
+    }
 }
 
 /// A collection's declared fields, the id field marked as the key.
@@ -199,16 +199,22 @@ fn bind_params(sql: &str, params: &[ParamBinding]) -> Result<(String, Vec<Value>
 fn param_value(binding: &ParamBinding) -> Result<Value, StudioError> {
     binding.check().map_err(|e| match e {
         ParamError::Missing { name } => StudioError::MissingParameter(name),
-        ParamError::Mismatch { .. } => StudioError::Rejected {
-            reason: e.to_string(),
+        ParamError::Mismatch {
+            name,
+            expected,
+            value,
+        } => StudioError::Refused {
+            reason: format!(
+                "Parameter :{name} is {expected}, and `{value}` is not. Correct the value, then run again."
+            ),
         },
     })?;
     let v = binding.value.trim();
     // `check` accepted the text. A parse that fails anyway is refused: a
     // silent NULL would run the statement with the wrong value.
-    let refused = || StudioError::Rejected {
+    let refused = || StudioError::Refused {
         reason: format!(
-            "parameter :{} does not parse as {}",
+            "Parameter :{} does not parse as {}. Correct the value, then run again.",
             binding.name,
             binding.ty.label()
         ),
@@ -521,7 +527,7 @@ mod tests {
         let bad = [ParamBinding::new("a", ParamType::Integer, "x")];
         assert!(matches!(
             bind_params("SELECT :a", &bad),
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
     }
 
@@ -590,12 +596,18 @@ mod tests {
         // A page of a write that was not just run does not run it again,
         // in a transaction or out of one.
         let again = svc.run_query(&q(insert, 1, 2)).await;
-        assert!(matches!(again, Err(StudioError::Setup(_))), "{again:?}");
+        assert!(
+            matches!(again, Err(StudioError::Refused { .. })),
+            "{again:?}"
+        );
         svc.begin_transaction(TxAccess::ReadWrite)
             .await
             .expect("begins");
         let again = svc.run_query(&q(insert, 1, 2)).await;
-        assert!(matches!(again, Err(StudioError::Setup(_))), "{again:?}");
+        assert!(
+            matches!(again, Err(StudioError::Refused { .. })),
+            "{again:?}"
+        );
         assert!(matches!(
             svc.transaction().await,
             Ok(TxState::Active { .. })
@@ -861,7 +873,7 @@ mod tests {
         ] {
             let refused = svc.run_query(&q(sql, 1, 50)).await;
             assert!(
-                matches!(&refused, Err(StudioError::Setup(e)) if e.to_string().contains("run the statement again")),
+                matches!(&refused, Err(StudioError::Refused { reason }) if reason.contains("Run the statement again")),
                 "{sql}: {refused:?}"
             );
         }
@@ -935,12 +947,12 @@ mod tests {
         ));
         assert!(matches!(
             svc.begin_transaction(TxAccess::ReadOnly).await,
-            Err(StudioError::Setup(_))
+            Err(StudioError::Unsupported { .. })
         ));
         assert!(matches!(
             svc.explain(&q("SELECT 1", 0, 50), ExplainMode::Analyze)
                 .await,
-            Err(StudioError::Setup(_))
+            Err(StudioError::Unsupported { .. })
         ));
         assert!(matches!(
             svc.console_run(Protocol::Sql, "", " ; ").await,
@@ -1013,7 +1025,10 @@ mod tests {
         let recalled = masked(&format!("ALTER USER {user} SET PASSWORD 'other'"));
         assert!(recalled.contains("'********'"), "{recalled}");
         let refused = svc.console_run(Protocol::Sql, "", &recalled).await;
-        assert!(matches!(refused, Err(StudioError::Setup(_))), "{refused:?}");
+        assert!(
+            matches!(refused, Err(StudioError::Refused { .. })),
+            "{refused:?}"
+        );
         let refused = svc
             .run_query(&QueryRequest {
                 sql: recalled,
@@ -1023,7 +1038,10 @@ mod tests {
                 page_size: 10,
             })
             .await;
-        assert!(refused.is_err());
+        assert!(
+            matches!(refused, Err(StudioError::Refused { .. })),
+            "{refused:?}"
+        );
         // The password is the one set at creation.
         let (_, session) = live_as(user, "maskpass1").await;
         assert_eq!(session.user, user);
@@ -1121,7 +1139,7 @@ mod tests {
         let insert = q(&format!("INSERT INTO {t} (id, n) VALUES ('x', 1)"), 0, 50);
         assert!(matches!(
             svc.explain(&insert, ExplainMode::Analyze).await,
-            Err(StudioError::Setup(_))
+            Err(StudioError::Unsupported { .. })
         ));
         let planned = svc
             .explain(&insert, ExplainMode::Explain)

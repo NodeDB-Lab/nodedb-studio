@@ -31,7 +31,8 @@ use crate::services::nodedb::explorer::sql::{
 use crate::services::nodedb::explorer::write::{
     Guarded, delete_statement, insert_statement, update_statement,
 };
-use crate::services::nodedb::explorer::{ident, profile_of_describe, schema_of};
+use crate::services::nodedb::explorer::{profile_of_describe, schema_of};
+use crate::services::nodedb::sql::ident;
 
 /// A server error from a write, as the seam names it. A refusal of the data
 /// reads as `Rejected`. A missing privilege reads as `PermissionDenied`.
@@ -104,7 +105,7 @@ impl NodeDbConnectionService {
         &self,
         collection: &str,
     ) -> Result<Meta, StudioError> {
-        let name = ident(collection)?;
+        let name = ident(collection, "collection")?;
         let describe = self.table(&format!("DESCRIBE {name}")).await?;
         let profile = profile_of_describe(name, &describe)?;
         let schema = schema_of(name, profile, &describe, &[])?;
@@ -115,15 +116,22 @@ impl NodeDbConnectionService {
         })
     }
 
-    async fn run(&self, statement: &Statement) -> Result<QueryResult, NodeDbError> {
-        let client = self.client(None).map_err(|_| {
-            NodeDbError::config("no session is open: connect before reading records")
-        })?;
-        client.execute_sql(&statement.sql, &statement.params).await
+    /// Run `statement` on the pool. `on_error` names a server error the way
+    /// the caller's seam method does.
+    async fn run(
+        &self,
+        statement: &Statement,
+        on_error: impl FnOnce(NodeDbError) -> StudioError,
+    ) -> Result<QueryResult, StudioError> {
+        let client = self.client(None)?;
+        client
+            .execute_sql(&statement.sql, &statement.params)
+            .await
+            .map_err(on_error)
     }
 
     async fn read(&self, statement: &Statement) -> Result<QueryResult, StudioError> {
-        Ok(self.run(statement).await?)
+        self.run(statement, StudioError::from).await
     }
 
     pub(in crate::services::nodedb) async fn read_records(
@@ -186,9 +194,8 @@ impl NodeDbConnectionService {
         let meta = self.meta(collection).await?;
         let statement = insert_statement(&meta, id, &value)?;
         let result = self
-            .run(&statement)
-            .await
-            .map_err(|e| write_error(e, "INSERT", &meta.collection))?;
+            .run(&statement, |e| write_error(e, "INSERT", &meta.collection))
+            .await?;
         match records_of(&meta, &result)?.into_iter().next() {
             Some(record) => Ok(record),
             // A server that returns no row for RETURNING: read the record back.
@@ -225,8 +232,9 @@ impl NodeDbConnectionService {
         self.outside_tx()?;
         let meta = self.meta(collection).await?;
         if meta.profile == Profile::Timeseries {
-            return Err(StudioError::Rejected {
-                reason: "timeseries data is append-only: a record cannot change".to_string(),
+            return Err(StudioError::Refused {
+                reason: "Timeseries data is append-only, so a record cannot change. Insert a new point instead."
+                    .to_string(),
             });
         }
         let stored = self.current(&meta, id, expected_revision).await?;
@@ -245,9 +253,10 @@ impl NodeDbConnectionService {
             return Ok(stored.clone());
         };
         let result = self
-            .run(&write.statement)
-            .await
-            .map_err(|e| write_error(e, "UPDATE", &meta.collection))?;
+            .run(&write.statement, |e| {
+                write_error(e, "UPDATE", &meta.collection)
+            })
+            .await?;
         if result.rows_affected == 0 {
             return Err(self.lost(meta, stored, &write).await);
         }
@@ -281,8 +290,8 @@ impl NodeDbConnectionService {
         self.outside_tx()?;
         let meta = self.meta(collection).await?;
         if meta.profile == Profile::Timeseries {
-            return Err(StudioError::Rejected {
-                reason: "timeseries data is append-only: expire it with a retention policy"
+            return Err(StudioError::Refused {
+                reason: "Timeseries data is append-only, so a record cannot be removed. Expire old points with a retention policy."
                     .to_string(),
             });
         }
@@ -294,9 +303,10 @@ impl NodeDbConnectionService {
     async fn apply_delete(&self, meta: &Meta, stored: &Record) -> Result<(), StudioError> {
         let write = delete_statement(meta, &stored.id, &stored.value)?;
         let result = self
-            .run(&write.statement)
-            .await
-            .map_err(|e| write_error(e, "DELETE", &meta.collection))?;
+            .run(&write.statement, |e| {
+                write_error(e, "DELETE", &meta.collection)
+            })
+            .await?;
         if result.rows_affected == 0 {
             return Err(self.lost(meta, stored, &write).await);
         }
@@ -397,7 +407,7 @@ mod tests {
         q.sort = Some(("nope".into(), false));
         assert!(matches!(
             svc.records(name, &q).await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
         assert!(matches!(
             svc.records("studio_probe_x_no_such", &RecordQuery::new(2))
@@ -490,7 +500,7 @@ mod tests {
                 obj(&[("id", s("r1")), ("zzz", s("x"))])
             )
             .await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
         svc.delete_record(name, "r1", saved.revision)
             .await
@@ -554,7 +564,7 @@ mod tests {
             ..RecordQuery::new(10)
         };
         match svc.records(name, &search).await {
-            Err(StudioError::Rejected { reason }) => assert!(reason.contains("0.6.2"), "{reason}"),
+            Err(StudioError::Unsupported { what }) => assert!(what.contains("0.6.2"), "{what}"),
             other => panic!("text search on a schemaless collection must refuse, got {other:?}"),
         }
     }
@@ -610,7 +620,7 @@ mod tests {
         );
         assert!(matches!(
             svc.record(col, "x").await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
         svc.delete_record(col, "20", row.revision)
             .await
@@ -692,7 +702,7 @@ mod tests {
 
         assert!(matches!(
             svc.record(name, "row:0").await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
         assert!(matches!(
             svc.update_record(
@@ -702,11 +712,11 @@ mod tests {
                 obj(&[("cpu", Value::Float(9.0))])
             )
             .await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
         assert!(matches!(
             svc.delete_record(name, &first.id, first.revision).await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
     }
 
@@ -831,7 +841,7 @@ mod tests {
         assert!(matches!(
             svc.update_record(name, "r1", saved.revision, placeholder)
                 .await,
-            Err(StudioError::Rejected { .. })
+            Err(StudioError::Refused { .. })
         ));
     }
 
@@ -1012,7 +1022,7 @@ mod tests {
         )
         .await;
         let refused = |r: Result<Record, StudioError>, why: &str| match r {
-            Err(StudioError::Rejected { reason }) => assert!(reason.contains(why), "{reason}"),
+            Err(StudioError::Refused { reason }) => assert!(reason.contains(why), "{reason}"),
             other => panic!("expected a refusal naming {why}, got {other:?}"),
         };
         for (name, key, field) in [(st, "id", "b"), (doc, "id", "b"), (kv, "key", "value")] {
@@ -1110,7 +1120,7 @@ mod tests {
             .update_record(doc, "d1", saved.revision, with(&saved, "a\"q", "q2"))
             .await
         {
-            Err(StudioError::Rejected { reason }) => assert!(reason.contains("a\"q"), "{reason}"),
+            Err(StudioError::Refused { reason }) => assert!(reason.contains("a\"q"), "{reason}"),
             other => panic!("expected a refusal, got {other:?}"),
         }
         let odd = obj(&[
