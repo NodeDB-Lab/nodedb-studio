@@ -996,6 +996,42 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+    async fn live_console_refuses_a_statement_recalled_with_a_masked_password() {
+        use crate::services::nodedb::service::live_as;
+        use crate::services::nodedb::workbench_sql::masked;
+
+        let svc = live().await;
+        let user = "studio_probe_w_mask";
+        // Fails when the user exists from an earlier run: that is fine.
+        let _ = svc
+            .console_run(
+                Protocol::Sql,
+                "",
+                &format!("CREATE USER {user} WITH PASSWORD 'maskpass1' ROLE readonly"),
+            )
+            .await;
+        // What Rerun sends: the history entry, with its password masked.
+        let recalled = masked(&format!("ALTER USER {user} SET PASSWORD 'other'"));
+        assert!(recalled.contains("'********'"), "{recalled}");
+        let refused = svc.console_run(Protocol::Sql, "", &recalled).await;
+        assert!(matches!(refused, Err(StudioError::Setup(_))), "{refused:?}");
+        let refused = svc
+            .run_query(&QueryRequest {
+                sql: recalled,
+                params: Vec::new(),
+                database: String::new(),
+                page: 0,
+                page_size: 10,
+            })
+            .await;
+        assert!(refused.is_err());
+        // The password is the one set at creation.
+        let (_, session) = live_as(user, "maskpass1").await;
+        assert_eq!(session.user, user);
+    }
+
+    #[tokio::test]
+    #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
     async fn live_console_runs_sql_admin_and_cypher_and_keeps_history() {
         let svc = live().await;
         let c = svc.client(None).expect("a client");

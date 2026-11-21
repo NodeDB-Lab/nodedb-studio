@@ -22,7 +22,9 @@ use crate::services::nodedb::workbench_conn::{
     CONTROL_LIMIT, Gone, SETTINGS_RESET, STATEMENT_LIMIT, bounded, ended, failed_on, lost,
     no_answer, status_of,
 };
-use crate::services::nodedb::workbench_sql::{Control, asks_read_only, control_of, resets_session};
+use crate::services::nodedb::workbench_sql::{
+    Control, asks_read_only, carries_mask, control_of, resets_session,
+};
 
 /// Shown with a COMMIT that found the transaction failed.
 pub(super) const ROLLED_BACK: &str = "The transaction had failed, so Studio rolled it back instead of committing. Nothing was committed.";
@@ -215,6 +217,12 @@ impl NodeDbConnectionService {
         // 0.6.2 reads a closing `;` into the value of SET, SHOW and RESET:
         // `SET x = 'a';` stores `a';`.
         let sql = sql.trim_end().trim_end_matches(';').trim_end();
+        if carries_mask(sql) {
+            return Err(StudioError::from(nodedb_client::NodeDbError::config(
+                "the password in this statement is the mask history shows in its place. \
+                 Type the password again, then run the statement",
+            )));
+        }
         let control = control_of(sql);
         match control {
             Some(Control::Begin) => return self.begin_tx(database, sql).await,

@@ -277,8 +277,30 @@ fn comment_len(rest: &[u8]) -> usize {
 /// '..'`. `CREATE API KEY` takes none: the server makes the key. Every
 /// delimiter is ASCII, so the byte scan never splits a character.
 pub(super) fn masked(sql: &str) -> String {
-    let bytes = sql.as_bytes();
     let mut out = String::with_capacity(sql.len());
+    let mut at = 0;
+    for (from, to) in password_literals(sql) {
+        out.push_str(&sql[at..from]);
+        out.push_str(MASK);
+        at = to;
+    }
+    out.push_str(&sql[at..]);
+    out
+}
+
+/// Whether a password in `sql` is the mask itself. History shows a
+/// password as `MASK`, so a statement recalled from history carries it.
+/// Run as it is, it would set the password to the mask text.
+pub(super) fn carries_mask(sql: &str) -> bool {
+    password_literals(sql)
+        .into_iter()
+        .any(|(from, to)| &sql[from..to] == MASK)
+}
+
+/// The byte range of each string literal that follows `PASSWORD`.
+fn password_literals(sql: &str) -> Vec<(usize, usize)> {
+    let bytes = sql.as_bytes();
+    let mut found = Vec::new();
     let (mut at, mut after_password) = (0, false);
     while at < bytes.len() {
         let rest = &bytes[at..];
@@ -287,10 +309,7 @@ pub(super) fn masked(sql: &str) -> String {
         let (len, password) = if c == b'\'' || escape {
             let len = usize::from(escape) + literal_len(&rest[usize::from(escape)..], escape);
             if after_password {
-                out.push_str(MASK);
-                at += len;
-                after_password = false;
-                continue;
+                found.push((at, at + len));
             }
             (len, false)
         } else if c.is_ascii_whitespace() || c == b'=' {
@@ -315,11 +334,10 @@ pub(super) fn masked(sql: &str) -> String {
         } else {
             (1, false)
         };
-        out.push_str(&sql[at..at + len]);
         at += len;
         after_password = password;
     }
-    out
+    found
 }
 
 /// The first words of a statement that only reads.
@@ -503,6 +521,21 @@ mod tests {
             assert!(resets_session(sql), "{sql}");
         }
         assert!(!resets_session("SELECT 'DISCARD ALL'"));
+    }
+
+    #[test]
+    fn a_statement_recalled_from_history_carries_the_mask() {
+        for sql in [
+            "ALTER USER bob SET PASSWORD 'real'",
+            "CREATE USER ann WITH PASSWORD = 'it''s'",
+            "create user ann with password /* c */ E'a\\'b' ROLE readonly",
+        ] {
+            assert!(!carries_mask(sql), "{sql}");
+            assert!(carries_mask(&masked(sql)), "{sql}");
+        }
+        // The mask text elsewhere is an ordinary value.
+        assert!(!carries_mask("SELECT '********'"));
+        assert!(!carries_mask("SELECT 1"));
     }
 
     #[test]
