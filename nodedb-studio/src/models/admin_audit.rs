@@ -12,22 +12,34 @@ use crate::models::feeds::Tone;
 pub enum AuditResult {
     Success,
     Denied,
+    /// The server tried and the operation did not complete.
+    Failed,
+    /// An event kind Studio does not know. Never read as a success.
+    Unknown,
 }
 
 impl AuditResult {
-    pub const ALL: [AuditResult; 2] = [AuditResult::Success, AuditResult::Denied];
+    pub const ALL: [AuditResult; 4] = [
+        AuditResult::Success,
+        AuditResult::Denied,
+        AuditResult::Failed,
+        AuditResult::Unknown,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             AuditResult::Success => "Success",
             AuditResult::Denied => "Denied",
+            AuditResult::Failed => "Failed",
+            AuditResult::Unknown => "Unknown",
         }
     }
 
     pub fn tone(self) -> Tone {
         match self {
             AuditResult::Success => Tone::Ok,
-            AuditResult::Denied => Tone::Err,
+            AuditResult::Denied | AuditResult::Failed => Tone::Err,
+            AuditResult::Unknown => Tone::Warn,
         }
     }
 }
@@ -75,10 +87,18 @@ pub enum TargetType {
     Snapshot,
     Config,
     Credential,
+    Database,
+    Tenant,
+    /// A cluster node.
+    Node,
+    /// Rows or a query: DML and query events.
+    Data,
+    /// Anything else, e.g. the audit trail itself.
+    Other,
 }
 
 impl TargetType {
-    pub const ALL: [TargetType; 8] = [
+    pub const ALL: [TargetType; 13] = [
         TargetType::Principal,
         TargetType::Role,
         TargetType::Policy,
@@ -87,6 +107,11 @@ impl TargetType {
         TargetType::Snapshot,
         TargetType::Config,
         TargetType::Credential,
+        TargetType::Database,
+        TargetType::Tenant,
+        TargetType::Node,
+        TargetType::Data,
+        TargetType::Other,
     ];
 
     pub fn label(self) -> &'static str {
@@ -99,6 +124,11 @@ impl TargetType {
             TargetType::Snapshot => "Snapshot",
             TargetType::Config => "Config",
             TargetType::Credential => "Credential",
+            TargetType::Database => "Database",
+            TargetType::Tenant => "Tenant",
+            TargetType::Node => "Node",
+            TargetType::Data => "Data",
+            TargetType::Other => "Other",
         }
     }
 }
@@ -122,7 +152,11 @@ pub struct AuditEvent {
     pub target_type: TargetType,
     /// The object acted on, e.g. `user:analyst`.
     pub target: String,
-    pub database: String,
+    /// `None`: the server does not report it.
+    pub database: Option<String>,
+    /// The tenant the server wrote. It writes `0` both for tenant 0 and for
+    /// an event with no tenant. `None`: not reported.
+    pub tenant: Option<u64>,
     /// The database object the row shows, e.g. `analytics.sales`.
     pub object: String,
     pub result: AuditResult,
@@ -134,6 +168,14 @@ pub struct AuditEvent {
 }
 
 impl AuditEvent {
+    /// The tenant for display. `None`: not reported.
+    pub fn tenant_text(&self) -> Option<String> {
+        self.tenant.map(|t| match t {
+            0 => "0 or none".to_string(),
+            t => t.to_string(),
+        })
+    }
+
     /// The principal name in a `user:name` target, so the target can link.
     pub fn principal_name(&self) -> Option<&str> {
         match self.target_type {
@@ -148,7 +190,12 @@ impl AuditEvent {
             | TargetType::Index
             | TargetType::Snapshot
             | TargetType::Config
-            | TargetType::Credential => None,
+            | TargetType::Credential
+            | TargetType::Database
+            | TargetType::Tenant
+            | TargetType::Node
+            | TargetType::Data
+            | TargetType::Other => None,
         }
     }
 }
@@ -172,6 +219,9 @@ pub struct AuditPage {
     pub total: usize,
     pub page: usize,
     pub page_size: usize,
+    /// The server holds more matching events than Studio read: `total`
+    /// counts the newest ones only.
+    pub truncated: bool,
     pub observed_at: i64,
 }
 
@@ -189,6 +239,16 @@ impl AuditPage {
         let to = (from + self.events.len()).saturating_sub(1);
         format!("{from}–{to} of {}", self.total)
     }
+
+    /// The line that says the list is cut, or `None` when it is whole.
+    pub fn truncation_text(&self) -> Option<String> {
+        self.truncated.then(|| {
+            format!(
+                "Showing the newest {} events. Narrow the time range to see older ones.",
+                self.total
+            )
+        })
+    }
 }
 
 /// What the filter menus list and what the reader may see.
@@ -196,7 +256,8 @@ impl AuditPage {
 pub struct AuditFacets {
     pub actors: Vec<String>,
     pub actions: Vec<String>,
-    pub retention_days: u32,
+    /// `None`: the server does not report it.
+    pub retention_days: Option<u32>,
     /// The permission that scopes the events the reader sees.
     pub scope: String,
 }
@@ -211,6 +272,7 @@ mod tests {
             total,
             page,
             page_size: 10,
+            truncated: false,
             observed_at: 0,
         }
     }
@@ -223,7 +285,8 @@ mod tests {
             action: String::new(),
             target_type: TargetType::Role,
             target: String::new(),
-            database: String::new(),
+            database: None,
+            tenant: None,
             object: String::new(),
             result: AuditResult::Success,
             correlation: String::new(),
@@ -244,6 +307,15 @@ mod tests {
         assert_eq!(page(47, 0, 10).pages(), 5);
         assert_eq!(page(0, 0, 0).span_text(), "0 events");
         assert_eq!(page(0, 0, 0).pages(), 1);
+        assert_eq!(page(47, 0, 10).truncation_text(), None);
+        let cut = AuditPage {
+            truncated: true,
+            ..page(5000, 0, 10)
+        };
+        assert_eq!(
+            cut.truncation_text().as_deref(),
+            Some("Showing the newest 5000 events. Narrow the time range to see older ones.")
+        );
     }
 
     #[test]
@@ -254,5 +326,15 @@ mod tests {
         assert_eq!(e.principal_name(), Some("analyst"));
         e.target_type = TargetType::Role;
         assert_eq!(e.principal_name(), None);
+    }
+
+    #[test]
+    fn tenant_zero_may_mean_no_tenant() {
+        let mut e = blank_event();
+        assert_eq!(e.tenant_text(), None);
+        e.tenant = Some(0);
+        assert_eq!(e.tenant_text().as_deref(), Some("0 or none"));
+        e.tenant = Some(2);
+        assert_eq!(e.tenant_text().as_deref(), Some("2"));
     }
 }

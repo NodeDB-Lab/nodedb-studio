@@ -12,7 +12,7 @@ use crate::models::admin_access::{AccessDirectory, Principal, PrincipalKind, Rol
 use crate::models::format::{date, date_second};
 use crate::services::backend::Backend;
 use crate::state::admin::AdminUi;
-use crate::views::admin::common::Cut;
+use crate::views::admin::common::{Cut, Reported};
 use crate::views::admin::tasks;
 use crate::views::cluster::common::NameChips;
 use crate::views::events::common::StatusBadge;
@@ -97,14 +97,14 @@ pub fn PrincipalDetails(dir: AccessDirectory, principal: Principal) -> Element {
                         "{p.status.label()}"
                     }
                 }
-                div { class: "kv-row", span { "Credential expiry" } span { "{date(p.credential_expiry, 0)}" } }
-                div { class: "kv-row", span { "Created" } span { "{date_second(p.created_at, 0)} UTC" } }
+                div { class: "kv-row", span { "Credential expiry" } Reported { text: p.credential_expiry.map(|t| date(t, 0)) } }
+                div { class: "kv-row", span { "Created" } Reported { text: p.created_at.map(|t| format!("{} UTC", date_second(t, 0))) } }
             }
             h4 { class: "inspector-section", "Authentication" }
             div { class: "kv",
                 div { class: "kv-row",
                     span { "Password" }
-                    span { if p.password { "Enabled" } else { "Not enabled" } }
+                    Reported { text: p.password.map(|on| if on { "Enabled" } else { "Not enabled" }.to_string()) }
                 }
                 div { class: "kv-row", span { "MFA" } span { "{p.mfa.label()}" } }
             }
@@ -135,7 +135,7 @@ pub fn RoleDetails(dir: AccessDirectory, role: Role, access: Option<SubjectAcces
                         NameChips { names: r.parents.clone() }
                     }
                 }
-                div { class: "kv-row", span { "Created" } span { "{date_second(r.created_at, 0)} UTC" } }
+                div { class: "kv-row", span { "Created" } Reported { text: r.created_at.map(|t| format!("{} UTC", date_second(t, 0))) } }
                 div { class: "kv-row",
                     span { "Members" }
                     match members {
@@ -145,7 +145,7 @@ pub fn RoleDetails(dir: AccessDirectory, role: Role, access: Option<SubjectAcces
                 }
             }
             p { class: "inspector-note",
-                "A role grants only the privileges listed in Role grants. It holds no global administrator access."
+                "A role grants what Role grants lists. ALL on every collection is every right: the superuser and tenant_admin roles hold it."
             }
             StagedChanges { dir }
         }
