@@ -11,20 +11,23 @@ use crate::models::format::thousands;
 use crate::models::query_plan::{ExplainMode, PlanOperator, QueryPlan, duration};
 use crate::state::query::{PlanState, QueryTab, QueryWorkspace};
 
+/// An estimate, or a dash when the server reports none.
+fn est(op: &PlanOperator) -> String {
+    op.est_rows
+        .map_or_else(|| "\u{2014}".to_string(), thousands)
+}
+
 /// The second line of an operator card.
 fn card_line(op: &PlanOperator, plan: &QueryPlan) -> String {
     match plan.mode {
         ExplainMode::Explain => match &op.target {
             Some(t) => t.clone(),
-            None => format!("Est. rows: {}", thousands(op.est_rows)),
+            None => format!("Est. rows: {}", est(op)),
         },
         ExplainMode::Analyze => {
             let rows = op.actual_rows.map(thousands).unwrap_or_default();
             let time = op.time_us.map(duration).unwrap_or_default();
-            format!(
-                "Est. {} \u{b7} Actual {rows} \u{b7} {time}",
-                thousands(op.est_rows)
-            )
+            format!("Est. {} \u{b7} Actual {rows} \u{b7} {time}", est(op))
         }
     }
 }
@@ -80,10 +83,24 @@ pub fn PlanView(tab: QueryTab) -> Element {
                     if shown.is_some_and(|s| s != mode) {
                         div { class: "plan-stale", "Showing the {plan.mode.label()} plan. Press {mode.label()} to plan again in the other mode." }
                     }
-                    PlanTree { plan: (**plan).clone(), selected: tab.selected_op }
+                    PlanBody { plan: (**plan).clone(), selected: tab.selected_op }
                 },
             }
         }
+    }
+}
+
+/// The operator tree, or the server's text when it gives no tree.
+#[component]
+fn PlanBody(plan: QueryPlan, selected: Option<u32>) -> Element {
+    match plan.text {
+        Some(text) => rsx! {
+            span { class: "plan-stale",
+                "This server reports the plan as text, without row estimates."
+            }
+            pre { class: "code-block plan-text", tabindex: "0", "{text}" }
+        },
+        None => rsx! { PlanTree { plan, selected } },
     }
 }
 
@@ -146,7 +163,7 @@ fn OperatorDetails(op: PlanOperator, plan: QueryPlan) -> Element {
             }
             div { class: "kv kv-compact",
                 div { class: "kv-row", span { "Operator type" } span { "{op.kind.label()}" } }
-                div { class: "kv-row", span { "Estimated rows" } span { class: "num", {thousands(op.est_rows)} } }
+                div { class: "kv-row", span { "Estimated rows" } span { class: "num", {est(&op)} } }
                 for (k, v) in op.facts.iter() {
                     div { key: "{k}", class: "kv-row", span { "{k}" } span { "{v}" } }
                 }
@@ -176,5 +193,52 @@ fn OperatorDetails(op: PlanOperator, plan: QueryPlan) -> Element {
                 None => rsx! { p { class: "muted", "Reads from storage." } },
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn render(app: fn() -> Element) -> String {
+        let mut dom = VirtualDom::new(app);
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    #[test]
+    fn a_text_plan_renders_its_text_and_no_estimate() {
+        fn app() -> Element {
+            let plan = QueryPlan::from_text(
+                ExplainMode::Explain,
+                "Query(Exchange(ExchangeOp { child: Document(Scan { collection: \"t\" }) }))"
+                    .into(),
+            );
+            rsx! { PlanBody { plan, selected: None } }
+        }
+        let html = render(app);
+        assert!(html.contains("plan-text"), "{html}");
+        assert!(html.contains("Document(Scan"), "{html}");
+        assert!(html.contains("without row estimates"), "{html}");
+        assert!(
+            !html.contains("Est. rows") && !html.contains("Estimated rows"),
+            "{html}"
+        );
+    }
+
+    #[test]
+    fn an_absent_estimate_is_a_dash_never_zero() {
+        let op = PlanOperator {
+            id: 1,
+            kind: crate::models::query_plan::OperatorKind::Sort,
+            target: None,
+            est_rows: None,
+            actual_rows: None,
+            time_us: None,
+            input: None,
+            description: String::new(),
+            facts: Vec::new(),
+        };
+        assert_eq!(est(&op), "\u{2014}");
     }
 }

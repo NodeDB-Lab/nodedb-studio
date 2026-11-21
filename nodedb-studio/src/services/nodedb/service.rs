@@ -33,6 +33,12 @@ pub struct NodeDbConnectionService {
     // again. The OS keychain replaces this map.
     pub(super) secrets: RefCell<HashMap<String, String>>,
     pub(super) session: RefCell<Option<Session>>,
+    /// Studio's own records, saved queries and console history, by saved
+    /// connection name and signed-in user. A reconnect keeps them.
+    // ponytail: memory only, so a restart starts empty, and a renamed
+    // connection starts a new library. Persist it with `state::persist`
+    // when saved queries must survive a restart.
+    libraries: RefCell<HashMap<(String, String), WorkbenchStore>>,
 }
 
 /// The last statement `run_query` executed, kept so a page change reads the
@@ -54,6 +60,10 @@ pub(super) fn next_id() -> u64 {
 pub(super) struct Session {
     /// Tells this session from the one a reconnect replaces it with.
     pub id: u64,
+    /// The saved connection it opened. Blank outside `connect`.
+    pub connection: String,
+    /// The user the server signed in.
+    pub user: String,
     pub config: PoolConfig,
     /// The database session-scoped reads answer for.
     pub database: String,
@@ -63,23 +73,20 @@ pub(super) struct Session {
     /// The open transaction. Dropping the session closes its connection,
     /// and the server rolls back what a closed connection left open.
     pub tx: Option<Tx>,
-    /// Studio's own records: saved queries and console history.
-    // ponytail: memory only, so a reconnect or a restart starts empty.
-    // Persist it with `state::persist` when saved queries must survive.
-    pub local: WorkbenchStore,
 }
 
 impl Session {
     pub fn new(config: PoolConfig, database: String, server_version: String, user: &str) -> Self {
         Self {
             id: next_id(),
+            connection: String::new(),
+            user: user.to_string(),
             config,
             database,
             server_version,
             clients: HashMap::new(),
             last_run: None,
             tx: None,
-            local: WorkbenchStore::empty(user, now_epoch),
         }
     }
 
@@ -201,6 +208,23 @@ impl NodeDbConnectionService {
     pub(super) async fn table(&self, sql: &str) -> Result<Table, StudioError> {
         let client = self.client(None)?;
         Ok(to_table(&client.query(sql).await?))
+    }
+
+    /// Run `f` on Studio's own records for the session's connection and
+    /// user. Each user owns the queries they save.
+    pub(super) fn local<T>(
+        &self,
+        f: impl FnOnce(&mut WorkbenchStore) -> Result<T, StudioError>,
+    ) -> Result<T, StudioError> {
+        let key = {
+            let session = self.session.borrow();
+            let s = session.as_ref().ok_or(StudioError::NotConnected)?;
+            (s.connection.clone(), s.user.clone())
+        };
+        let mut libraries = self.libraries.borrow_mut();
+        f(libraries
+            .entry(key)
+            .or_insert_with_key(|(_, user)| WorkbenchStore::empty(user, now_epoch)))
     }
 }
 

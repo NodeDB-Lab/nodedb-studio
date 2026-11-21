@@ -120,7 +120,7 @@ pub fn query_plan(sql: &str, mode: ExplainMode) -> QueryPlan {
                 id: i as u32 + 1,
                 kind: op.kind,
                 target: op.target.map(str::to_string),
-                est_rows: op.est,
+                est_rows: Some(op.est),
                 actual_rows: analyzed.then_some(op.measured.0),
                 time_us: analyzed.then_some(op.measured.1),
                 input: (i + 1 < list.len()).then_some(i as u32 + 2),
@@ -137,5 +137,6 @@ pub fn query_plan(sql: &str, mode: ExplainMode) -> QueryPlan {
         mode,
         operators,
         elapsed_ms: (mode == ExplainMode::Analyze).then_some(31),
+        text: None,
     }
 }

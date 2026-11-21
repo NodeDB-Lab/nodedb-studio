@@ -1,6 +1,7 @@
 //! Query workbench over the native client. Statements, transactions, plans,
 //! the schema tree, and the Console reach the server. Saved queries and the
-//! console history are Studio's own records, kept in the session.
+//! console history are Studio's own records, kept per saved connection and
+//! user across reconnects.
 
 use std::time::Instant;
 
@@ -8,7 +9,6 @@ use async_trait::async_trait;
 use nodedb_client::{NodeDb, NodeDbError, QueryResult};
 use nodedb_types::Value;
 
-use crate::data::mock::WorkbenchStore;
 use crate::models::collection::Profile;
 use crate::models::console::{ConsoleOutput, ConsoleReply, HistoryEntry, HistoryQuery, Protocol};
 use crate::models::explorer::RecordRow;
@@ -25,6 +25,7 @@ use crate::services::error::StudioError;
 use crate::services::explorer_data::ExplorerData;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::nodedb::service::{LastRun, to_table};
+use crate::services::nodedb::workbench_sql::is_plain_read;
 use crate::services::nodedb::workbench_tx::read_only_unsupported;
 use crate::services::workbench_data::WorkbenchData;
 
@@ -53,29 +54,18 @@ impl NodeDbConnectionService {
         )
         .map(Some)
     }
-
-    /// Run `f` on the session's own records.
-    fn local<T>(
-        &self,
-        f: impl FnOnce(&mut WorkbenchStore) -> Result<T, StudioError>,
-    ) -> Result<T, StudioError> {
-        let mut session = self.session.borrow_mut();
-        f(&mut session.as_mut().ok_or(StudioError::NotConnected)?.local)
-    }
 }
 
 fn ms_since(started: Instant) -> u32 {
     u32::try_from(started.elapsed().as_millis()).unwrap_or(u32::MAX)
 }
 
-/// 0.6.2 answers EXPLAIN with the Rust debug text of its physical plan. It
-/// names no operator `QueryPlan` knows and gives no row estimate, which
-/// `QueryPlan` requires. The error carries the plan so the user still reads
-/// it.
-fn plan_unsupported(plan: &str) -> StudioError {
-    StudioError::Setup(NodeDbError::config(format!(
-        "NodeDB 0.6.2 gives no operator types or row estimates, so Studio cannot draw this plan. The server's plan:\n{plan}"
-    )))
+/// A page of a statement whose rows Studio no longer holds, and that can
+/// write. Running it again to read the page would repeat the write.
+fn run_again_first() -> StudioError {
+    StudioError::Setup(NodeDbError::bad_request(
+        "Studio no longer holds the rows of this statement, and running it again can repeat a write: run the statement again, then change the page",
+    ))
 }
 
 /// 0.6.2 has no EXPLAIN ANALYZE: it reports a parse error. Studio does not
@@ -240,11 +230,14 @@ impl WorkbenchData for NodeDbConnectionService {
             return Err(StudioError::EmptyStatement);
         }
         // A page change reads the buffered rows. Executing again would repeat
-        // a write.
-        if request.page > 0
-            && let Some(run) = self.buffered_page(request, sql)?
-        {
-            return Ok(run);
+        // a write, so only a plain read runs again for a page.
+        if request.page > 0 {
+            if let Some(run) = self.buffered_page(request, sql)? {
+                return Ok(run);
+            }
+            if !is_plain_read(sql) {
+                return Err(run_again_first());
+            }
         }
         let (positional, values) = if request.params.is_empty() {
             (sql.to_string(), Vec::new())
@@ -252,16 +245,28 @@ impl WorkbenchData for NodeDbConnectionService {
             bind_params(sql, &request.params)?
         };
         let started = Instant::now();
-        let (result, tx) = self
+        let ran = self
             .execute(&request.database, &positional, &values)
             .await?;
         let elapsed_ms = ms_since(started);
-        let run = build_run(&result, request.page, request.page_size, elapsed_ms, tx)?;
+        let mut run = build_run(
+            &ran.result,
+            request.page,
+            request.page_size,
+            elapsed_ms,
+            ran.tx,
+        )?;
+        if let Some(text) = ran.warning {
+            run.messages.push(QueryMessage {
+                level: MessageLevel::Warning,
+                text: text.to_string(),
+            });
+        }
         if let Some(session) = self.session.borrow_mut().as_mut() {
             session.last_run = Some(LastRun {
                 database: request.database.clone(),
                 sql: sql.to_string(),
-                result,
+                result: ran.result,
                 elapsed_ms,
             });
         }
@@ -292,7 +297,7 @@ impl WorkbenchData for NodeDbConnectionService {
         let plan = decode_rows(&to_table(&result), &["plan"], |r| {
             Ok(r.field("plan")?.to_string())
         })?;
-        Err(plan_unsupported(&plan.join("\n")))
+        Ok(QueryPlan::from_text(mode, plan.join("\n")))
     }
 
     async fn schema_tree(&self) -> Result<SchemaTree, StudioError> {
@@ -353,22 +358,22 @@ impl WorkbenchData for NodeDbConnectionService {
     }
 
     async fn transaction(&self) -> Result<TxState, StudioError> {
-        self.tx_state()
+        self.tx_checked().await
     }
 
     async fn begin_transaction(&self, access: TxAccess) -> Result<TxState, StudioError> {
         match access {
             TxAccess::ReadOnly => Err(read_only_unsupported()),
-            TxAccess::ReadWrite => self.begin_tx("", "BEGIN").await.map(|(_, tx)| tx),
+            TxAccess::ReadWrite => self.begin_tx("", "BEGIN").await.map(|ran| ran.tx),
         }
     }
 
     async fn commit_transaction(&self) -> Result<TxState, StudioError> {
-        self.end_tx(true).await.map(|(_, tx)| tx)
+        self.end_tx(true).await.map(|ran| ran.tx)
     }
 
     async fn rollback_transaction(&self) -> Result<TxState, StudioError> {
-        self.end_tx(false).await.map(|(_, tx)| tx)
+        self.end_tx(false).await.map(|ran| ran.tx)
     }
 
     async fn query_library(&self) -> Result<QueryLibrary, StudioError> {
@@ -409,11 +414,14 @@ impl WorkbenchData for NodeDbConnectionService {
         // SQL, admin commands such as `SHOW DATABASES`, and Cypher `MATCH`
         // all reach the server as statement text, so one path runs all three.
         let started = Instant::now();
-        let (result, tx) = self.execute(database, text, &[]).await?;
+        let ran = self.execute(database, text, &[]).await?;
         Ok(ConsoleReply {
-            output: console_output(&result),
+            output: match ran.warning {
+                Some(text) => ConsoleOutput::Text(vec![text.to_string()]),
+                None => console_output(&ran.result),
+            },
             elapsed_ms: ms_since(started),
-            tx,
+            tx: ran.tx,
         })
     }
 
@@ -574,12 +582,31 @@ mod tests {
             .await
             .expect("counts");
         assert_eq!(count.result.total_rows, 3);
-        // A page of a statement that was not just run executes.
+        // A page of a read that was not just run executes.
         let other = svc
             .run_query(&q("SELECT id FROM studio_probe_q_page", 1, 2))
             .await
             .expect("pages");
         assert_eq!(other.result.rows().len(), 1);
+        // A page of a write that was not just run does not run it again,
+        // in a transaction or out of one.
+        let again = svc.run_query(&q(insert, 1, 2)).await;
+        assert!(matches!(again, Err(StudioError::Setup(_))), "{again:?}");
+        svc.begin_transaction(TxAccess::ReadWrite)
+            .await
+            .expect("begins");
+        let again = svc.run_query(&q(insert, 1, 2)).await;
+        assert!(matches!(again, Err(StudioError::Setup(_))), "{again:?}");
+        assert!(matches!(
+            svc.transaction().await,
+            Ok(TxState::Active { .. })
+        ));
+        svc.rollback_transaction().await.expect("rolls back");
+        let count = svc
+            .run_query(&q("SELECT id FROM studio_probe_q_page", 0, 50))
+            .await
+            .expect("counts");
+        assert_eq!(count.result.total_rows, 3);
     }
 
     #[tokio::test]
@@ -618,25 +645,72 @@ mod tests {
         assert!(err.to_string().contains("parse error"), "got {err}");
     }
 
-    /// A session that never reached a server: everything Studio keeps
-    /// itself answers, and nothing touches the network.
-    fn offline() -> NodeDbConnectionService {
+    /// Sign `user` in on saved connection `probe`, as `connect` does, with
+    /// a session that never reached a server.
+    fn sign_in(svc: &NodeDbConnectionService, user: &str) {
         use nodedb_client::native::pool::PoolConfig;
         use nodedb_types::protocol::AuthMethod as WireAuth;
         let config = PoolConfig::new(
             "127.0.0.1:1",
             WireAuth::Trust {
-                username: "alice".into(),
+                username: user.into(),
             },
         );
-        let svc = NodeDbConnectionService::default();
-        *svc.session.borrow_mut() = Some(crate::services::nodedb::service::Session::new(
+        let mut session = crate::services::nodedb::service::Session::new(
             config,
             "default".into(),
             "0.6.2".into(),
-            "alice",
-        ));
+            user,
+        );
+        session.connection = "probe".into();
+        *svc.session.borrow_mut() = Some(session);
+    }
+
+    /// A session that never reached a server: everything Studio keeps
+    /// itself answers, and nothing touches the network.
+    fn offline() -> NodeDbConnectionService {
+        let svc = NodeDbConnectionService::default();
+        sign_in(&svc, "alice");
         svc
+    }
+
+    #[tokio::test]
+    async fn saved_queries_outlive_a_reconnect_and_belong_to_their_user() {
+        let svc = offline();
+        let made = svc.save_query(&save("Kept")).await.expect("saves");
+        sign_in(&svc, "alice");
+        let lib = svc.query_library().await.expect("reads");
+        assert_eq!(
+            lib.queries,
+            std::slice::from_ref(&made),
+            "a reconnect keeps them"
+        );
+        // Another user of the connection has a library of their own.
+        sign_in(&svc, "bob");
+        assert!(svc.query_library().await.expect("reads").queries.is_empty());
+        let theirs = svc.save_query(&save("Theirs")).await.expect("saves");
+        assert_eq!(theirs.owner, "bob");
+        sign_in(&svc, "alice");
+        let lib = svc.query_library().await.expect("reads");
+        assert_eq!(lib.queries, [made]);
+    }
+
+    /// A page of a write Studio no longer buffers is refused before
+    /// anything reaches the server.
+    #[tokio::test]
+    async fn a_page_of_an_unbuffered_write_does_not_run_it() {
+        let svc = offline();
+        for sql in [
+            "INSERT INTO t (id) VALUES ('a') RETURNING id",
+            "WITH d AS (DELETE FROM t RETURNING id) SELECT * FROM d",
+            "COMMIT",
+        ] {
+            let refused = svc.run_query(&q(sql, 1, 50)).await;
+            assert!(
+                matches!(&refused, Err(StudioError::Setup(e)) if e.to_string().contains("run the statement again")),
+                "{sql}: {refused:?}"
+            );
+        }
     }
 
     fn save(name: &str) -> SaveQuery {
@@ -847,23 +921,28 @@ mod tests {
         }
         let mut request = q(&format!("SELECT id FROM {t} WHERE n > :n;"), 0, 50);
         request.params = vec![ParamBinding::new("n", ParamType::Integer, "1")];
-        let err = svc
+        let plan = svc
             .explain(&request, ExplainMode::Explain)
             .await
-            .expect_err("0.6.2 has no plan Studio can draw");
-        assert!(matches!(err, StudioError::Setup(_)), "{err:?}");
-        let text = err.to_string();
+            .expect("0.6.2 plans as text");
+        let text = plan.text.expect("a text plan");
         assert!(text.contains("Scan") && text.contains(t), "{text}");
+        assert!(plan.operators.is_empty() && plan.elapsed_ms.is_none());
         let insert = q(&format!("INSERT INTO {t} (id, n) VALUES ('x', 1)"), 0, 50);
         assert!(matches!(
             svc.explain(&insert, ExplainMode::Analyze).await,
             Err(StudioError::Setup(_))
         ));
+        let planned = svc
+            .explain(&insert, ExplainMode::Explain)
+            .await
+            .expect("an INSERT plans");
+        assert!(planned.text.is_some());
         let rows = c
             .query(&format!("SELECT id FROM {t}"))
             .await
             .expect("reads");
-        assert!(rows.rows.is_empty(), "Analyze ran nothing");
+        assert!(rows.rows.is_empty(), "neither mode ran the INSERT");
         let bad = svc
             .explain(&q("SELEC 1", 0, 50), ExplainMode::Explain)
             .await

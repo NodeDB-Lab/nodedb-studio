@@ -12,23 +12,35 @@
 //! connection out of the session, awaits, and puts it back. A call that
 //! needs the connection meanwhile is refused, never queued. Reads outside the
 //! transaction (the catalog, the schema tree, EXPLAIN) use the pool.
+//!
+//! Every call on the pinned connection has a time limit. A call that runs
+//! past it, or a connection that dies, ends the transaction: Studio closes
+//! the connection and the server rolls back.
 
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use nodedb_client::native::connection::NativeConnection;
 use nodedb_client::native::pool::PoolConfig;
 use nodedb_client::{NativeClient, NodeDb, NodeDbError, QueryResult};
 use nodedb_types::Value;
-use nodedb_types::error::ErrorDetails;
 
 use crate::models::workbench::{TxAccess, TxState};
 use crate::services::error::StudioError;
 use crate::services::nodedb::NodeDbConnectionService;
 use crate::services::nodedb::service::next_id;
+use crate::services::nodedb::workbench_conn::{
+    CONTROL_LIMIT, Gone, STATEMENT_LIMIT, bounded, ended, failed_on, lost, open, status_of,
+};
+use crate::services::nodedb::workbench_sql::{Control, asks_read_only, control_of, resets_session};
 
-/// A failed block refuses every statement except transaction control. This
-/// read answers in an open block and is refused in a failed one.
-const PROBE: &str = "SHOW transaction_read_only";
+/// `tx_checked` asks the server after the connection sat idle this long.
+/// 0.6.2 closes a native session idle for `idle_timeout_secs` (3600 s by
+/// default) and rolls its transaction back.
+const IDLE_PROBE_AFTER: Duration = Duration::from_secs(30);
+
+/// Shown with a COMMIT that found the transaction failed.
+pub(super) const ROLLED_BACK: &str = "The transaction had failed, so Studio rolled it back instead of committing. Nothing was committed.";
 
 /// The open transaction.
 pub(super) struct Tx {
@@ -36,10 +48,15 @@ pub(super) struct Tx {
     id: u64,
     /// The database it runs on.
     database: String,
-    /// Statements that succeeded since BEGIN.
+    /// Statements that succeeded since BEGIN and that no ROLLBACK TO undid.
     statements: u32,
+    /// Each open savepoint, oldest first, with the statement count right
+    /// after it.
+    savepoints: Vec<(String, u32)>,
     /// A statement failed the transaction on the server.
     failed: bool,
+    /// When the last call on the connection finished.
+    used: Instant,
     /// `None` while a statement runs on it.
     conn: Option<NativeConnection>,
 }
@@ -55,118 +72,53 @@ impl Tx {
             }
         }
     }
-}
 
-/// Transaction control written as a statement.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Control {
-    Begin,
-    Commit,
-    Rollback,
-}
-
-/// The words of `sql`, upper-cased, as the server's transaction-control
-/// tokenizer reads them: comments skipped, a closing `;` allowed. `None`
-/// when anything follows the `;` or a token is not a word or a comma.
-fn words(sql: &str) -> Option<Vec<String>> {
-    let mut out = Vec::new();
-    let mut chars = sql.chars().peekable();
-    let mut ended = false;
-    while let Some(c) = chars.next() {
-        if c.is_whitespace() {
-            continue;
-        }
-        if c == '-' && chars.peek() == Some(&'-') {
-            chars.by_ref().find(|&n| n == '\n');
-            continue;
-        }
-        if c == '/' && chars.peek() == Some(&'*') {
-            chars.next();
-            let mut depth = 1usize;
-            while depth > 0 {
-                match chars.next()? {
-                    '*' if chars.peek() == Some(&'/') => {
-                        chars.next();
-                        depth -= 1;
-                    }
-                    '/' if chars.peek() == Some(&'*') => {
-                        chars.next();
-                        depth += 1;
-                    }
-                    _ => {}
+    /// Count a statement that succeeded. Savepoints follow the server: a
+    /// RELEASE drops the savepoint and every later one, and a ROLLBACK TO
+    /// keeps the savepoint and undoes every statement after it.
+    fn ran(&mut self, control: Option<&Control>) {
+        let at = |tx: &Self, name: &str| tx.savepoints.iter().rposition(|(n, _)| n == name);
+        match control {
+            Some(Control::Savepoint(name)) => {
+                self.statements += 1;
+                self.savepoints.push((name.clone(), self.statements));
+            }
+            Some(Control::Release(name)) => {
+                if let Some(i) = at(self, name) {
+                    self.savepoints.truncate(i);
                 }
+                self.statements += 1;
             }
-            continue;
-        }
-        if c == ';' {
-            ended = true;
-            continue;
-        }
-        if ended {
-            return None;
-        }
-        if c == ',' {
-            out.push(",".to_string());
-        } else if c.is_alphabetic() || c == '_' {
-            let mut word = String::from(c);
-            while let Some(&n) = chars
-                .peek()
-                .filter(|n| n.is_alphanumeric() || **n == '_' || **n == '$')
-            {
-                word.push(n);
-                chars.next();
+            Some(Control::RollbackTo(name)) => {
+                if let Some(i) = at(self, name) {
+                    self.statements = self.savepoints[i].1;
+                    self.savepoints.truncate(i + 1);
+                }
+                self.statements += 1;
             }
-            out.push(word.to_ascii_uppercase());
-        } else {
-            return None;
+            Some(Control::Begin | Control::Commit | Control::Rollback) | None => {
+                self.statements += 1;
+            }
         }
     }
-    Some(out)
 }
 
-/// The transaction control `sql` spells. COMMIT and ROLLBACK follow the
-/// server's grammar exactly, so `COMMIT OFFSETS ...` and `ROLLBACK TO s1`
-/// stay statements. Any `BEGIN` or `START TRANSACTION` counts, so no
-/// spelling the server accepts can open a transaction on a pooled
-/// connection.
-fn control_of(sql: &str) -> Option<Control> {
-    let words = words(sql)?;
-    let words: Vec<&str> = words.iter().map(String::as_str).collect();
-    let skip_noise = |rest: &[&str]| -> usize {
-        usize::from(matches!(rest.first(), Some(&("WORK" | "TRANSACTION"))))
-    };
-    let ends = |rest: &[&str]| matches!(&rest[skip_noise(rest)..], [] | ["AND", "NO", "CHAIN"]);
-    match words.as_slice() {
-        ["BEGIN", ..] | ["START", "TRANSACTION", ..] => Some(Control::Begin),
-        ["COMMIT" | "END", rest @ ..] if ends(rest) => Some(Control::Commit),
-        ["ROLLBACK" | "ABORT", rest @ ..] if ends(rest) => Some(Control::Rollback),
-        _ => None,
+/// A statement's result and the transaction state after it.
+pub(super) struct Ran {
+    pub result: QueryResult,
+    pub tx: TxState,
+    /// What the user must read with the result.
+    pub warning: Option<&'static str>,
+}
+
+impl Ran {
+    fn new(result: QueryResult, tx: TxState) -> Self {
+        Self {
+            result,
+            tx,
+            warning: None,
+        }
     }
-}
-
-/// Whether a BEGIN asks for a read-only transaction.
-fn asks_read_only(sql: &str) -> bool {
-    words(sql).is_some_and(|w| w.windows(2).any(|p| p[0] == "READ" && p[1] == "ONLY"))
-}
-
-/// The tag of a status row, such as `BEGIN` or `COMMIT`.
-fn status_of(result: &QueryResult) -> Option<&str> {
-    match (result.columns.as_slice(), result.rows.as_slice()) {
-        ([column], [row]) if column == "status" => row.first().and_then(Value::as_str),
-        _ => None,
-    }
-}
-
-/// The connection is gone: the client could not write or read the frame.
-fn is_dead(e: &NodeDbError) -> bool {
-    matches!(e.details(), ErrorDetails::SyncConnectionFailed)
-}
-
-/// The transaction ended with its connection. Nothing it wrote is committed.
-fn lost(detail: impl std::fmt::Display) -> StudioError {
-    StudioError::Connection(NodeDbError::sync_connection_failed(format!(
-        "the transaction ended and its uncommitted statements are gone: {detail}"
-    )))
 }
 
 fn busy() -> StudioError {
@@ -182,24 +134,6 @@ pub(super) fn read_only_unsupported() -> StudioError {
     StudioError::Setup(NodeDbError::config(
         "NodeDB 0.6.2 runs and commits writes inside BEGIN READ ONLY, so Studio opens read-write transactions only",
     ))
-}
-
-/// Open the connection a transaction pins, as the pool would.
-async fn open(config: &PoolConfig) -> Result<NativeConnection, StudioError> {
-    let connect = async {
-        let mut conn = if config.tls.enabled {
-            NativeConnection::connect_tls(&config.addr, &config.tls).await?
-        } else {
-            NativeConnection::connect(&config.addr).await?
-        };
-        conn.authenticate(config.auth.clone(), config.database.as_deref())
-            .await?;
-        Ok::<_, NodeDbError>(conn)
-    };
-    tokio::time::timeout(config.connect_timeout, connect)
-        .await
-        .map_err(|_| NodeDbError::sync_connection_failed("connect timeout"))?
-        .map_err(StudioError::from)
 }
 
 /// The transaction's connection, out of the session while a statement runs
@@ -225,6 +159,7 @@ impl Lease<'_> {
         {
             Some(tx) => {
                 tx.conn = conn;
+                tx.used = Instant::now();
                 update(tx);
                 Ok(tx.state())
             }
@@ -273,9 +208,49 @@ impl NodeDbConnectionService {
         Ok(session.tx.as_ref().map_or(TxState::Idle, Tx::state))
     }
 
-    /// Where a statement on `database` runs: in the open transaction when it
-    /// runs on that database, else on the pool.
-    fn route(&self, database: &str) -> Result<Route<'_>, StudioError> {
+    /// The session's transaction, checked with the server when its
+    /// connection sat idle. A connection the server closed ends the
+    /// transaction: this call reports the loss, and later calls read Idle.
+    pub(super) async fn tx_checked(&self) -> Result<TxState, StudioError> {
+        let mut lease = {
+            let mut session = self.session.borrow_mut();
+            let s = session.as_mut().ok_or(StudioError::NotConnected)?;
+            let Some(tx) = s.tx.as_mut() else {
+                return Ok(TxState::Idle);
+            };
+            if tx.used.elapsed() < IDLE_PROBE_AFTER {
+                return Ok(tx.state());
+            }
+            // A statement runs on it, so it is in use.
+            let Some(conn) = tx.conn.take() else {
+                return Ok(tx.state());
+            };
+            Lease {
+                svc: self,
+                id: tx.id,
+                conn: Some(conn),
+            }
+        };
+        let Some(conn) = lease.conn.as_mut() else {
+            return Err(busy());
+        };
+        match failed_on(conn).await {
+            Ok(failed) => lease.put_back(|tx| tx.failed = failed),
+            Err(Gone(detail)) => {
+                lease.end();
+                Err(lost(detail))
+            }
+        }
+    }
+
+    /// Where statement `sql` on `database` runs: in the open transaction
+    /// when it runs on that database, else on the pool.
+    fn route(
+        &self,
+        database: &str,
+        sql: &str,
+        control: Option<&Control>,
+    ) -> Result<Route<'_>, StudioError> {
         {
             let mut session = self.session.borrow_mut();
             let s = session.as_mut().ok_or(StudioError::NotConnected)?;
@@ -286,11 +261,17 @@ impl NodeDbConnectionService {
                 if tx.database != database {
                     return Err(StudioError::TransactionOpen);
                 }
-                if tx.failed {
+                // 0.6.2 drops the transaction on DISCARD ALL, then commits
+                // each later statement at once while Studio shows it open.
+                if resets_session(sql) {
+                    return Err(StudioError::TransactionOpen);
+                }
+                // The server runs ROLLBACK TO in a failed block: it rewinds
+                // to the savepoint and clears the failure.
+                if tx.failed && !matches!(control, Some(Control::RollbackTo(_))) {
                     return Err(StudioError::Rejected {
-                        reason:
-                            "the transaction failed: roll it back before running more statements"
-                                .to_string(),
+                        reason: "the transaction failed: roll it back, or back to a savepoint, before running more statements"
+                            .to_string(),
                     });
                 }
                 let conn = tx.conn.take().ok_or_else(busy)?;
@@ -311,64 +292,74 @@ impl NodeDbConnectionService {
         database: &str,
         sql: &str,
         values: &[Value],
-    ) -> Result<(QueryResult, TxState), StudioError> {
-        match control_of(sql) {
+    ) -> Result<Ran, StudioError> {
+        let control = control_of(sql);
+        match control {
             Some(Control::Begin) => return self.begin_tx(database, sql).await,
             Some(Control::Commit) => return self.end_tx(true).await,
             Some(Control::Rollback) => return self.end_tx(false).await,
-            None => {}
+            Some(Control::Savepoint(_) | Control::Release(_) | Control::RollbackTo(_)) | None => {}
         }
-        let mut lease = match self.route(database)? {
+        let mut lease = match self.route(database, sql, control.as_ref())? {
             Route::Pool(client) => {
                 let result = if values.is_empty() {
                     client.query(sql).await?
                 } else {
                     client.execute_sql(sql, values).await?
                 };
-                return Ok((result, TxState::Idle));
+                return Ok(Ran::new(result, TxState::Idle));
             }
             Route::Tx(lease) => lease,
         };
         let Some(conn) = lease.conn.as_mut() else {
             return Err(busy());
         };
-        let failure = match conn.execute_sql_with_params(sql, values).await {
+        let answer = match bounded(STATEMENT_LIMIT, conn.execute_sql_with_params(sql, values)).await
+        {
+            Err(Gone(detail)) => {
+                lease.end();
+                return Err(lost(detail));
+            }
             // A COMMIT the classifier missed still ends the transaction.
-            Ok(result) if status_of(&result) == Some("COMMIT") => {
+            Ok(Ok(result)) if status_of(&result) == Some("COMMIT") => {
                 lease.end();
-                return Ok((result, TxState::Idle));
+                return Ok(Ran::new(result, TxState::Idle));
             }
+            Ok(answer) => answer,
+        };
+        // 0.6.2 fails the transaction on a planning or execution error, keeps
+        // it open on a DDL error, and clears a failure on ROLLBACK TO. Ask
+        // the server which one holds.
+        let ask = answer.is_err() || matches!(control, Some(Control::RollbackTo(_)));
+        let failed = if ask {
+            match failed_on(conn).await {
+                Ok(failed) => failed,
+                Err(Gone(detail)) => {
+                    lease.end();
+                    return Err(lost(detail));
+                }
+            }
+        } else {
+            false
+        };
+        match answer {
             Ok(result) => {
-                let state = lease.put_back(|tx| tx.statements += 1)?;
-                return Ok((result, state));
+                let tx = lease.put_back(|tx| {
+                    tx.ran(control.as_ref());
+                    tx.failed = failed;
+                })?;
+                Ok(Ran::new(result, tx))
             }
-            Err(e) => e,
-        };
-        if is_dead(&failure) {
-            lease.end();
-            return Err(lost(failure));
+            Err(e) => {
+                lease.put_back(|tx| tx.failed = failed)?;
+                Err(e.into())
+            }
         }
-        // 0.6.2 fails the transaction on a planning or execution error and
-        // keeps it open on a DDL error. Ask the server which one this was.
-        let failed = match conn.execute_sql(PROBE).await {
-            Ok(_) => false,
-            Err(e) if is_dead(&e) => {
-                lease.end();
-                return Err(lost(e));
-            }
-            Err(_) => true,
-        };
-        lease.put_back(|tx| tx.failed = failed)?;
-        Err(failure.into())
     }
 
     /// Open a transaction on `database` by running `sql`, a BEGIN, on a new
     /// connection.
-    pub(super) async fn begin_tx(
-        &self,
-        database: &str,
-        sql: &str,
-    ) -> Result<(QueryResult, TxState), StudioError> {
+    pub(super) async fn begin_tx(&self, database: &str, sql: &str) -> Result<Ran, StudioError> {
         if asks_read_only(sql) {
             return Err(read_only_unsupported());
         }
@@ -386,9 +377,17 @@ impl NodeDbConnectionService {
             (s.id, database, config)
         };
         let mut conn = open(&config).await?;
-        let result = conn.execute_sql(sql).await?;
+        // Dropping `conn` on any way out closes it, and the server rolls
+        // back whatever it opened.
+        let result = match bounded(CONTROL_LIMIT, conn.execute_sql(sql)).await {
+            Ok(answer) => answer?,
+            Err(Gone(detail)) => {
+                return Err(StudioError::Connection(
+                    NodeDbError::sync_connection_failed(detail),
+                ));
+            }
+        };
         // Anything but the BEGIN tag means the server did not open a block.
-        // Dropping `conn` closes it.
         if status_of(&result) != Some("BEGIN") {
             return Err(StudioError::Setup(NodeDbError::bad_request(format!(
                 "the server did not open a transaction for `{sql}`"
@@ -407,18 +406,20 @@ impl NodeDbConnectionService {
             id: next_id(),
             database,
             statements: 0,
+            savepoints: Vec::new(),
             failed: false,
+            used: Instant::now(),
             conn: Some(conn),
         };
         let state = tx.state();
         s.tx = Some(tx);
-        Ok((result, state))
+        Ok(Ran::new(result, state))
     }
 
     /// Commit the open transaction, or roll it back. A failed transaction
-    /// always rolls back: 0.6.2 answers COMMIT in a failed block by
-    /// committing the writes made before the failure.
-    pub(super) async fn end_tx(&self, commit: bool) -> Result<(QueryResult, TxState), StudioError> {
+    /// always rolls back, with a warning: 0.6.2 answers COMMIT in a failed
+    /// block by committing the writes made before the failure.
+    pub(super) async fn end_tx(&self, commit: bool) -> Result<Ran, StudioError> {
         let (mut lease, failed) = {
             let mut session = self.session.borrow_mut();
             let s = session.as_mut().ok_or(StudioError::NotConnected)?;
@@ -431,109 +432,160 @@ impl NodeDbConnectionService {
             };
             (lease, tx.failed)
         };
-        let sql = if commit && !failed {
-            "COMMIT"
-        } else {
-            "ROLLBACK"
-        };
-        let out = match lease.conn.as_mut() {
-            Some(conn) => conn.execute_sql(sql).await,
+        let committing = commit && !failed;
+        let sql = if committing { "COMMIT" } else { "ROLLBACK" };
+        let answer = match lease.conn.as_mut() {
+            Some(conn) => bounded(CONTROL_LIMIT, conn.execute_sql(sql)).await,
             None => return Err(busy()),
         };
-        // Whatever the server answered, the transaction is over. A refused
-        // COMMIT rolled back on the server, and closing the connection rolls
-        // back anything left.
+        // Whatever the server answered, the transaction is over.
         lease.end();
-        match out {
-            Ok(result) => Ok((result, TxState::Idle)),
-            Err(e) if is_dead(&e) => Err(lost(e)),
-            Err(e) => Err(e.into()),
-        }
+        Ok(Ran {
+            result: ended(committing, answer)?,
+            tx: TxState::Idle,
+            warning: (commit && failed).then_some(ROLLED_BACK),
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use nodedb_types::protocol::AuthMethod as WireAuth;
+
     use super::*;
+    use crate::services::nodedb::service::Session;
 
-    #[test]
-    fn begin_in_any_spelling_is_control() {
-        for sql in [
-            "BEGIN",
-            "begin;",
-            "Begin Work",
-            "START TRANSACTION",
-            "start transaction isolation level serializable, read only ;",
-            "-- open\nBEGIN /* a /* nested */ note */",
-            "BEGIN FOO",
-        ] {
-            assert_eq!(control_of(sql), Some(Control::Begin), "{sql}");
+    fn tx(used: Instant) -> Tx {
+        Tx {
+            id: next_id(),
+            database: "default".into(),
+            statements: 0,
+            savepoints: Vec::new(),
+            failed: false,
+            used,
+            conn: None,
         }
     }
 
     #[test]
-    fn commit_and_rollback_follow_the_server_grammar() {
-        for sql in [
-            "COMMIT",
-            "commit work",
-            "END TRANSACTION;",
-            "COMMIT AND NO CHAIN",
-        ] {
-            assert_eq!(control_of(sql), Some(Control::Commit), "{sql}");
-        }
-        for sql in ["ROLLBACK", "abort work", "ROLLBACK -- end the block\n"] {
-            assert_eq!(control_of(sql), Some(Control::Rollback), "{sql}");
-        }
+    fn rollback_to_a_savepoint_undoes_the_count_after_it() {
+        let mut tx = tx(Instant::now());
+        let sp = |n: &str| Control::Savepoint(n.into());
+        let to = |n: &str| Control::RollbackTo(n.into());
+        tx.ran(None);
+        tx.ran(Some(&sp("a")));
+        tx.ran(None);
+        tx.ran(Some(&sp("b")));
+        tx.ran(None);
+        tx.ran(Some(&to("b")));
+        assert_eq!(tx.statements, 5, "four up to b, and the ROLLBACK TO");
+        assert_eq!(tx.savepoints.len(), 2, "b stays");
+        tx.ran(Some(&to("a")));
+        assert_eq!(tx.statements, 3);
+        assert_eq!(tx.savepoints, [("a".to_string(), 2)], "b is gone");
+        tx.ran(Some(&Control::Release("a".into())));
+        assert_eq!(tx.statements, 4);
+        assert!(tx.savepoints.is_empty());
+        // A name Studio does not hold changes only the count.
+        tx.ran(Some(&to("x")));
+        assert_eq!(tx.statements, 5);
     }
 
     #[test]
-    fn statements_that_only_look_like_control_are_statements() {
-        for sql in [
-            "SELECT 1",
-            "BEGINNING",
-            "ROLLBACK TO s1",
-            "ROLLBACK TO SAVEPOINT s1",
-            "COMMIT AND CHAIN",
-            "COMMIT OFFSETS ON s CONSUMER GROUP g",
-            "SAVEPOINT s1",
-            "BEGIN; SELECT 1",
-            "",
-        ] {
-            assert_eq!(control_of(sql), None, "{sql}");
-        }
+    fn a_reused_savepoint_name_means_the_latest() {
+        let mut tx = tx(Instant::now());
+        tx.ran(Some(&Control::Savepoint("a".into())));
+        tx.ran(None);
+        tx.ran(Some(&Control::Savepoint("a".into())));
+        tx.ran(None);
+        tx.ran(Some(&Control::RollbackTo("a".into())));
+        assert_eq!(tx.statements, 4);
+        assert_eq!(tx.savepoints.len(), 2);
     }
 
-    #[test]
-    fn read_only_is_found_among_the_modes() {
-        assert!(asks_read_only("BEGIN READ ONLY"));
-        assert!(asks_read_only(
-            "start transaction isolation level serializable, read only;"
-        ));
-        assert!(!asks_read_only("BEGIN READ WRITE"));
-        assert!(!asks_read_only("BEGIN"));
+    /// A service whose session holds `tx` and never reached a server.
+    fn holding(tx: Tx) -> NodeDbConnectionService {
+        let config = PoolConfig::new(
+            "127.0.0.1:1",
+            WireAuth::Trust {
+                username: "alice".into(),
+            },
+        );
+        let svc = NodeDbConnectionService::default();
+        let mut session = Session::new(config, "default".into(), "0.6.2".into(), "alice");
+        session.tx = Some(tx);
+        *svc.session.borrow_mut() = Some(session);
+        svc
     }
 
-    #[test]
-    fn a_status_row_names_its_tag() {
-        let row = |cols: &[&str], tag: &str| QueryResult {
-            columns: cols.iter().map(|c| c.to_string()).collect(),
-            rows: vec![vec![Value::String(tag.into())]],
-            rows_affected: 1,
-            command: None,
+    #[tokio::test]
+    async fn the_state_read_asks_the_server_only_after_idle() {
+        let active = TxState::Active {
+            access: TxAccess::ReadWrite,
+            statements: 0,
         };
-        assert_eq!(status_of(&row(&["status"], "BEGIN")), Some("BEGIN"));
-        assert_eq!(status_of(&row(&["id"], "BEGIN")), None);
+        // Used just now: no probe, so no network.
+        let svc = holding(tx(Instant::now()));
+        assert_eq!(svc.tx_checked().await.expect("reads"), active);
+        // Idle, but a statement holds the connection: it is in use.
+        let long_ago = Instant::now()
+            .checked_sub(IDLE_PROBE_AFTER * 2)
+            .expect("the clock runs long enough");
+        let svc = holding(tx(long_ago));
+        assert_eq!(svc.tx_checked().await.expect("reads"), active);
     }
 
     mod live {
-        use crate::models::console::{ConsoleOutput, Protocol};
-        use crate::models::workbench::{QueryRequest, TxAccess, TxState};
+        use std::time::{Duration, Instant};
+
+        use super::super::IDLE_PROBE_AFTER;
+        use crate::models::console::{ConsoleOutput, HistoryQuery, HistoryWindow, Protocol};
+        use crate::models::saved_query::SaveQuery;
+        use crate::models::workbench::{MessageLevel, QueryRequest, TxAccess, TxState};
         use crate::services::connection_service::ConnectionService;
         use crate::services::error::StudioError;
         use crate::services::nodedb::NodeDbConnectionService;
         use crate::services::nodedb::service::{live, to_table};
+        use crate::services::nodedb::workbench_conn::is_dead;
         use crate::services::workbench_data::WorkbenchData;
         use crate::state::connections_registry::Credentials;
+
+        /// Kill the transaction's connection, as a server that closed it
+        /// leaves it, and make it look idle. A frame over the server's
+        /// 16 MiB limit makes the server answer an error and close the
+        /// connection.
+        async fn kill_pinned(svc: &NodeDbConnectionService) {
+            let mut conn = svc
+                .session
+                .borrow_mut()
+                .as_mut()
+                .and_then(|s| s.tx.as_mut())
+                .and_then(|tx| tx.conn.take())
+                .expect("a pinned connection");
+            let huge = format!("SELECT '{}'", "x".repeat(17 * 1024 * 1024));
+            let out = tokio::time::timeout(Duration::from_secs(30), conn.execute_sql(&huge))
+                .await
+                .expect("the server answers in time");
+            assert!(
+                out.as_ref().is_err_and(is_dead),
+                "the connection is dead: {out:?}"
+            );
+            let mut session = svc.session.borrow_mut();
+            let tx = session
+                .as_mut()
+                .and_then(|s| s.tx.as_mut())
+                .expect("still open in Studio");
+            tx.conn = Some(conn);
+            tx.used = Instant::now()
+                .checked_sub(IDLE_PROBE_AFTER * 2)
+                .expect("the clock runs long enough");
+        }
+
+        fn unknown_outcome(e: &StudioError) -> bool {
+            matches!(e, StudioError::Connection(_))
+                && !e.is_retriable()
+                && e.to_string().contains("can have committed")
+        }
 
         fn q(sql: &str) -> QueryRequest {
             QueryRequest {
@@ -786,6 +838,22 @@ mod tests {
             svc.run_query(&q(&format!("INSERT INTO {t} (id, n) VALUES ('a', 1)")))
                 .await
                 .expect("inserts");
+            // Studio's own records outlive the session.
+            let saved = svc
+                .save_query(&SaveQuery {
+                    id: None,
+                    name: "studio_probe_w_saved".into(),
+                    folder: None,
+                    database: "default".into(),
+                    sql: "SELECT 1".into(),
+                    params: Vec::new(),
+                    tags: Vec::new(),
+                })
+                .await
+                .expect("saves");
+            svc.console_run(Protocol::Sql, "", "SELECT 2")
+                .await
+                .expect("runs");
             let creds = Credentials {
                 username: std::env::var("NODEDB_PROBE_USER").expect("set NODEDB_PROBE_USER"),
                 password: None,
@@ -793,8 +861,194 @@ mod tests {
             svc.connect("probe", &creds).await.expect("reconnects");
             assert_eq!(svc.transaction().await.expect("state"), TxState::Idle);
             assert!(outside(&svc, t).await.is_empty());
+            let library = svc.query_library().await.expect("reads");
+            assert_eq!(library.queries, std::slice::from_ref(&saved));
+            assert_eq!(saved.owner, creds.username);
+            let history = svc
+                .console_history(&HistoryQuery {
+                    protocol: None,
+                    window: HistoryWindow::AllTime,
+                })
+                .await
+                .expect("reads");
+            assert!(history.iter().any(|h| h.text == "SELECT 2"));
             assert!(svc.begin_transaction(TxAccess::ReadWrite).await.is_ok());
             svc.rollback_transaction().await.expect("rolls back");
+        }
+
+        #[tokio::test]
+        #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+        async fn live_tx_discard_all_is_refused_inside_a_transaction() {
+            let svc = live().await;
+            let t = "studio_probe_w_tx_discard";
+            seed(&svc, t).await;
+            svc.begin_transaction(TxAccess::ReadWrite)
+                .await
+                .expect("begins");
+            svc.run_query(&q(&format!("INSERT INTO {t} (id, n) VALUES ('a', 1)")))
+                .await
+                .expect("inserts");
+            // 0.6.2 would drop the transaction, then commit each later
+            // statement at once while Studio showed it open.
+            for sql in ["DISCARD ALL", "discard all;", "/* reset */ DISCARD ALL"] {
+                let refused = svc.run_query(&q(sql)).await;
+                assert!(
+                    matches!(refused, Err(StudioError::TransactionOpen)),
+                    "{sql}: {refused:?}"
+                );
+            }
+            assert!(matches!(
+                svc.console_run(Protocol::Sql, "", "DISCARD ALL").await,
+                Err(StudioError::TransactionOpen)
+            ));
+            assert_eq!(svc.transaction().await.expect("state"), active(1));
+            svc.run_query(&q(&format!("INSERT INTO {t} (id, n) VALUES ('b', 1)")))
+                .await
+                .expect("inserts");
+            svc.rollback_transaction().await.expect("rolls back");
+            assert!(outside(&svc, t).await.is_empty(), "nothing escaped");
+            // Outside a transaction it runs on the pool.
+            assert!(svc.run_query(&q("DISCARD ALL")).await.is_ok());
+        }
+
+        #[tokio::test]
+        #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+        async fn live_tx_rollback_to_a_savepoint_clears_a_failure() {
+            let svc = live().await;
+            let t = "studio_probe_w_tx_savepoint";
+            seed(&svc, t).await;
+            let insert = |id: &str| q(&format!("INSERT INTO {t} (id, n) VALUES ('{id}', 1)"));
+            svc.begin_transaction(TxAccess::ReadWrite)
+                .await
+                .expect("begins");
+            svc.run_query(&insert("a")).await.expect("inserts");
+            let sp = svc.run_query(&q("SAVEPOINT s")).await.expect("marks");
+            assert_eq!(sp.tx, active(2));
+            svc.run_query(&insert("b")).await.expect("inserts");
+            assert!(
+                svc.run_query(&q("SELECT * FROM studio_probe_w_missing"))
+                    .await
+                    .is_err()
+            );
+            assert_eq!(svc.transaction().await.expect("state"), TxState::Failed);
+            // The server runs ROLLBACK TO in a failed block and clears it.
+            let back = svc
+                .run_query(&q("rollback to savepoint s"))
+                .await
+                .expect("rewinds");
+            assert_eq!(
+                back.tx,
+                active(3),
+                "the two statements before s, and this one"
+            );
+            let seen = svc
+                .run_query(&q(&format!("SELECT id FROM {t}")))
+                .await
+                .expect("selects");
+            assert_eq!(seen.result.total_rows, 1, "b is gone, a stays");
+            // A quoted name keeps its case, as on the server.
+            svc.run_query(&q(r#"SAVEPOINT "Q""#)).await.expect("marks");
+            svc.run_query(&insert("c")).await.expect("inserts");
+            let back = svc
+                .console_run(Protocol::Sql, "", r#"ROLLBACK TO "Q";"#)
+                .await
+                .expect("rewinds");
+            assert_eq!(back.tx, active(6));
+            // A savepoint that does not exist fails the statement only.
+            assert!(svc.run_query(&q("ROLLBACK TO nope")).await.is_err());
+            assert_eq!(svc.transaction().await.expect("state"), active(6));
+            svc.run_query(&q("RELEASE SAVEPOINT s"))
+                .await
+                .expect("releases");
+            svc.commit_transaction().await.expect("commits");
+            assert_eq!(outside(&svc, t).await, ["a"]);
+        }
+
+        #[tokio::test]
+        #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+        async fn live_tx_a_typed_commit_on_a_failed_transaction_warns() {
+            let svc = live().await;
+            let t = "studio_probe_w_tx_warn";
+            seed(&svc, t).await;
+            let fail = q("SELECT * FROM studio_probe_w_missing");
+            svc.begin_transaction(TxAccess::ReadWrite)
+                .await
+                .expect("begins");
+            svc.run_query(&q(&format!("INSERT INTO {t} (id, n) VALUES ('a', 1)")))
+                .await
+                .expect("inserts");
+            assert!(svc.run_query(&fail).await.is_err());
+            let run = svc.run_query(&q("commit")).await.expect("ends");
+            assert_eq!(run.tx, TxState::Idle);
+            assert!(
+                run.messages
+                    .iter()
+                    .any(|m| m.level == MessageLevel::Warning && m.text.contains("rolled it back")),
+                "{:?}",
+                run.messages
+            );
+            svc.console_run(Protocol::Sql, "", "BEGIN")
+                .await
+                .expect("begins");
+            svc.run_query(&q(&format!("INSERT INTO {t} (id, n) VALUES ('b', 1)")))
+                .await
+                .expect("inserts");
+            assert!(svc.run_query(&fail).await.is_err());
+            let reply = svc
+                .console_run(Protocol::Sql, "", "END;")
+                .await
+                .expect("ends");
+            assert_eq!(reply.tx, TxState::Idle);
+            let ConsoleOutput::Text(lines) = reply.output else {
+                panic!("a warning line, got {:?}", reply.output);
+            };
+            assert!(lines.iter().any(|l| l.contains("Nothing was committed")));
+            assert!(outside(&svc, t).await.is_empty());
+        }
+
+        #[tokio::test]
+        #[ignore = "needs a live NodeDB 0.6.2 server: see `live`"]
+        async fn live_tx_a_lost_connection_ends_the_transaction() {
+            let svc = live().await;
+            let t = "studio_probe_w_tx_lost";
+            seed(&svc, t).await;
+            let insert = |id: &str| q(&format!("INSERT INTO {t} (id, n) VALUES ('{id}', 1)"));
+            svc.begin_transaction(TxAccess::ReadWrite)
+                .await
+                .expect("begins");
+            svc.run_query(&insert("a")).await.expect("inserts");
+            kill_pinned(&svc).await;
+            // The badge read finds the loss and reports it once.
+            let lost = svc.transaction().await.expect_err("the loss is reported");
+            assert!(matches!(lost, StudioError::Connection(_)), "{lost:?}");
+            assert_eq!(svc.transaction().await.expect("state"), TxState::Idle);
+            assert!(outside(&svc, t).await.is_empty());
+            // COMMIT with no answer: the outcome is unknown, and no Retry.
+            svc.begin_transaction(TxAccess::ReadWrite)
+                .await
+                .expect("begins");
+            svc.run_query(&insert("b")).await.expect("inserts");
+            kill_pinned(&svc).await;
+            let unknown = svc.commit_transaction().await.expect_err("no answer");
+            assert!(unknown_outcome(&unknown), "{unknown:?}");
+            assert_eq!(svc.transaction().await.expect("state"), TxState::Idle);
+            svc.console_run(Protocol::Sql, "", "BEGIN")
+                .await
+                .expect("begins");
+            kill_pinned(&svc).await;
+            let unknown = svc
+                .console_run(Protocol::Sql, "", "COMMIT;")
+                .await
+                .expect_err("no answer");
+            assert!(unknown_outcome(&unknown), "{unknown:?}");
+            // ROLLBACK with no answer: the server rolled back on close.
+            svc.begin_transaction(TxAccess::ReadWrite)
+                .await
+                .expect("begins");
+            kill_pinned(&svc).await;
+            let gone = svc.rollback_transaction().await.expect_err("no answer");
+            assert!(gone.to_string().contains("uncommitted statements are gone"));
+            assert!(outside(&svc, t).await.is_empty());
         }
 
         #[tokio::test]

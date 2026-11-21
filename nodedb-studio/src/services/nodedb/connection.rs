@@ -206,8 +206,11 @@ impl ConnectionService for NodeDbConnectionService {
                 c.summary()
             })
             .unwrap_or_default();
-        *self.session.borrow_mut() =
-            Some(Session::new(config, database.clone(), seen.version, &user));
+        let mut session = Session::new(config, database.clone(), seen.version, &user);
+        // Studio's own records belong to the saved connection, so a
+        // reconnect finds them.
+        session.connection = name.to_string();
+        *self.session.borrow_mut() = Some(session);
         Ok(ActiveConnection {
             name: name.to_string(),
             sub,
@@ -227,6 +230,17 @@ impl ConnectionService for NodeDbConnectionService {
                 // ponytail: assumes the user can write. Read the session's
                 // grants when a read-only login must hide the write actions.
                 readonly: false,
+                // 0.6.2 cannot do these, so the UI must not offer them.
+                // Records carry a content fingerprint, not a revision.
+                record_revisions: false,
+                // It accepts BEGIN READ ONLY, then runs writes inside it.
+                read_only_transactions: false,
+                // No statement describes an array.
+                arrays: false,
+                // No source for the Backups, Config and Credentials tabs.
+                backups: false,
+                config: false,
+                credentials: false,
             },
             current_database: database,
         })
