@@ -10,7 +10,7 @@
 //! when the hash differs. Another administrator's change that lands between
 //! that read and the statement is not caught.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 use async_trait::async_trait;
@@ -103,6 +103,31 @@ impl NodeDbConnectionService {
         access::database_names(&self.table("SHOW DATABASES").await?)
     }
 
+    /// `sql` in `db`, or `None` when `db` refused the caller or is gone:
+    /// `skipped` then names it with the reason. A skipped database is not
+    /// asked again.
+    async fn in_database(
+        &self,
+        db: &str,
+        sql: &str,
+        skipped: &mut BTreeMap<String, String>,
+    ) -> Result<Option<Table>, StudioError> {
+        if skipped.contains_key(db) {
+            return Ok(None);
+        }
+        match self.client(Some(db))?.query(sql).await {
+            Ok(r) => Ok(Some(to_table(&r))),
+            Err(e) => {
+                let e = StudioError::from(e);
+                if !access::refused(&e) {
+                    return Err(e);
+                }
+                skipped.insert(db.to_string(), e.to_string());
+                Ok(None)
+            }
+        }
+    }
+
     /// The grants made to `wanted`, each in its database. Bare `SHOW
     /// PERMISSIONS` names no database, so each name is asked again in every
     /// database. Tenant-wide grants show only under `FOR <role>`.
@@ -111,6 +136,7 @@ impl NodeDbConnectionService {
         wanted: &HashSet<String>,
         databases: &[String],
         tenant: u64,
+        skipped: &mut BTreeMap<String, String>,
     ) -> Result<Vec<Grant>, StudioError> {
         let ours = |rows: Vec<PermRow>| -> Vec<PermRow> {
             rows.into_iter()
@@ -127,10 +153,12 @@ impl NodeDbConnectionService {
         names.dedup();
         let mut per_db = Vec::new();
         for db in databases {
-            let client = self.client(Some(db))?;
             let mut rows = Vec::new();
             for name in &names {
-                let t = to_table(&client.query(&format!("SHOW PERMISSIONS ON {name}")).await?);
+                let sql = format!("SHOW PERMISSIONS ON {name}");
+                let Some(t) = self.in_database(db, &sql, skipped).await? else {
+                    break;
+                };
                 rows.extend(ours(access::permissions(&t)?));
             }
             per_db.push((db.clone(), rows));
@@ -148,10 +176,13 @@ impl NodeDbConnectionService {
         &self,
         user: &str,
         databases: &[String],
+        skipped: &mut BTreeMap<String, String>,
     ) -> Result<Vec<(String, String)>, StudioError> {
         let mut out = Vec::new();
         for db in databases {
-            let t = to_table(&self.client(Some(db))?.query("SHOW COLLECTIONS").await?);
+            let Some(t) = self.in_database(db, "SHOW COLLECTIONS", skipped).await? else {
+                continue;
+            };
             out.extend(
                 access::owners(&t)?
                     .into_iter()
@@ -168,6 +199,7 @@ impl NodeDbConnectionService {
         query: &AuditQuery,
         now: i64,
     ) -> Result<audit::Fetched, StudioError> {
+        let caller = self.caller().await?;
         let client = self.client(None)?;
         let n = audit::FETCH_LIMIT as u64 + 1;
         let from = now
@@ -183,8 +215,11 @@ impl NodeDbConnectionService {
         };
         // The fresh read runs first: a flush between the two reads moves
         // rows into the catalog, where the stored read finds them.
-        let fresh = audit::events(&to_table(&client.execute_sql(sql, &params).await?))?;
-        let stored = audit::events(&self.table(&format!("SHOW AUDIT LOG LIMIT {n}")).await?)?;
+        let fresh = audit::events(&to_table(&client.execute_sql(sql, &params).await?), caller)?;
+        let stored = audit::events(
+            &self.table(&format!("SHOW AUDIT LOG LIMIT {n}")).await?,
+            caller,
+        )?;
         let gap = match stored.first() {
             Some((newest, _)) if stored.len() > audit::FETCH_LIMIT => {
                 let t = to_table(&client.execute_sql(audit::ONE_SQL, &[int(*newest)]).await?);
@@ -219,12 +254,19 @@ impl AdminData for NodeDbConnectionService {
         let rows = self.tenant_rows().await?;
         let wanted = grants::grantees(subject, &rows.users, &rows.roles)?;
         let databases = self.database_list().await?;
-        let held = self.grants_to(&wanted, &databases, rows.tenant).await?;
+        // A tenant administrator sees every database and opens only some.
+        let mut skipped = BTreeMap::new();
+        let held = self
+            .grants_to(&wanted, &databases, rows.tenant, &mut skipped)
+            .await?;
         let owned = match subject {
-            AccessSubject::Principal(id) => self.owned_by(id, &databases).await?,
+            AccessSubject::Principal(id) => self.owned_by(id, &databases, &mut skipped).await?,
             AccessSubject::Role(_) => vec![],
         };
-        grants::subject_access(subject, &rows.users, &rows.roles, &held, &owned, now())
+        let mut held =
+            grants::subject_access(subject, &rows.users, &rows.roles, &held, &owned, now())?;
+        held.unreported.extend(access::skipped_notes(&skipped));
+        Ok(held)
     }
 
     async fn policy_set(&self, database: &str) -> Result<PolicySet, StudioError> {
@@ -269,9 +311,11 @@ impl AdminData for NodeDbConnectionService {
     }
 
     async fn audit_facets(&self) -> Result<AuditFacets, StudioError> {
+        let caller = self.caller().await?;
         let mut actors: Vec<String> = access::users(&self.table("SHOW USERS").await?)?
             .into_iter()
-            .map(|u| u.name)
+            .filter(|u| caller.superuser || u.tenant == caller.tenant)
+            .map(|u| audit::actor_label(&u.name, u.tenant, caller))
             .collect();
         actors.sort();
         actors.dedup();
@@ -297,12 +341,17 @@ impl AdminData for NodeDbConnectionService {
             id: id.to_string(),
         };
         let seq: u64 = id.parse().map_err(|_| unknown())?;
+        let caller = self.caller().await?;
         let client = self.client(None)?;
-        let fresh = audit::events(&to_table(
-            &client.execute_sql(audit::ONE_SQL, &[int(seq)]).await?,
-        ))?;
+        let fresh = audit::events(
+            &to_table(&client.execute_sql(audit::ONE_SQL, &[int(seq)]).await?),
+            caller,
+        )?;
         let n = audit::FETCH_LIMIT + 1;
-        let stored = audit::events(&self.table(&format!("SHOW AUDIT LOG LIMIT {n}")).await?)?;
+        let stored = audit::events(
+            &self.table(&format!("SHOW AUDIT LOG LIMIT {n}")).await?,
+            caller,
+        )?;
         audit::find(fresh, stored, seq).ok_or_else(unknown)
     }
 
@@ -436,11 +485,13 @@ impl AdminData for NodeDbConnectionService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::admin_access::{AccessChange, EVERY, PrincipalKind, Privilege};
+    use crate::models::admin_access::{
+        AccessChange, EVERY, HOLDER_DATABASES, PrincipalKind, Privilege,
+    };
     use crate::models::admin_audit::AuditRange;
     use crate::models::admin_policy::{PolicyChange, PolicyDraft};
     use crate::services::nodedb::admin_user::live::users_lock;
-    use crate::services::nodedb::service::live;
+    use crate::services::nodedb::service::{live, live_as};
 
     const USER: &str = "studio_probe_a_t_user";
     const ROLE: &str = "studio_probe_a_t_role";
@@ -729,7 +780,8 @@ mod tests {
         for want in [
             (Some(DB2), coll, Privilege::Drop),
             (Some(DB2), coll, Privilege::Admin),
-            (Some(EVERY), EVERY, Privilege::Select),
+            // A tenant-wide grant reaches the databases a holder can open.
+            (Some(HOLDER_DATABASES), EVERY, Privilege::Select),
         ] {
             assert!(held.contains(&want), "{want:?} in {held:?}");
         }
@@ -755,6 +807,130 @@ mod tests {
             && e.source == "superuser account"));
 
         quietly_in(&svc, Some(DB2), &refs(&in_db2)).await;
+        quietly(&svc, &refs(&reset)).await;
+    }
+
+    /// A user with `readwrite` and no grant on `DB2`, and a tenant
+    /// administrator with no grant on `DB2` either.
+    #[tokio::test]
+    #[ignore = "needs a live server: see service::live"]
+    async fn live_admin_a_user_reaches_only_the_databases_it_can_open() {
+        use crate::models::admin_access::USER_DATABASES;
+        use crate::models::admin_audit::TargetType;
+        let _lock = users_lock();
+        let svc = live().await;
+        let (bob, ta) = ("studio_probe_a_bob", "studio_probe_a_ta");
+        let (bob_pw, ta_pw) = ("studio-probe-fixture-5", "studio-probe-fixture-6");
+        let reset = [
+            format!("REVOKE ALL ON DATABASE {DB2} FROM {bob}"),
+            format!("DROP USER IF EXISTS {bob}"),
+            format!("DROP USER IF EXISTS {ta}"),
+        ];
+        quietly(&svc, &refs(&reset)).await;
+        quietly(
+            &svc,
+            &[
+                &format!("CREATE DATABASE {DB2}"),
+                &format!("CREATE USER {bob} WITH PASSWORD '{bob_pw}' ROLE readwrite"),
+                &format!("CREATE USER {ta} WITH PASSWORD '{ta_pw}' ROLE tenant_admin"),
+            ],
+        )
+        .await;
+
+        // The server refuses bob in DB2: he holds no grant on it.
+        let (as_bob, _) = live_as(bob, bob_pw).await;
+        let refusal = as_bob
+            .client(Some(DB2))
+            .expect("a session")
+            .query("SHOW COLLECTIONS")
+            .await
+            .map(|_| ())
+            .map_err(StudioError::from);
+        println!("bob in {DB2}: {refusal:?}");
+        let refusal = refusal.expect_err("bob cannot open DB2");
+        assert!(access::refused(&refusal), "{refusal}");
+
+        let a = svc
+            .subject_access(&AccessSubject::Principal(bob.into()))
+            .await
+            .expect("access");
+        assert!(
+            a.effective
+                .iter()
+                .any(|e| e.source == "readwrite" && e.privilege == Privilege::Insert)
+        );
+        assert!(
+            a.effective
+                .iter()
+                .filter(|e| e.source == "readwrite")
+                .all(|e| e.database.as_deref() == Some(USER_DATABASES)),
+            "readwrite reaches the databases bob can open, not every one"
+        );
+        assert!(
+            a.unreported
+                .iter()
+                .any(|n| n.contains("does not list database grants")),
+            "{:?}",
+            a.unreported
+        );
+
+        // No statement lists a database grant.
+        quietly(
+            &svc,
+            &[&format!(
+                "GRANT CREATE COLLECTION ON DATABASE {DB2} TO {bob}"
+            )],
+        )
+        .await;
+        for sql in [
+            format!("SHOW GRANTS FOR {bob}"),
+            format!("SHOW PERMISSIONS FOR {bob}"),
+            format!("SHOW PERMISSIONS FOR \"user:{bob}\""),
+            "SHOW PERMISSIONS".to_string(),
+        ] {
+            let listed = svc.table(&sql).await.map(|t| t.rows.concat().join(" "));
+            println!("{sql}: {listed:?}");
+            assert!(
+                !listed.as_deref().is_ok_and(|t| t.contains(DB2)),
+                "{sql} lists the database grant: {listed:?}"
+            );
+        }
+        quietly(&svc, &[&format!("REVOKE ALL ON DATABASE {DB2} FROM {bob}")]).await;
+
+        // A tenant administrator lists DB2 but cannot open it: the panel
+        // still renders and names it.
+        let (as_ta, _) = live_as(ta, ta_pw).await;
+        let seen = as_ta
+            .subject_access(&AccessSubject::Principal(bob.into()))
+            .await
+            .expect("the panel renders");
+        let skipped = format!("Could not read database {DB2}: ");
+        assert!(
+            seen.unreported.iter().any(|n| n.starts_with(&skipped)),
+            "{:?}",
+            seen.unreported
+        );
+
+        // Bob's refusal is a database denial in the trail.
+        let denied = svc
+            .audit_events(&AuditQuery {
+                range: AuditRange::Last24Hours,
+                action: Some("PermissionDenied".into()),
+                target: Some(TargetType::Database),
+                page_size: 200,
+                ..AuditQuery::default()
+            })
+            .await
+            .expect("audit");
+        let mine = format!("user '{bob}' does not have access to");
+        let e = denied
+            .events
+            .iter()
+            .find(|e| e.object.contains(&mine))
+            .expect("bob's refusal is filed under Database");
+        assert!(e.target.starts_with("database "), "{}", e.target);
+        assert_eq!(e.tenant, Some(0));
+
         quietly(&svc, &refs(&reset)).await;
     }
 

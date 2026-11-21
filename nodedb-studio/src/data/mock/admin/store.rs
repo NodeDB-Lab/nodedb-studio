@@ -150,6 +150,7 @@ impl AdminStore {
                 target_type,
                 target: target.to_string(),
                 database: Some(DATABASE.to_string()),
+                tenant: None,
                 object: object.to_string(),
                 result: AuditResult::Success,
                 correlation: super::audit::correlation(self.next_audit),

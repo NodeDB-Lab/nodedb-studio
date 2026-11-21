@@ -37,7 +37,7 @@ impl AdminStore {
                 let line = format!(
                     "  - {}: {}{}",
                     e.privilege.label().to_lowercase(),
-                    scope_text(e.database.as_deref(), &e.target),
+                    scope_text(e.database.as_deref(), &e.target, e.privilege),
                     e.via.as_deref().map(|_| " (inherited)").unwrap_or("")
                 );
                 if !out.contains(&line) {
@@ -163,7 +163,7 @@ impl AdminStore {
                                 format!(
                                     "{} on {}",
                                     e.privilege.label(),
-                                    scope_text(e.database.as_deref(), &e.target)
+                                    scope_text(e.database.as_deref(), &e.target, e.privilege)
                                 )
                             })
                             .collect();

@@ -29,6 +29,7 @@ use crate::services::decode::{Row, Table, decode_rows};
 use crate::services::error::StudioError;
 
 use nodedb_client::NodeDbError;
+use nodedb_types::error::ErrorDetails;
 
 /// The roles the server has built in. `SHOW ROLES` never lists them.
 /// `database_owner:<id>`, `database_editor:<id>` and `database_reader:<id>`
@@ -100,6 +101,7 @@ pub(super) struct Caller {
     pub tenant: u64,
     /// A superuser or a tenant administrator.
     pub admin: bool,
+    pub superuser: bool,
 }
 
 fn number(r: &Row<'_>, col: &str, what: &str) -> Result<i64, StudioError> {
@@ -186,6 +188,28 @@ pub(super) fn permissions(table: &Table) -> Result<Vec<PermRow>, StudioError> {
         .collect())
 }
 
+/// Whether `e` says a database refused the caller or no longer exists. A
+/// read across the databases `SHOW DATABASES` lists skips such a database
+/// and names it: a tenant administrator sees every database but opens only
+/// the default one and those granted to it. Any other error fails the read.
+pub(super) fn refused(e: &StudioError) -> bool {
+    if let StudioError::Auth(n) | StudioError::NotFound(n) = e {
+        n.is_auth_denied() || matches!(n.details(), ErrorDetails::DatabaseNotFound { .. })
+    } else {
+        false
+    }
+}
+
+/// The note for each database a read skipped, `(database, reason)`.
+pub(super) fn skipped_notes(skipped: &std::collections::BTreeMap<String, String>) -> Vec<String> {
+    skipped
+        .iter()
+        .map(|(db, why)| {
+            format!("Could not read database {db}: {why}. Grants and owned collections in it do not show here.")
+        })
+        .collect()
+}
+
 /// Database names from `SHOW DATABASES`.
 pub(super) fn database_names(table: &Table) -> Result<Vec<String>, StudioError> {
     decode_rows(table, &["name"], |r| Ok(r.field("name")?.to_string()))
@@ -206,9 +230,11 @@ pub(super) fn session(table: &Table) -> Result<Caller, StudioError> {
         let admin = role_list(r.field("roles")?)
             .iter()
             .any(|x| x == "tenant_admin");
+        let superuser = flag(&r, "is_superuser")?;
         Ok(Caller {
             tenant: tenant_of(&r, "session")?,
-            admin: flag(&r, "is_superuser")? || admin,
+            admin: superuser || admin,
+            superuser,
         })
     })?
     .into_iter()
@@ -457,13 +483,39 @@ mod tests {
         };
         let c = session(&t("superuser", "t")).expect("reads");
         assert_eq!(c.tenant, 3);
-        assert!(c.admin);
-        assert!(
-            session(&t("readonly, tenant_admin", "f"))
-                .expect("reads")
-                .admin
-        );
+        assert!(c.admin && c.superuser);
+        let ta = session(&t("readonly, tenant_admin", "f")).expect("reads");
+        assert!(ta.admin && !ta.superuser);
         assert!(!session(&t("readonly", "f")).expect("reads").admin);
+    }
+
+    #[test]
+    fn only_a_refusal_or_a_missing_database_is_skipped() {
+        use nodedb_types::error::ErrorCode;
+        let skip = |e: NodeDbError| refused(&StudioError::from(e));
+        assert!(skip(NodeDbError::authorization_denied(
+            "permission denied for database"
+        )));
+        assert!(skip(NodeDbError::from_wire(
+            ErrorCode::DATABASE_NOT_FOUND,
+            "database 'x' does not exist"
+        )));
+        for other in [
+            NodeDbError::authentication_failed("bad password"),
+            NodeDbError::bad_request("syntax"),
+            NodeDbError::internal("disk"),
+            NodeDbError::collection_not_found("c"),
+        ] {
+            assert!(!skip(other), "only a refusal is skipped");
+        }
+        assert!(!refused(&StudioError::NotConnected));
+        let skipped = [("db2".to_string(), "denied".to_string())].into();
+        assert_eq!(
+            skipped_notes(&skipped),
+            [
+                "Could not read database db2: denied. Grants and owned collections in it do not show here."
+            ]
+        );
     }
 
     #[test]

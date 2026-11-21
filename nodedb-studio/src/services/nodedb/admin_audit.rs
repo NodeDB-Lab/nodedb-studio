@@ -30,6 +30,7 @@ use crate::models::admin_audit::{
 };
 use crate::services::decode::{Table, decode_rows};
 use crate::services::error::StudioError;
+use crate::services::nodedb::admin_access::Caller;
 
 /// The most events one read keeps. Each statement asks for one more, so a
 /// full read shows that more exist.
@@ -194,21 +195,71 @@ fn login_user(detail: &str) -> String {
     }
 }
 
+/// A collection name as a physical plan writes it: `<database id>/<name>`
+/// outside the default database. Grants use the bare name.
+fn bare(name: &str) -> &str {
+    match name.split_once('/') {
+        Some((db, rest)) if !db.is_empty() && db.bytes().all(|b| b.is_ascii_digit()) => rest,
+        _ => name,
+    }
+}
+
+/// What a `PermissionDenied` detail names, and the object's name (empty
+/// when the text names none). The server writes a fixed set of texts:
+/// `authorization/service.rs`, `security/permission/check.rs`, the DDL
+/// gates (the statement refused), `USE DATABASE`, and the sync schema
+/// check.
+fn denied(detail: &str) -> (TargetType, String) {
+    use TargetType as T;
+    // The word after `mark`, up to a space or a colon.
+    let word = |mark: &str| {
+        let (_, rest) = detail.split_once(mark)?;
+        rest.split([' ', ':']).next().map(str::to_string)
+    };
+    // The `'quoted'` name right after `mark`.
+    let quoted = |mark: &str| {
+        let (_, rest) = detail.split_once(mark)?;
+        let (name, _) = rest.strip_prefix('\'')?.split_once('\'')?;
+        Some(name.to_string())
+    };
+    if let Some(id) = word("does not have access to ").or_else(|| word(" on database ")) {
+        (T::Database, format!("database {id}"))
+    } else if let Some(id) = word(" on tenant ").or_else(|| word("task tenant ")) {
+        (T::Tenant, format!("tenant {id}"))
+    } else if let Some(f) = quoted(" on function ") {
+        // Studio has no function target type.
+        (T::Other, f)
+    } else if let Some(c) = quoted(" permission on ").or_else(|| quoted(" denied on ")) {
+        (T::Collection, bare(&c).to_string())
+    } else if let Some(c) = detail
+        .strip_prefix("permission denied: system catalog access requires superuser (")
+        .and_then(|r| r.strip_suffix(')'))
+    {
+        (T::Collection, c.to_string())
+    } else if let Some(db) = detail.strip_prefix("USE DATABASE access denied: ") {
+        (T::Database, db.to_string())
+    } else if let Some(t) = word("MOVE TENANT ") {
+        (T::Tenant, t)
+    } else if detail.contains("SERVICE ACCOUNT") {
+        (T::Principal, String::new())
+    } else if let Some(id) = quoted("KILL SESSION ") {
+        (T::Principal, id)
+    } else if detail.contains("OIDC providers") {
+        (T::Config, String::new())
+    } else if detail == "CollectionSchema tenant mismatch" {
+        (T::Tenant, String::new())
+    } else if detail.contains("DATABASE") || detail == "CollectionSchema database mismatch" {
+        // A refused statement: `CREATE DATABASE x`, `ALTER DATABASE x …`.
+        (T::Database, word("DATABASE ").unwrap_or_default())
+    } else {
+        (T::Other, String::new())
+    }
+}
+
 /// What a detail-driven kind acts on.
-fn target_of(event: &str, kind: &str, detail: &str) -> TargetType {
+fn target_of(kind: &str, detail: &str) -> TargetType {
     let kind = kind.to_ascii_lowercase();
     let detail = detail.to_ascii_lowercase();
-    if event == "PermissionDenied" {
-        return if detail.contains(" on function ") {
-            TargetType::Other
-        } else if detail.contains(" on tenant ") {
-            TargetType::Tenant
-        } else if detail.contains(" denied on '") {
-            TargetType::Collection
-        } else {
-            TargetType::Other
-        };
-    }
     if kind.contains("api_key") || detail.contains("api key") {
         TargetType::Credential
     } else if kind.contains("rls") || detail.contains("rls policy") {
@@ -283,15 +334,15 @@ fn event_of(
         Some(_) if source == "event_trigger_failed" => AuditResult::Failed,
         Some(k) => k.result,
     };
-    let target_type = match known {
-        None => TargetType::Other,
-        Some(k) => k
-            .target
-            .unwrap_or_else(|| target_of(event, ddl_kind, detail)),
+    let (target_type, named) = match known.map(|k| k.target) {
+        None => (TargetType::Other, String::new()),
+        Some(Some(t)) => (t, String::new()),
+        Some(None) if event == "PermissionDenied" => denied(detail),
+        Some(None) => (target_of(ddl_kind, detail), String::new()),
     };
     let (target, object) = match &structured {
         Some(d) => (d.name.clone(), d.sql.clone()),
-        None => (String::new(), detail.to_string()),
+        None => (named, detail.to_string()),
     };
     Ok(AuditEvent {
         id: seq.to_string(),
@@ -301,6 +352,7 @@ fn event_of(
         target_type,
         target,
         database: database_id.map(database_label),
+        tenant: None,
         object,
         result,
         correlation: String::new(),
@@ -317,36 +369,61 @@ fn event_of(
     })
 }
 
+/// A user name as the actor filter lists it: bare in the caller's tenant,
+/// with its tenant in any other. A name can repeat across tenants.
+pub(super) fn actor_label(name: &str, tenant: u64, caller: Caller) -> String {
+    if tenant == caller.tenant {
+        name.to_string()
+    } else {
+        format!("{name} (tenant {tenant})")
+    }
+}
+
+fn number(what: &str, text: &str) -> Result<u64, StudioError> {
+    text.parse().map_err(|_| StudioError::MalformedRows {
+        reason: format!("audit {what} `{text}` is not a number"),
+    })
+}
+
+/// The columns both audit reads hold.
+const COLUMNS: [&str; 6] = [
+    "seq",
+    "timestamp_us",
+    "event",
+    "tenant_id",
+    "source",
+    "detail",
+];
+
 /// The events of `SHOW AUDIT LOG` or `_system.audit_log`, keyed by `seq`.
-/// The second has no `database_id`, so its events report no database.
-pub(super) fn events(table: &Table) -> Result<Vec<(u64, AuditEvent)>, StudioError> {
+/// The second has no `database_id`, so its events report no database. Both
+/// list every tenant: a superuser keeps each event, labelled with its
+/// tenant, and anyone else keeps the caller's tenant only.
+pub(super) fn events(table: &Table, caller: Caller) -> Result<Vec<(u64, AuditEvent)>, StudioError> {
     let with_db = table.columns.iter().any(|c| c == "database_id");
-    decode_rows(
-        table,
-        &["seq", "timestamp_us", "event", "source", "detail"],
-        |r| {
-            let seq = r.field("seq")?;
-            let seq = seq.parse::<u64>().map_err(|_| StudioError::MalformedRows {
-                reason: format!("audit seq `{seq}` is not a number"),
-            })?;
-            let database_id = if with_db {
-                Some(r.field("database_id")?)
-            } else {
-                None
-            };
-            Ok((
-                seq,
-                event_of(
-                    r.field("timestamp_us")?,
-                    seq,
-                    r.field("event")?,
-                    database_id,
-                    r.field("source")?,
-                    r.field("detail")?,
-                )?,
-            ))
-        },
-    )
+    let rows = decode_rows(table, &COLUMNS, |r| {
+        let seq = number("seq", r.field("seq")?)?;
+        let database_id = with_db.then(|| r.field("database_id")).transpose()?;
+        let mut e = event_of(
+            r.field("timestamp_us")?,
+            seq,
+            r.field("event")?,
+            database_id,
+            r.field("source")?,
+            r.field("detail")?,
+        )?;
+        let tenant = number("tenant_id", r.field("tenant_id")?)?;
+        e.tenant = Some(tenant);
+        if !e.actor.is_empty() {
+            e.actor = actor_label(&e.actor, tenant, caller);
+        }
+        Ok((seq, tenant, e))
+    })?;
+    Ok(rows
+        .into_iter()
+        .filter(|(_, tenant, _)| caller.superuser || *tenant == caller.tenant)
+        .map(|(seq, _, e)| (seq, e))
+        .collect())
 }
 
 /// The two reads of one page. `fresh`: `_system.audit_log` with the range
@@ -423,6 +500,13 @@ mod tests {
     use super::*;
     use crate::models::admin_audit::AuditRange;
 
+    /// A superuser of tenant 0.
+    const ROOT: Caller = Caller {
+        tenant: 0,
+        admin: true,
+        superuser: true,
+    };
+
     const COLS: [&str; 7] = [
         "seq",
         "timestamp_us",
@@ -450,7 +534,7 @@ mod tests {
     }
 
     fn one(row: [&str; 6]) -> AuditEvent {
-        events(&table(&[row])).expect("decodes").remove(0).1
+        events(&table(&[row]), ROOT).expect("decodes").remove(0).1
     }
 
     /// Every `AuditEvent` variant of the NodeDB 0.6.2 server.
@@ -590,6 +674,7 @@ mod tests {
         ]);
         assert_eq!(e.actor, "ann");
         assert_eq!(e.target_type, TargetType::Collection);
+        assert_eq!(e.target, "orders");
         let q = AuditQuery {
             range: AuditRange::Last24Hours,
             actor: Some("ann".into()),
@@ -606,6 +691,139 @@ mod tests {
             1,
         );
         assert_eq!(p.total, 1, "the actor filter keeps the denial");
+    }
+
+    /// Every `PermissionDenied` detail NodeDB 0.6.2 writes, as it writes it.
+    #[test]
+    fn a_denial_names_what_was_denied() {
+        use TargetType::{Collection, Config, Database, Other, Principal, Tenant};
+        for (detail, kind, target) in [
+            // authorization/service.rs: SQL reads and writes.
+            (
+                "permission denied: user 'ann' lacks Write permission on 'orders'",
+                Collection,
+                "orders",
+            ),
+            (
+                "permission denied: user 'ann' lacks Read permission on '1024/orders'",
+                Collection,
+                "orders",
+            ),
+            (
+                "permission denied: system catalog access requires superuser (_system.audit_log)",
+                Collection,
+                "_system.audit_log",
+            ),
+            (
+                "permission denied for database: user 'ann' does not have access to 1024",
+                Database,
+                "database 1024",
+            ),
+            (
+                "permission denied: user 'ann' lacks Create permission on database 1024",
+                Database,
+                "database 1024",
+            ),
+            (
+                "permission denied: database grants do not support Write on database 1024",
+                Database,
+                "database 1024",
+            ),
+            (
+                "permission denied: unable to verify Create permission on database 1024: io",
+                Database,
+                "database 1024",
+            ),
+            (
+                "permission denied: user 'ann' lacks Backup permission on tenant 3",
+                Tenant,
+                "tenant 3",
+            ),
+            (
+                "permission denied: task tenant 3 is outside authenticated tenant",
+                Tenant,
+                "tenant 3",
+            ),
+            // security/permission/check.rs.
+            (
+                "permission Drop denied on 'orders' for user 'ann'",
+                Collection,
+                "orders",
+            ),
+            (
+                "EXECUTE permission denied on function 'score' for user 'ann'",
+                Other,
+                "score",
+            ),
+            (
+                "permission Backup denied on tenant 3 for user 'ann'",
+                Tenant,
+                "tenant 3",
+            ),
+            // pgwire USE, the sync schema check, and the DDL gates.
+            (
+                "USE DATABASE access denied: analytics",
+                Database,
+                "analytics",
+            ),
+            ("CollectionSchema tenant mismatch", Tenant, ""),
+            ("CollectionSchema database mismatch", Database, ""),
+            ("CREATE DATABASE analytics", Database, "analytics"),
+            ("ALTER DATABASE analytics SET QUOTA", Database, "analytics"),
+            ("RESTORE DATABASE analytics", Database, "analytics"),
+            ("CLONE DATABASE", Database, ""),
+            ("MOVE TENANT acme FROM a TO b", Tenant, "acme"),
+            ("ALTER SERVICE ACCOUNT SET DATABASES", Principal, ""),
+            ("KILL SESSION 'abc'", Principal, "abc"),
+            ("create OIDC providers", Config, ""),
+            ("something new", Other, ""),
+        ] {
+            let e = one(["1", "1000000", "PermissionDenied", "0", "ann", detail]);
+            assert_eq!(
+                (e.target_type, e.target.as_str()),
+                (kind, target),
+                "{detail}"
+            );
+            assert_eq!(e.object, detail, "the full text stays");
+        }
+    }
+
+    #[test]
+    fn a_superuser_sees_every_tenant_labelled_and_anyone_else_its_own() {
+        let t = Table {
+            columns: COLS.iter().map(|s| (*s).to_string()).collect(),
+            rows: [["1", "2"], ["2", "0"]]
+                .iter()
+                .map(|[seq, tenant]| {
+                    [
+                        *seq,
+                        "1000000",
+                        "PrivilegeChange",
+                        tenant,
+                        "0",
+                        "alice",
+                        "x",
+                    ]
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect()
+                })
+                .collect(),
+        };
+        let all = events(&t, ROOT).expect("decodes");
+        let tagged: Vec<_> = all
+            .iter()
+            .map(|(_, e)| (e.actor.as_str(), e.tenant))
+            .collect();
+        assert_eq!(tagged, [("alice (tenant 2)", Some(2)), ("alice", Some(0))]);
+        let admin = Caller {
+            superuser: false,
+            ..ROOT
+        };
+        let own = events(&t, admin).expect("decodes");
+        assert_eq!(own.len(), 1);
+        assert_eq!(own[0].1.actor, "alice");
+        assert_eq!(actor_label("alice", 2, ROOT), "alice (tenant 2)");
     }
 
     #[test]
@@ -664,12 +882,15 @@ mod tests {
     #[test]
     fn a_bad_number_is_an_error() {
         let t = table(&[["x", "1", "AuthSuccess", "0", "s", "d"]]);
-        assert!(events(&t).is_err());
+        assert!(events(&t, ROOT).is_err());
         assert!(
-            events(&Table {
-                columns: vec!["setting".into()],
-                rows: vec![vec![String::new()]]
-            })
+            events(
+                &Table {
+                    columns: vec!["setting".into()],
+                    rows: vec![vec![String::new()]]
+                },
+                ROOT
+            )
             .is_err()
         );
     }

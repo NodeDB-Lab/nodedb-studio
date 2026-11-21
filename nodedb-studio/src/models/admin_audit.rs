@@ -154,6 +154,9 @@ pub struct AuditEvent {
     pub target: String,
     /// `None`: the server does not report it.
     pub database: Option<String>,
+    /// The tenant the server wrote. It writes `0` both for tenant 0 and for
+    /// an event with no tenant. `None`: not reported.
+    pub tenant: Option<u64>,
     /// The database object the row shows, e.g. `analytics.sales`.
     pub object: String,
     pub result: AuditResult,
@@ -165,6 +168,14 @@ pub struct AuditEvent {
 }
 
 impl AuditEvent {
+    /// The tenant for display. `None`: not reported.
+    pub fn tenant_text(&self) -> Option<String> {
+        self.tenant.map(|t| match t {
+            0 => "0 or none".to_string(),
+            t => t.to_string(),
+        })
+    }
+
     /// The principal name in a `user:name` target, so the target can link.
     pub fn principal_name(&self) -> Option<&str> {
         match self.target_type {
@@ -275,6 +286,7 @@ mod tests {
             target_type: TargetType::Role,
             target: String::new(),
             database: None,
+            tenant: None,
             object: String::new(),
             result: AuditResult::Success,
             correlation: String::new(),
@@ -314,5 +326,15 @@ mod tests {
         assert_eq!(e.principal_name(), Some("analyst"));
         e.target_type = TargetType::Role;
         assert_eq!(e.principal_name(), None);
+    }
+
+    #[test]
+    fn tenant_zero_may_mean_no_tenant() {
+        let mut e = blank_event();
+        assert_eq!(e.tenant_text(), None);
+        e.tenant = Some(0);
+        assert_eq!(e.tenant_text().as_deref(), Some("0 or none"));
+        e.tenant = Some(2);
+        assert_eq!(e.tenant_text().as_deref(), Some("2"));
     }
 }

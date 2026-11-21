@@ -9,13 +9,19 @@
 use std::collections::HashSet;
 
 use crate::models::admin_access::{
-    AccessSubject, EVERY, EffectiveGrant, Member, Membership, Privilege, RoleGrant, SubjectAccess,
+    AccessSubject, EVERY, EffectiveGrant, HOLDER_DATABASES, Member, Membership, Privilege,
+    RoleGrant, SubjectAccess, USER_DATABASES,
 };
 use crate::services::error::StudioError;
 use crate::services::nodedb::admin_access::{Grant, NO_DATABASE, RoleRow, UserRow};
 
 /// What the access lists leave out because NodeDB 0.6.2 reports it nowhere.
 const USER_TENANT_GRANTS: &str = "NodeDB 0.6.2 does not list a tenant-wide grant made to a user itself (GRANT … ON TENANT … TO <user>). Such a grant does not show here.";
+/// The server lists no database grant, and a user who is not a superuser
+/// opens only the default database and the databases granted to it
+/// (`session_auth/identity.rs`, `authorization/service.rs`).
+const USER_DATABASE_GRANTS: &str = "NodeDB 0.6.2 does not list database grants (GRANT … ON DATABASE … TO <user>). This user opens the default database and each database granted to it, and no other. A row in another database applies only if such a grant exists.";
+const HOLDER_DATABASE_GRANTS: &str = "NodeDB 0.6.2 does not list database grants (GRANT … ON DATABASE … TO <user>). A holder who is not a superuser opens the default database and each database granted to it, and no other.";
 
 /// The privileges one server permission name holds. The server's set is
 /// closed, so any other name is an error, never a silent drop.
@@ -43,6 +49,7 @@ fn privileges(permission: &str) -> Result<Vec<Privilege>, StudioError> {
 /// What a built-in role holds on every collection without a stored grant,
 /// and the database it covers (`EVERY`, or one database by id). From the
 /// server's `role_grants_permission`. `None` for a custom role.
+/// `subject_access` narrows `EVERY` to the databases the holder can open.
 fn builtin(role: &str) -> Option<(String, Vec<Privilege>)> {
     use Privilege::{All, Create, Delete, Execute, Insert, Monitor, Select, Update};
     let every = |p: Vec<Privilege>| Some((EVERY.to_string(), p));
@@ -181,6 +188,7 @@ pub(super) fn subject_access(
     now: i64,
 ) -> Result<SubjectAccess, StudioError> {
     grantees(subject, users, custom)?;
+    let mut superuser = false;
     let mut effective_rows = Vec::new();
     let mut unreported = vec![];
     let (held, memberships, members) = match subject {
@@ -189,6 +197,7 @@ pub(super) fn subject_access(
                 .iter()
                 .find(|u| &u.name == id)
                 .ok_or_else(|| unknown("principal", id))?;
+            superuser = user.superuser;
             if user.superuser {
                 effective_rows.push(EffectiveGrant {
                     database: Some(EVERY.to_string()),
@@ -279,6 +288,23 @@ pub(super) fn subject_access(
                 });
             }
         }
+    }
+    // Only a superuser opens every database. Anyone else reaches a built-in
+    // role's or a tenant-wide grant's collections in the databases it can
+    // open, which the server does not list.
+    let reach = match subject {
+        AccessSubject::Principal(_) if superuser => None,
+        AccessSubject::Principal(_) => Some((USER_DATABASES, USER_DATABASE_GRANTS)),
+        AccessSubject::Role(_) => Some((HOLDER_DATABASES, HOLDER_DATABASE_GRANTS)),
+    };
+    if let Some((databases, note)) = reach {
+        let rows = role_grants.iter_mut().map(|g| &mut g.database);
+        for db in rows.chain(effective_rows.iter_mut().map(|e| &mut e.database)) {
+            if db.as_deref() == Some(EVERY) {
+                *db = Some(databases.to_string());
+            }
+        }
+        unreported.push(note.to_string());
     }
     Ok(SubjectAccess {
         subject: subject.clone(),
@@ -420,7 +446,10 @@ mod tests {
             [(Some(EVERY), EVERY, "ALL", "superuser account")]
         );
         let ta = of(AccessSubject::Principal("ta".into()), &users, &[], &[], &[]);
-        assert_eq!(rows(&ta), [(Some(EVERY), EVERY, "ALL", "tenant_admin")]);
+        assert_eq!(
+            rows(&ta),
+            [(Some(USER_DATABASES), EVERY, "ALL", "tenant_admin")]
+        );
         let owned = [("db2".to_string(), "orders".to_string())];
         let ann = of(
             AccessSubject::Principal("ann".into()),
@@ -433,8 +462,8 @@ mod tests {
             rows(&ann),
             [
                 (Some("db2"), "orders", "ALL", "owner"),
-                (Some(EVERY), EVERY, "SELECT", "readonly"),
-                (Some(EVERY), EVERY, "EXECUTE", "readonly"),
+                (Some(USER_DATABASES), EVERY, "SELECT", "readonly"),
+                (Some(USER_DATABASES), EVERY, "EXECUTE", "readonly"),
             ]
         );
         let su = of(
@@ -445,6 +474,55 @@ mod tests {
             &[],
         );
         assert_eq!(su.grants[0].privilege, Privilege::All);
+        assert_eq!(su.grants[0].database.as_deref(), Some(HOLDER_DATABASES));
+    }
+
+    #[test]
+    fn only_a_superuser_reaches_every_database() {
+        let mut root = user("root", &["readwrite"]);
+        root.superuser = true;
+        let users = [root, user("bob", &["readwrite", "wide"])];
+        let custom = [role("wide", None)];
+        let grants = [grant("wide", "Read", EVERY, Some(EVERY))];
+        let bob = of(
+            AccessSubject::Principal("bob".into()),
+            &users,
+            &custom,
+            &grants,
+            &[],
+        );
+        assert!(!bob.effective.is_empty());
+        assert!(
+            bob.effective
+                .iter()
+                .map(|e| &e.database)
+                .chain(bob.grants.iter().map(|g| &g.database))
+                .all(|d| d.as_deref() == Some(USER_DATABASES)),
+            "a built-in role and a tenant-wide grant reach the databases bob can open"
+        );
+        assert!(bob.unreported.iter().any(|n| n == USER_DATABASE_GRANTS));
+        let root = of(
+            AccessSubject::Principal("root".into()),
+            &users,
+            &custom,
+            &grants,
+            &[],
+        );
+        assert!(
+            root.effective
+                .iter()
+                .all(|e| e.database.as_deref() == Some(EVERY))
+        );
+        assert!(!root.unreported.iter().any(|n| n == USER_DATABASE_GRANTS));
+        let wide = of(
+            AccessSubject::Role("wide".into()),
+            &users,
+            &custom,
+            &grants,
+            &[],
+        );
+        assert_eq!(wide.grants[0].database.as_deref(), Some(HOLDER_DATABASES));
+        assert_eq!(wide.unreported, [HOLDER_DATABASE_GRANTS]);
     }
 
     #[test]
@@ -493,7 +571,11 @@ mod tests {
             &[],
         );
         assert_eq!(rows(&a), [(Some("default"), "items", "SELECT", "ann")]);
-        assert_eq!(a.unreported.len(), 1, "tenant-wide user grants are named");
+        assert_eq!(
+            a.unreported,
+            [USER_TENANT_GRANTS, USER_DATABASE_GRANTS],
+            "tenant-wide user grants and database grants are named"
+        );
     }
 
     #[test]

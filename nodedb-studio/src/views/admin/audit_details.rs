@@ -100,6 +100,7 @@ pub fn EventDetails(id: String) -> Element {
                     }
                 }
                 div { class: "kv-row", span { "Database" } Reported { text: e.database.clone() } }
+                div { class: "kv-row", span { "Tenant" } Reported { text: e.tenant_text() } }
                 div { class: "kv-row",
                     span { "Result" }
                     StatusText { tone: e.result.tone(), text: e.result.label().to_string() }

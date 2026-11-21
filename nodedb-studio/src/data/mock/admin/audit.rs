@@ -211,6 +211,8 @@ fn older() -> Vec<AuditEvent> {
             target_type: kind,
             target: target_text(kind, object),
             database: Some("analytics".to_string()),
+            // The mock models no tenants.
+            tenant: None,
             object: object.to_string(),
             result: if denied {
                 AuditResult::Denied
@@ -264,6 +266,7 @@ pub(super) fn seeded_events() -> Vec<AuditEvent> {
                 target_type: r.kind,
                 target: r.target.to_string(),
                 database: Some("analytics".to_string()),
+                tenant: None,
                 object: r.object.to_string(),
                 result: r.result,
                 correlation: r.correlation.to_string(),

@@ -3,10 +3,12 @@
 
 pub mod admin;
 pub mod admin_access;
+pub mod admin_access_change;
 pub mod admin_audit;
 pub mod admin_backup;
 pub mod admin_config;
 pub mod admin_credential;
+pub mod admin_grant;
 pub mod admin_password;
 pub mod admin_policy;
 pub mod array_data;
