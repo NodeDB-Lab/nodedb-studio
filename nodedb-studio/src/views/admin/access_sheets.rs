@@ -10,6 +10,7 @@ use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
 use crate::models::admin_access::{
     AccessChange, AccessDirectory, PrincipalDraft, PrincipalKind, RoleDraft,
 };
+use crate::models::admin_password::Secret;
 use crate::services::backend::Backend;
 use crate::state::admin::{AccessMode, AccessSheet, AdminUi};
 use crate::views::admin::common::ReviewSheet;
@@ -84,6 +85,8 @@ fn PrincipalSheet(draft: PrincipalDraft, dir: AccessDirectory) -> Element {
     let taken = taken_principals(&dir, &ui.read().staged);
     let name_err = draft.tried.then(|| draft.name_issue(&taken)).flatten();
     let expiry_err = draft.tried.then(|| draft.expiry_issue()).flatten();
+    let password_err = draft.tried.then(|| draft.password_issue()).flatten();
+    let confirm_err = draft.tried.then(|| draft.confirm_issue()).flatten();
     let stage = {
         let (draft, taken) = (draft.clone(), taken.clone());
         move |_| match draft.change(&taken) {
@@ -125,11 +128,39 @@ fn PrincipalSheet(draft: PrincipalDraft, dir: AccessDirectory) -> Element {
                         onchange: move |e| {
                             let v = e.value();
                             if let Some(k) = PrincipalKind::ALL.iter().copied().find(|k| k.label() == v) {
-                                edit_principal(ui, |d| d.kind = k);
+                                edit_principal(ui, |d| {
+                                    d.kind = k;
+                                    d.clear_password();
+                                });
                             }
                         },
                         for k in PrincipalKind::ALL {
                             option { key: "{k.label()}", value: "{k.label()}", selected: k == draft.kind, "{k.label()}" }
+                        }
+                    }
+                }
+                if draft.needs_password() {
+                    FormField {
+                        label: "Password",
+                        id: "ad-p-password",
+                        error: password_err,
+                        hint: "The user signs in with it. Studio sends it once and keeps it only until you apply or withdraw the change.".to_string(),
+                        input {
+                            id: "ad-p-password",
+                            class: "input",
+                            r#type: "password",
+                            autocomplete: "new-password",
+                            // No `value`: the typed text lives in the draft, never in an attribute.
+                            oninput: move |e| edit_principal(ui, |d| d.password = Secret::new(e.value())),
+                        }
+                    }
+                    FormField { label: "Confirm password", id: "ad-p-confirm", error: confirm_err,
+                        input {
+                            id: "ad-p-confirm",
+                            class: "input",
+                            r#type: "password",
+                            autocomplete: "new-password",
+                            oninput: move |e| edit_principal(ui, |d| d.confirm = Secret::new(e.value())),
                         }
                     }
                 }
@@ -145,7 +176,7 @@ fn PrincipalSheet(draft: PrincipalDraft, dir: AccessDirectory) -> Element {
                     label: "Credential expiry",
                     id: "ad-p-expiry",
                     error: expiry_err,
-                    hint: "The server holds the credential. Studio never sees it.".to_string(),
+                    hint: "When the credential expires, as you record it.".to_string(),
                     input {
                         id: "ad-p-expiry",
                         class: "input",
@@ -328,5 +359,54 @@ fn MembershipSheet(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn render(kind: PrincipalKind) -> String {
+        #[derive(Clone, PartialEq)]
+        struct Seed(PrincipalKind);
+        fn app(seed: Seed) -> Element {
+            AdminUi::provide();
+            let mut draft = PrincipalDraft::new();
+            draft.kind = seed.0;
+            draft.password = Secret::new("zz-render-pw-1");
+            let dir = AccessDirectory {
+                principals: vec![],
+                roles: vec![],
+                databases: vec![],
+                tenant: None,
+                observed_at: 0,
+            };
+            rsx! { PrincipalSheet { draft, dir } }
+        }
+        let mut dom = VirtualDom::new_with_props(app, Seed(kind));
+        dom.rebuild_in_place();
+        dioxus_ssr::render(&dom)
+    }
+
+    #[test]
+    fn a_new_user_form_has_a_password_and_a_confirmation() {
+        let html = render(PrincipalKind::User);
+        for id in ["ad-p-password", "ad-p-confirm"] {
+            let at = html.find(&format!("id=\"{id}\"")).expect(id);
+            let tag = &html[html[..at].rfind("<input").expect("tag")..];
+            let tag = &tag[..tag.find('>').expect("end")];
+            assert!(tag.contains("type=\"password\""), "{tag}");
+        }
+        assert!(
+            !html.contains("zz-render-pw-1"),
+            "the password is not in the markup"
+        );
+    }
+
+    #[test]
+    fn a_service_account_form_has_no_password_field() {
+        let html = render(PrincipalKind::ServiceAccount);
+        assert!(!html.contains("ad-p-password"), "{html}");
+        assert!(!html.contains("ad-p-confirm"), "{html}");
     }
 }

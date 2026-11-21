@@ -4,6 +4,7 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::components::sheet::{Sheet, SheetFooter, SheetWidth};
+use crate::models::admin_access::NOT_REPORTED;
 use crate::models::feeds::Tone;
 use crate::state::admin::ReviewState;
 use crate::views::events::common::StatusText;
@@ -15,6 +16,15 @@ pub fn dash() -> Element {
 /// A value nobody reported. It is never filled from another field.
 pub fn unknown() -> Element {
     rsx! { span { class: "muted", "Unknown" } }
+}
+
+/// A value the server reported, or "Not reported" when it reports none.
+#[component]
+pub fn Reported(text: Option<String>) -> Element {
+    match text {
+        Some(t) => rsx! { span { "{t}" } },
+        None => rsx! { span { class: "muted", "{NOT_REPORTED}" } },
+    }
 }
 
 /// A value whose full text is its tooltip, cut with an ellipsis in a tight cell.

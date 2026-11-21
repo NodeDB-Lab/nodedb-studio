@@ -14,7 +14,7 @@ use crate::routes::Route;
 use crate::routes::tabs::AdminTab;
 use crate::services::backend::Backend;
 use crate::state::admin::{AccessMode, AccessUi, AdminUi};
-use crate::views::admin::common::Cut;
+use crate::views::admin::common::{Cut, Reported};
 use crate::views::events::common::StatusText;
 
 /// Open the principal an event acted on in Access. Names resolve to ids
@@ -99,7 +99,8 @@ pub fn EventDetails(id: String) -> Element {
                         Cut { text: e.target.clone() }
                     }
                 }
-                div { class: "kv-row", span { "Database" } span { "{e.database}" } }
+                div { class: "kv-row", span { "Database" } Reported { text: e.database.clone() } }
+                div { class: "kv-row", span { "Tenant" } Reported { text: e.tenant_text() } }
                 div { class: "kv-row",
                     span { "Result" }
                     StatusText { tone: e.result.tone(), text: e.result.label().to_string() }

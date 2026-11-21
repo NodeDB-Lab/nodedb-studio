@@ -33,8 +33,8 @@ pub(super) fn seeded_policies() -> Vec<Policy> {
             database: DATABASE.into(),
             collection: "analytics.sales".into(),
             operation: PolicyOperation::Select,
-            role: "tenant_reader".into(),
-            using_expr: TENANT_FILTER.into(),
+            role: Some("tenant_reader".into()),
+            using_expr: Some(TENANT_FILTER.into()),
             check_expr: None,
             enabled: true,
         },
@@ -44,8 +44,8 @@ pub(super) fn seeded_policies() -> Vec<Policy> {
             database: DATABASE.into(),
             collection: "analytics.sales".into(),
             operation: PolicyOperation::InsertUpdate,
-            role: "tenant_writer".into(),
-            using_expr: TENANT_FILTER.into(),
+            role: Some("tenant_writer".into()),
+            using_expr: Some(TENANT_FILTER.into()),
             check_expr: Some(TENANT_FILTER.into()),
             enabled: true,
         },
@@ -176,13 +176,13 @@ impl AdminStore {
                         d.operation.label().into(),
                     ));
                 }
-                if d.role.trim() != p.role {
-                    lines.push(line("Role", Some(p.role.clone()), d.role.trim().into()));
+                if Some(d.role.trim()) != p.role.as_deref() {
+                    lines.push(line("Role", p.role.clone(), d.role.trim().into()));
                 }
-                if d.using_expr.trim() != p.using_expr {
+                if Some(d.using_expr.trim()) != p.using_expr.as_deref() {
                     lines.push(line(
                         "USING",
-                        Some(p.using_expr.clone()),
+                        p.using_expr.clone(),
                         d.using_expr.trim().into(),
                     ));
                 }
@@ -267,8 +267,8 @@ impl AdminStore {
                     database: d.database.clone(),
                     collection: d.collection.clone(),
                     operation: d.operation,
-                    role: d.role.trim().to_string(),
-                    using_expr: d.using_expr.trim().to_string(),
+                    role: Some(d.role.trim().to_string()),
+                    using_expr: Some(d.using_expr.trim().to_string()),
                     check_expr: d.stored_check(),
                     enabled: d.enabled,
                 });
@@ -283,8 +283,8 @@ impl AdminStore {
                     .ok_or_else(|| missing("policy", &id))?;
                 p.name = d.name.trim().to_string();
                 p.operation = d.operation;
-                p.role = d.role.trim().to_string();
-                p.using_expr = d.using_expr.trim().to_string();
+                p.role = Some(d.role.trim().to_string());
+                p.using_expr = Some(d.using_expr.trim().to_string());
                 p.check_expr = d.stored_check();
                 p.enabled = d.enabled;
                 ("Update policy", id)

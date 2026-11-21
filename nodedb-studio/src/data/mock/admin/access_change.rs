@@ -4,8 +4,9 @@
 use crate::data::mock::admin::access::principal;
 use crate::data::mock::admin::store::AdminStore;
 use crate::models::admin::{AdminReview, ReviewLine};
-use crate::models::admin_access::{AccessChange, PrincipalKind, Role};
+use crate::models::admin_access::{AccessChange, PrincipalKind, Role, scope_text};
 use crate::models::admin_audit::TargetType;
+use crate::models::admin_password::password_issue;
 use crate::models::format::date;
 use crate::services::error::StudioError;
 
@@ -34,10 +35,9 @@ impl AdminStore {
         for (_, r, db) in self.memberships.iter().filter(|(p, _, _)| p == principal) {
             for e in self.role_effective(r, db) {
                 let line = format!(
-                    "  - {}: {}.{}{}",
+                    "  - {}: {}{}",
                     e.privilege.label().to_lowercase(),
-                    e.database,
-                    e.target,
+                    scope_text(e.database.as_deref(), &e.target, e.privilege),
                     e.via.as_deref().map(|_| " (inherited)").unwrap_or("")
                 );
                 if !out.contains(&line) {
@@ -98,10 +98,17 @@ impl AdminStore {
                     name,
                     kind,
                     credential_expiry,
+                    password,
                     ..
                 } => {
                     if names.contains(name) {
                         errors.push(format!("A principal named {name} exists."));
+                    }
+                    if *kind == PrincipalKind::User {
+                        match password {
+                            None => errors.push(format!("{name} needs a password.")),
+                            Some(p) => errors.extend(password_issue(p)),
+                        }
                     }
                     names.push(name.clone());
                     lines.push(ReviewLine::new(
@@ -114,7 +121,7 @@ impl AdminStore {
                         ),
                     ));
                     notes.push(format!(
-                        "{name} holds no role until you add one. Studio never sees its credential."
+                        "{name} holds no role until you add one. Studio sends the password once and keeps no copy."
                     ));
                 }
                 AccessChange::CreateRole { name, .. } => {
@@ -153,7 +160,11 @@ impl AdminStore {
                             .role_effective(role, database)
                             .iter()
                             .map(|e| {
-                                format!("{} on {}.{}", e.privilege.label(), e.database, e.target)
+                                format!(
+                                    "{} on {}",
+                                    e.privilege.label(),
+                                    scope_text(e.database.as_deref(), &e.target, e.privilege)
+                                )
                             })
                             .collect();
                         if !adds.is_empty() {
@@ -216,6 +227,8 @@ impl AdminStore {
                     kind,
                     description,
                     credential_expiry,
+                    // The mock keeps no credential: nothing it shows holds the password.
+                    password: _,
                 } => {
                     let id = format!("pr_{:02}", self.next_principal);
                     self.next_principal += 1;
@@ -248,7 +261,7 @@ impl AdminStore {
                         name: name.clone(),
                         description: description.clone(),
                         parents: Vec::new(),
-                        created_at: self.clock,
+                        created_at: Some(self.clock),
                     });
                     self.record(
                         "Create role",

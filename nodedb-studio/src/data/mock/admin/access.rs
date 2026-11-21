@@ -31,9 +31,9 @@ pub(super) fn principal(
         kind,
         status: PrincipalStatus::Active,
         description: description.into(),
-        credential_expiry: expiry,
-        created_at: created,
-        password: user,
+        credential_expiry: Some(expiry),
+        created_at: Some(created),
+        password: Some(user),
         mfa: if user {
             Mfa::NotRequired
         } else {
@@ -47,18 +47,18 @@ fn role(name: &str, description: &str, parents: &[&str]) -> Role {
         name: name.into(),
         description: description.into(),
         parents: parents.iter().map(|p| p.to_string()).collect(),
-        created_at: epoch(2024, 11, 3, 10, 20, 0),
+        created_at: Some(epoch(2024, 11, 3, 10, 20, 0)),
     }
 }
 
 fn grant(role: &str, collection: &str, privilege: Privilege) -> RoleGrant {
     RoleGrant {
         role: role.into(),
-        database: DATABASE.into(),
+        database: Some(DATABASE.into()),
         collection: collection.into(),
         privilege,
-        granted_by: ADMIN.into(),
-        granted_at: epoch(2025, 3, 18, 9, 30, 0),
+        granted_by: Some(ADMIN.into()),
+        granted_at: Some(epoch(2025, 3, 18, 9, 30, 0)),
     }
 }
 
@@ -130,6 +130,8 @@ impl AdminStore {
             principals: self.principals.clone(),
             roles: self.roles.clone(),
             databases: self.databases.clone(),
+            // The mock models no tenants.
+            tenant: None,
             observed_at: self.clock,
         }
     }
@@ -137,7 +139,7 @@ impl AdminStore {
     fn role_grants(&self, role: &str, database: &str) -> Vec<&RoleGrant> {
         self.grants
             .iter()
-            .filter(|g| g.role == role && g.database == database)
+            .filter(|g| g.role == role && g.database.as_deref() == Some(database))
             .collect()
     }
 
@@ -213,6 +215,7 @@ impl AdminStore {
             members: Vec::new(),
             grants: Vec::new(),
             effective: Vec::new(),
+            unreported: Vec::new(),
             observed_at: self.clock,
         };
         match subject {

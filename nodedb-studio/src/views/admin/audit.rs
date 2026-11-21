@@ -1,9 +1,10 @@
 //! Administration → Audit: the trail of administrative changes, filtered
 //! and paged, with the chosen event's detail beside it.
 //!
-//! Two panels. Every filter runs on the server. An event is read-only, and
-//! the footer states how long the trail is kept and which permission scopes
-//! what the reader sees. It does not promise the events last forever.
+//! Two panels. The backend applies every filter, and a list it had to cut
+//! says so above the table. An event is read-only, and the footer states
+//! how long the trail is kept and which permission scopes what the reader
+//! sees. It does not promise the events last forever.
 
 use std::rc::Rc;
 
@@ -13,6 +14,7 @@ use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::pager::Pager;
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
+use crate::models::admin_access::NOT_REPORTED;
 use crate::models::admin_audit::{AuditRange, AuditResult, TargetType};
 use crate::models::format::date_second;
 use crate::routes::tabs::AdminTab;
@@ -189,6 +191,12 @@ pub fn AuditTab() -> Element {
                         on_retry: move |_| page.restart(),
                         empty_message: "No event matches these filters in this time range.",
                     }
+                    if let Some(cut) = data.as_ref().and_then(|p| p.truncation_text()) {
+                        div { class: "callout warn", role: "status",
+                            Ico { icon: Icon::TriangleAlert, size: 16 }
+                            span { "{cut}" }
+                        }
+                    }
                     if let Some(p) = data.as_ref() {
                         div { class: "dt-wrap",
                             table { class: "dt cl-table ad-table ad-audit",
@@ -239,13 +247,25 @@ pub fn AuditTab() -> Element {
                         }
                         div { class: "toolbar-spacer" }
                         if let Some(f) = facet.as_ref() {
-                            span { class: "ad-retention", "Retention: {f.retention_days} days ({f.scope})" }
-                            InfoTip {
-                                text: format!(
-                                    "The server removes events older than {} days. You see the events your {} permission covers. Studio cannot edit or delete an event.",
-                                    f.retention_days,
-                                    f.scope,
-                                ),
+                            match f.retention_days {
+                                Some(days) => rsx! {
+                                    span { class: "ad-retention", "Retention: {days} days ({f.scope})" }
+                                    InfoTip {
+                                        text: format!(
+                                            "The server removes events older than {days} days. You see the events your {} permission covers. Studio cannot edit or delete an event.",
+                                            f.scope,
+                                        ),
+                                    }
+                                },
+                                None => rsx! {
+                                    span { class: "ad-retention", "Retention: {NOT_REPORTED} ({f.scope})" }
+                                    InfoTip {
+                                        text: format!(
+                                            "The server does not report how long it keeps events. You see the events your {} permission covers. Studio cannot edit or delete an event.",
+                                            f.scope,
+                                        ),
+                                    }
+                                },
                             }
                         }
                     }
