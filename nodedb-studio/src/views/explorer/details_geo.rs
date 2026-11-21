@@ -99,7 +99,10 @@ pub fn SpatialDetails(
     let can_update = access.as_ref().is_some_and(|a| a.update.allowed());
     let text = geojson_text(&schema, &record);
     let at = point(&schema, &record);
-    let srid = schema.geometry().map(|(_, s)| s).unwrap_or_default();
+    let srid = schema
+        .geometry()
+        .and_then(|(_, s)| s)
+        .map_or_else(|| "Not reported".to_string(), |s| format!("EPSG:{s}"));
     rsx! {
         div { class: "inspector",
             div { class: "inspector-head",
@@ -112,7 +115,7 @@ pub fn SpatialDetails(
                 DetailsTab::Geometry => rsx! {
                     div { class: "kv",
                         div { class: "kv-row", span { "Type" } span { if at.is_some() { "Point" } else { "Geometry" } } }
-                        div { class: "kv-row", span { "SRID" } span { "EPSG:{srid}" } }
+                        div { class: "kv-row", span { "SRID" } span { "{srid}" } }
                         if let Some((lon, lat)) = at {
                             div { class: "kv-row", span { "Longitude" } span { "{lon}" } }
                             div { class: "kv-row", span { "Latitude" } span { "{lat}" } }

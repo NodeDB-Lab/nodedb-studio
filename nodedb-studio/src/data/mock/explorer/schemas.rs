@@ -30,7 +30,7 @@ fn index(name: &str, kind: IndexKind, fields: &[&str]) -> IndexDef {
         name: name.to_string(),
         kind,
         fields: fields.iter().map(|f| f.to_string()).collect(),
-        ready: true,
+        ready: Some(true),
     }
 }
 
@@ -85,8 +85,8 @@ fn orders() -> CollectionSchema {
             field(
                 "total",
                 FieldType::Decimal {
-                    precision: 10,
-                    scale: 2,
+                    precision: Some(10),
+                    scale: Some(2),
                 },
                 true,
             ),
@@ -132,8 +132,8 @@ fn sales() -> CollectionSchema {
             field(
                 "revenue",
                 FieldType::Decimal {
-                    precision: 12,
-                    scale: 2,
+                    precision: Some(12),
+                    scale: Some(2),
                 },
                 true,
             ),
@@ -162,7 +162,7 @@ fn places() -> CollectionSchema {
             field("feature_id", text(None), true),
             field("name", text(None), true),
             field("category", text(None), false),
-            field("geometry", FieldType::Geometry { srid: 4326 }, true),
+            field("geometry", FieldType::Geometry { srid: Some(4326) }, true),
         ],
         columns: vec![
             col("feature_id", "feature_id", CellFormat::Text),
@@ -217,7 +217,7 @@ fn articles() -> CollectionSchema {
                 ("title".into(), "English".into()),
                 ("body".into(), "English".into()),
             ],
-            ready: true,
+            ready: Some(true),
             coverage_percent: None,
         }),
         vector: Some(VectorField {
@@ -266,8 +266,8 @@ fn inventory() -> CollectionSchema {
             field(
                 "price",
                 FieldType::Decimal {
-                    precision: 10,
-                    scale: 2,
+                    precision: Some(10),
+                    scale: Some(2),
                 },
                 true,
             ),

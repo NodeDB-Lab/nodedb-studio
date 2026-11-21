@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use nodedb_types::{NdbDateTime, Value};
 
-use crate::models::record_json::{compact, normalize, pretty};
+use crate::models::record_json::{compact, decimal_text, from_json, normalize, pretty};
 use crate::models::schema::{FieldType, SchemaField};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,12 +107,19 @@ fn type_error(ty: &FieldType, v: &Value) -> Option<String> {
         (FieldType::Float64, Value::Float(_) | Value::Integer(_)) => None,
         (FieldType::Float64, _) => bad("a number"),
         (FieldType::Decimal { precision, scale }, Value::String(s)) => {
-            let digits = s.trim_start_matches('-').replace('.', "").len();
-            let frac = s.split_once('.').map_or(0, |(_, f)| f.len());
-            if s.parse::<f64>().is_err() {
-                bad("a decimal number")
-            } else if frac > usize::from(*scale) || digits > usize::from(*precision) {
-                Some(format!("must fit decimal({precision},{scale})"))
+            let Some(text) = decimal_text(s, None) else {
+                return bad("a decimal number");
+            };
+            // A bare DECIMAL has no limit. DECIMAL(p,s) holds s places and
+            // p - s integer digits, as the server's typmod does.
+            let (Some(p), Some(sc)) = (precision, scale) else {
+                return None;
+            };
+            let digits = text.trim_start_matches('-');
+            let (int, frac) = digits.split_once('.').unwrap_or((digits, ""));
+            let int = int.trim_start_matches('0').len();
+            if frac.len() > usize::from(*sc) || int > usize::from(p.saturating_sub(*sc)) {
+                Some(format!("must fit decimal({p},{sc})"))
             } else {
                 None
             }
@@ -223,6 +230,7 @@ pub fn set_field(
                 .unwrap_or_else(|| Value::String(input.to_string())),
             Some(FieldType::Object | FieldType::Array | FieldType::Json) => {
                 sonic_rs::from_str::<Value>(input)
+                    .map(from_json)
                     .unwrap_or_else(|_| Value::String(input.to_string()))
             }
             Some(FieldType::String { .. } | FieldType::Decimal { .. } | FieldType::Uuid) | None => {
@@ -291,8 +299,8 @@ mod tests {
             f(
                 "total",
                 FieldType::Decimal {
-                    precision: 10,
-                    scale: 2,
+                    precision: Some(10),
+                    scale: Some(2),
                 },
                 true,
             ),
@@ -319,6 +327,31 @@ mod tests {
                 .any(|(n, m)| n == "currency" && m.contains("at most 3"))
         );
         assert!(found.contains(&("extra".into(), "is not in the schema".into())));
+    }
+
+    /// A bare DECIMAL takes any decimal. DECIMAL(p,s) counts integer
+    /// digits as p - s, so a leading zero is no digit.
+    #[test]
+    fn a_decimal_limit_is_the_declared_one_only() {
+        let check = |ty: FieldType, text: &str| {
+            let fields = [f("d", ty, false)];
+            violations(true, &fields, &obj(vec![("d", Value::String(text.into()))]))
+        };
+        let free = FieldType::Decimal {
+            precision: None,
+            scale: None,
+        };
+        for ok in ["3.14159", "12345678901234567890.123456", "-7"] {
+            assert!(check(free, ok).is_empty(), "{ok}");
+        }
+        assert!(!check(free, "abc").is_empty());
+        let money = FieldType::Decimal {
+            precision: Some(2),
+            scale: Some(2),
+        };
+        assert!(check(money, "0.50").is_empty());
+        assert!(!check(money, "1.50").is_empty());
+        assert!(!check(money, "0.505").is_empty());
     }
 
     #[test]

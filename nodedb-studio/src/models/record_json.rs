@@ -63,7 +63,46 @@ fn expanded(value: &Value) -> Value {
     sonic_rs::to_string(value)
         .ok()
         .and_then(|text| sonic_rs::from_str::<Value>(&text).ok())
+        .map(from_json)
         .unwrap_or(Value::Null)
+}
+
+/// A value parsed from JSON text, as that text means it. `Value` reads a
+/// JSON array of numbers 0 to 255 as `Bytes`, but JSON has no bytes: such
+/// an array is an array of integers.
+pub fn from_json(value: Value) -> Value {
+    match value {
+        Value::Bytes(b) => Value::Array(b.into_iter().map(|n| Value::Integer(n.into())).collect()),
+        Value::Array(items) => Value::Array(items.into_iter().map(from_json).collect()),
+        Value::Object(map) => {
+            Value::Object(map.into_iter().map(|(k, v)| (k, from_json(v))).collect())
+        }
+        other => other,
+    }
+}
+
+/// `text` as a decimal the editor can show bare: plain decimal digits that
+/// read back from the JSON number (an `f64`) as the same text at `scale`.
+/// Any other decimal shows quoted, so it reads back exact.
+fn bare_decimal(text: &str, scale: Option<u8>) -> bool {
+    let Some(exact) = decimal_text(text, scale) else {
+        return false;
+    };
+    text.trim()
+        .parse::<f64>()
+        .ok()
+        .and_then(|n| decimal_text(&n.to_string(), scale))
+        .is_some_and(|back| back == exact)
+}
+
+/// A decimal as the editor shows it: bare when it reads back exact, else
+/// quoted.
+fn decimal_out(text: &str, scale: Option<u8>) -> String {
+    if bare_decimal(text, scale) {
+        text.trim().to_string()
+    } else {
+        escape(text)
+    }
 }
 
 fn field_type<'a>(fields: &'a [SchemaField], name: &str) -> Option<&'a FieldType> {
@@ -106,12 +145,19 @@ fn write(
         Value::Integer(i) => out.push_str(&i.to_string()),
         Value::Float(f) => out.push_str(&float(*f)),
         Value::String(s) => match ty {
-            Some(FieldType::Decimal { .. }) if s.parse::<f64>().is_ok() => out.push_str(s),
+            Some(FieldType::Decimal { scale, .. }) => out.push_str(&decimal_out(s, *scale)),
             _ => out.push_str(&escape(s)),
         },
         Value::Uuid(s) | Value::Ulid(s) | Value::Regex(s) => out.push_str(&escape(s)),
         Value::DateTime(t) | Value::NaiveDateTime(t) => out.push_str(&escape(&iso(t))),
-        Value::Decimal(d) => out.push_str(&d.to_string()),
+        Value::Decimal(d) => {
+            let scale = if let Some(FieldType::Decimal { scale, .. }) = ty {
+                *scale
+            } else {
+                None
+            };
+            out.push_str(&decimal_out(&d.to_string(), scale));
+        }
         Value::Bytes(b) => out.push_str(&escape(&format!("<{} bytes>", b.len()))),
         Value::Vector(v) => {
             let head: Vec<String> = v.iter().take(3).map(|f| format!("{f}")).collect();
@@ -210,16 +256,30 @@ pub fn compact(value: &Value, fields: &[SchemaField]) -> String {
     out
 }
 
-/// A decimal as exact text padded to `scale` places. Text with more places
-/// than `scale` stays as typed: rounding it would hide the error. `None`
-/// when the text is not a number.
-fn decimal_text(text: &str, scale: u8) -> Option<String> {
-    let n: f64 = text.trim().parse().ok()?;
-    let places = text.trim().split_once('.').map_or(0, |(_, f)| f.len());
-    if places > usize::from(scale) {
-        Some(text.trim().to_string())
-    } else {
-        Some(format!("{n:.prec$}", prec = usize::from(scale)))
+/// A decimal as exact text, never through a float: padded to `scale`
+/// places, or as typed without a scale (a bare DECIMAL). Text with more
+/// places than `scale` stays as typed: rounding it would hide the error.
+/// `None` when the text is not a plain decimal such as `-12.50`.
+pub fn decimal_text(text: &str, scale: Option<u8>) -> Option<String> {
+    let t = text.trim();
+    let digits = t.strip_prefix('-').unwrap_or(t);
+    let (int, frac) = digits.split_once('.').unwrap_or((digits, ""));
+    let plain = !(int.is_empty() && frac.is_empty())
+        && int.bytes().chain(frac.bytes()).all(|b| b.is_ascii_digit());
+    if !plain {
+        return None;
+    }
+    match scale.map(usize::from) {
+        Some(scale) if frac.len() <= scale => {
+            let sign = if t.starts_with('-') { "-" } else { "" };
+            let int = if int.is_empty() { "0" } else { int };
+            Some(
+                format!("{sign}{int}.{frac:0<scale$}")
+                    .trim_end_matches('.')
+                    .to_string(),
+            )
+        }
+        Some(_) | None => Some(t.to_string()),
     }
 }
 
@@ -235,15 +295,21 @@ pub fn normalize(value: &Value, fields: &[SchemaField]) -> Value {
         let Some(v) = out.get(&f.name).cloned() else {
             continue;
         };
+        let as_decimal = |text: String, scale: Option<u8>| {
+            Value::String(decimal_text(&text, scale).unwrap_or(text))
+        };
         let fixed = match (&f.ty, &v) {
             (FieldType::Decimal { scale, .. }, Value::String(s)) => {
                 decimal_text(s, *scale).map(Value::String).unwrap_or(v)
             }
             (FieldType::Decimal { scale, .. }, Value::Float(n)) => {
-                Value::String(decimal_text(&n.to_string(), *scale).unwrap_or_else(|| n.to_string()))
+                as_decimal(n.to_string(), *scale)
             }
             (FieldType::Decimal { scale, .. }, Value::Integer(n)) => {
-                Value::String(format!("{n}.{}", "0".repeat(usize::from(*scale))))
+                as_decimal(n.to_string(), *scale)
+            }
+            (FieldType::Decimal { scale, .. }, Value::Decimal(d)) => {
+                as_decimal(d.to_string(), *scale)
             }
             (FieldType::Timestamp | FieldType::Datetime, Value::String(s)) => {
                 NdbDateTime::parse(s).map(Value::DateTime).unwrap_or(v)
@@ -258,9 +324,11 @@ pub fn normalize(value: &Value, fields: &[SchemaField]) -> Value {
 
 /// Parses editor text into an object, normalized against `fields`.
 pub fn parse_object(text: &str, fields: &[SchemaField]) -> Result<Value, JsonError> {
-    let parsed: Value = sonic_rs::from_str(text).map_err(|e| JsonError {
-        message: format!("Invalid JSON: {e}"),
-    })?;
+    let parsed: Value = sonic_rs::from_str(text)
+        .map(from_json)
+        .map_err(|e| JsonError {
+            message: format!("Invalid JSON: {e}"),
+        })?;
     match parsed {
         Value::Object(_) => Ok(normalize(&parsed, fields)),
         _ => Err(JsonError {
@@ -403,14 +471,105 @@ mod tests {
         let f = [field(
             "total",
             FieldType::Decimal {
-                precision: 10,
-                scale: 2,
+                precision: Some(10),
+                scale: Some(2),
             },
         )];
         let v = object(vec![("total", Value::String("89.50".into()))]);
         assert!(pretty(&v, &f).contains("\"total\": 89.50"));
         let parsed = parse_object("{\"total\": 89.5}", &f).expect("parses");
         assert_eq!(compact(&parsed, &f), compact(&v, &f));
+    }
+
+    /// Every decimal the editor shows reads back as the stored value. A
+    /// JSON number is an `f64`, so a decimal with more digits than an `f64`
+    /// holds shows quoted.
+    #[test]
+    fn a_decimal_reads_back_exact_whatever_its_digits() {
+        let fixed = field(
+            "d",
+            FieldType::Decimal {
+                precision: Some(38),
+                scale: Some(2),
+            },
+        );
+        let free = field(
+            "d",
+            FieldType::Decimal {
+                precision: None,
+                scale: None,
+            },
+        );
+        for (f, stored, shown) in [
+            (&fixed, "89.50", "89.50"),
+            (
+                &fixed,
+                "12345678901234567890.12",
+                "\"12345678901234567890.12\"",
+            ),
+            (&free, "3.14159", "3.14159"),
+            (&free, "1.50", "\"1.50\""),
+            (
+                &free,
+                "12345678901234567890.123456",
+                "\"12345678901234567890.123456\"",
+            ),
+        ] {
+            let fields = [f.clone()];
+            for v in [
+                Value::String(stored.into()),
+                Value::Decimal(stored.parse().expect("a decimal")),
+            ] {
+                let v = object(vec![("d", v)]);
+                let text = compact(&v, &fields);
+                assert_eq!(text, format!("{{\"d\": {shown}}}"), "{stored}");
+                let back = parse_object(&text, &fields).expect("parses");
+                assert_eq!(
+                    compact(&normalize(&v, &fields), &fields),
+                    compact(&back, &fields),
+                    "{stored}"
+                );
+                assert_eq!(
+                    normalize(&v, &fields),
+                    object(vec![("d", Value::String(stored.into()))]),
+                    "{stored} normalizes to its own text"
+                );
+            }
+        }
+        assert_eq!(decimal_text("7", Some(2)).as_deref(), Some("7.00"));
+        assert_eq!(decimal_text("-.5", Some(2)).as_deref(), Some("-0.50"));
+        assert_eq!(decimal_text("1.234", Some(2)).as_deref(), Some("1.234"));
+        assert_eq!(decimal_text("7", Some(0)).as_deref(), Some("7"));
+        for bad in ["NaN", "inf", "1e5", "", "-", ".", "1.2.3", "+1"] {
+            assert_eq!(decimal_text(bad, Some(2)), None, "{bad}");
+        }
+    }
+
+    /// JSON has no bytes, so an array of small numbers is an array.
+    #[test]
+    fn an_array_of_small_numbers_parses_as_an_array() {
+        assert!(
+            matches!(sonic_rs::from_str::<Value>("[1, 2]"), Ok(Value::Bytes(_))),
+            "`Value` alone reads it as bytes: the reason for `from_json`"
+        );
+        let v = parse_object("{\"tags\": [1, 2, 255], \"o\": {\"a\": [0]}}", &[]).expect("parses");
+        assert_eq!(
+            v,
+            object(vec![
+                (
+                    "tags",
+                    Value::Array(vec![
+                        Value::Integer(1),
+                        Value::Integer(2),
+                        Value::Integer(255)
+                    ])
+                ),
+                (
+                    "o",
+                    object(vec![("a", Value::Array(vec![Value::Integer(0)]))])
+                ),
+            ])
+        );
     }
 
     #[test]
