@@ -219,12 +219,16 @@ pub fn MonitoringTab() -> Element {
             div { class: "workbench col",
                 {charts(Metric::Queries, Metric::P99Latency)}
                 {charts(Metric::Cpu, Metric::Memory)}
-                ResizeHandle { surface: SURFACE, target: "nodes", size: NODES_SIZE, side: Side::After }
+                if history {
+                    ResizeHandle { surface: SURFACE, target: "nodes", size: NODES_SIZE, side: Side::After }
+                }
+                // Without charts above it, the panel takes the page.
                 Panel {
                     surface: SURFACE,
                     id: "nodes",
                     title: "Nodes",
-                    size: NODES_SIZE,
+                    size: history.then_some(NODES_SIZE),
+                    class: if history { "" } else { "fill" },
                     if let Some(t) = data.as_ref() {
                         NodeTable { telemetry: t.clone() }
                         if !history && t.nodes.iter().all(|n| n.cpu_percent.is_none()) {

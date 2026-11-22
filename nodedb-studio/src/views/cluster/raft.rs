@@ -20,7 +20,7 @@ use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
 use crate::state::cluster::ClusterUi;
 use crate::state::workspace::Surface;
-use crate::views::cluster::common::{NotReported, SeenBy};
+use crate::views::cluster::common::{GroupId, NotReported, SeenBy};
 use crate::views::cluster::raft_details::RaftDetails;
 use crate::views::cluster::raft_review::TransferSheet;
 use crate::views::events::common::{NoticeLine, StatusText};
@@ -164,7 +164,7 @@ pub fn RaftTab() -> Element {
                                                                 w.group = Some(id.clone());
                                                                 w.target = None;
                                                             },
-                                                            td { class: "key", "{g.id}" }
+                                                            td { class: "key", GroupId { id: g.id.clone() } }
                                                             td { "{g.leader_name()}" }
                                                             td { class: "num", "{g.voter_count}" }
                                                             td { class: "num",

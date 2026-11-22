@@ -23,7 +23,7 @@ use crate::state::caps::cluster::offers_cluster_ops;
 use crate::state::cluster::ClusterUi;
 use crate::state::gates::use_caps;
 use crate::state::workspace::Surface;
-use crate::views::cluster::common::{NotReported, SeenBy, or_not_reported};
+use crate::views::cluster::common::{GroupId, NotReported, SeenBy, or_not_reported};
 use crate::views::cluster::node_details::NodeDetails;
 use crate::views::events::common::StatusText;
 
@@ -288,7 +288,7 @@ pub fn NodesTab() -> Element {
                                                         class: if is_selected { "clickable selected" } else { "clickable" },
                                                         "aria-selected": "{is_selected}",
                                                         onclick: move |_| sel.write().group = Some(id.clone()),
-                                                        td { class: "key", "{g.group}" }
+                                                        td { class: "key", GroupId { id: g.group.clone() } }
                                                         td { "{g.kind.label()}" }
                                                         td { "{g.role_here.label()}" }
                                                         td { "{g.leader.as_deref().unwrap_or(\"none\")}" }

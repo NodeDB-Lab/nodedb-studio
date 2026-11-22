@@ -2,7 +2,7 @@
 
 use dioxus::prelude::*;
 
-use crate::models::cluster::Observer;
+use crate::models::cluster::{Observer, SEQUENCER_GROUP_ID};
 
 /// Why a panel names its node: one connection reaches one node.
 const SEEN_BY: &str = "Studio reads the cluster through the node it connected to. Roles, leaders, terms, node states and circuit states are that node's opinion, and another node can hold a different one during a change.";
@@ -28,6 +28,21 @@ pub fn or_not_reported<T>(value: Option<T>, show: impl FnOnce(T) -> String) -> E
     match value.map(show) {
         Some(text) => rsx! { "{text}" },
         None => rsx! { NotReported {} },
+    }
+}
+
+/// A group id short enough for a table cell. NodeDB's sequencer id is a
+/// 20-digit number (SQL prints it as `-4294967295`), so the cell names the
+/// group and its title keeps the id.
+#[component]
+pub fn GroupId(id: String) -> Element {
+    let text = if id == SEQUENCER_GROUP_ID.to_string() {
+        "sequencer"
+    } else {
+        id.as_str()
+    };
+    rsx! {
+        span { title: "Group {id}", "{text}" }
     }
 }
 

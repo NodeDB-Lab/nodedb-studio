@@ -105,7 +105,7 @@ fn Overview(group: RaftGroup, observer: Observer) -> Element {
         h4 { class: "inspector-section", "Peers" }
         if g.peers.is_none() {
             div { class: "async-empty", "Node {on} does not list the members of {g.id}." }
-        }
+        } else {
         div { class: "dt-wrap cl-peers",
             table { class: "dt",
                 thead {
@@ -148,6 +148,7 @@ fn Overview(group: RaftGroup, observer: Observer) -> Element {
                     }
                 }
             }
+        }
         }
         p { class: "inspector-note",
             "Term, commit index and applied index are node {on}'s. The leader and the circuits are node {on}'s view: another node can hold a different one during a change."
