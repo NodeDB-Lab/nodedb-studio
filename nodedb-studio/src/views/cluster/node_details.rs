@@ -12,6 +12,10 @@ use crate::state::cluster::ClusterUi;
 use crate::views::cluster::common::{SeenBy, or_not_reported};
 use crate::views::events::common::{StatusBadge, StatusText};
 
+/// What an open circuit and `draining` do and do not tell. A stopped peer
+/// shows exactly these two, so neither can mean the node is fine.
+pub const PEER_STATES: &str = "A peer that stops answering opens the circuit first and turns draining later. Neither state tells you whether the node is down or was removed.";
+
 #[component]
 pub fn NodeDetails(
     member: ClusterMember,
@@ -58,7 +62,7 @@ pub fn NodeDetails(
             }
             p { class: "inspector-note",
                 SeenBy { observer: observer.clone() }
-                " A peer that stops answering opens the circuit first and turns draining later. Neither means the node is gone."
+                " {PEER_STATES}"
             }
             div { class: "inspector-actions",
                 button {
@@ -83,5 +87,18 @@ pub fn NodeDetails(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A killed peer shows exactly an open circuit, then `draining`: the
+    /// note must not say the node is not gone.
+    #[test]
+    fn the_peer_note_does_not_say_the_node_is_up() {
+        assert!(!PEER_STATES.contains("Neither means the node is gone"));
+        assert!(PEER_STATES.contains("whether the node is down or was removed"));
     }
 }
