@@ -1,7 +1,10 @@
 //! Cluster reads and operations. Scope is the whole Origin cluster: none of
-//! these depend on the selected database. A membership operation is read as a
+//! these depend on the selected database. Each read is one node's view, the
+//! observer it names: roles, leaders, terms, node states and circuits differ
+//! between nodes during a change. A membership operation is read as a
 //! preview first. Apply names the revision the preview read and the server
-//! refuses it when the cluster changed since.
+//! refuses it when the cluster changed since. A server without operations
+//! answers each one `Unsupported`.
 
 use async_trait::async_trait;
 
@@ -15,13 +18,16 @@ use crate::services::error::StudioError;
 
 #[async_trait(?Send)]
 pub trait ClusterData {
-    /// Every configured member with its observed reachability.
+    /// Every configured member, with the node state the observer holds for
+    /// it and the observer's circuit to it.
     async fn cluster_members(&self) -> Result<ClusterMembers, StudioError>;
 
     /// The Raft groups member `node_id` hosts, as that member observes them.
+    /// `Unsupported` when the backend cannot read that member's own view.
     async fn hosted_groups(&self, node_id: &str) -> Result<Vec<HostedGroup>, StudioError>;
 
-    /// Every Raft group with its peers, log positions, and snapshots.
+    /// Every Raft group the observer hosts, with its peers, log positions,
+    /// and snapshots as far as the server reports them.
     async fn raft_groups(&self) -> Result<RaftGroups, StudioError>;
 
     /// What moving `group`'s leadership to member `target_id` will do.
@@ -53,7 +59,7 @@ pub trait ClusterData {
     async fn apply_rebalance(&self, plan: &RebalancePlan) -> Result<OpResult, StudioError>;
 
     /// Telemetry over `range`. `node` is a member id, or every node together
-    /// when `None`.
+    /// when `None`. A server without history returns no series.
     async fn telemetry(
         &self,
         node: Option<&str>,
