@@ -21,7 +21,8 @@ use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::cluster::monitor::{
-    EngineBudget, Freshness, Metric, NodeTelemetry, Telemetry, TelemetryRange, capacity_text,
+    EngineBudget, Freshness, Metric, NodeTelemetry, RESERVED_NOTE, Telemetry, TelemetryRange,
+    capacity_text,
 };
 use crate::models::cluster::place::size_text;
 use crate::models::feeds::Tone;
@@ -330,7 +331,7 @@ fn Budgets(budgets: Vec<EngineBudget>, node: String) -> Element {
                     tr {
                         th { "Engine" }
                         th { class: "num", "Budget" }
-                        th { class: "num", title: "Bytes reserved now. NodeDB reserves only on some engine paths (flushes, checkpoints, index builds), so a busy node can read 0.", "Reserved" }
+                        th { class: "num", title: RESERVED_NOTE, "Reserved" }
                         th { class: "num", "Peak" }
                         th { class: "num", title: "Reservations refused for lack of budget", "Refused" }
                     }
@@ -349,7 +350,7 @@ fn Budgets(budgets: Vec<EngineBudget>, node: String) -> Element {
             }
         }
         p { class: "inspector-note",
-            "Budgets the engines reserve against on node {node}, not the process's memory. NodeDB reserves only on some engine paths, so a busy node can read 0."
+            "Budgets the engines reserve against on node {node}, not the process's memory. A reservation lasts only while an operation or a resident index holds memory, so a busy node can read 0."
         }
     }
 }

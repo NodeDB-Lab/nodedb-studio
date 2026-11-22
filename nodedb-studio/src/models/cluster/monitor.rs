@@ -168,14 +168,20 @@ pub struct NodeTelemetry {
     pub observed_at: i64,
 }
 
+/// What a reservation reading means. NodeDB 0.6.2 reserves while an
+/// operation holds memory (scans, aggregates, joins, spills, graph
+/// algorithms, writes, flushes, checkpoints, index builds) and while some
+/// indexes stay resident (spatial R-trees, graph CSR), and releases it
+/// after. A sample between operations reads 0, even on a busy node.
+pub const RESERVED_NOTE: &str = "Bytes reserved when the node answered. Engines reserve while an operation holds memory (scans, aggregates, joins, spills, graph algorithms, writes, flushes, checkpoints, index builds) and while some indexes stay resident (spatial R-trees, graph CSR), and release it after. A sample between operations reads 0, even on a busy node.";
+
 /// One engine's memory budget on the observer (`SHOW MEMORY`). It is a
 /// budget the engine reserves against, not the process's memory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct EngineBudget {
     pub engine: String,
     pub limit_bytes: u64,
-    /// Bytes reserved now. NodeDB reserves only on some engine paths
-    /// (flushes, checkpoints, index builds), so a busy node can read 0.
+    /// Bytes reserved when the node answered. See `RESERVED_NOTE`.
     pub reserved_bytes: u64,
     pub peak_bytes: u64,
     /// Reservations refused for lack of budget.
@@ -264,6 +270,22 @@ mod tests {
             node(1_000).freshness(1_000 + STALE_AFTER_SECS + 1),
             Freshness::Stale
         );
+    }
+
+    /// The note must not narrow reservations to flushes and checkpoints:
+    /// scans, aggregates and resident indexes reserve too.
+    #[test]
+    fn the_reserved_note_names_every_kind_of_reservation() {
+        for word in [
+            "scans",
+            "aggregates",
+            "spills",
+            "graph algorithms",
+            "resident",
+            "reads 0",
+        ] {
+            assert!(RESERVED_NOTE.contains(word), "{word}");
+        }
     }
 
     #[test]
