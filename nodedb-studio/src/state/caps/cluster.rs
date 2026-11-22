@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::routes::tabs::ClusterTab;
 use crate::state::connection::Capabilities;
+use crate::state::workspace::Surface;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ClusterCaps {
@@ -72,8 +73,21 @@ pub fn shows_cluster_history(caps: Option<&Capabilities>) -> bool {
     caps.is_none_or(|c| c.cluster_caps.history)
 }
 
+/// Whether the View menu lists panel `id` of `surface`. A panel a Cluster
+/// flag hides renders nothing, so its toggle must not show. Every panel of
+/// another page is listed.
+pub fn offers_panel(surface: Surface, id: &str, caps: Option<&Capabilities>) -> bool {
+    match surface {
+        Surface::Cluster(ClusterTab::Placement) if id == "rebalance" => offers_cluster_ops(caps),
+        Surface::Cluster(ClusterTab::Monitoring) if id != "nodes" => shows_cluster_history(caps),
+        _ => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use dioxus::prelude::*;
+
     use super::*;
     use crate::state::gates::test_caps;
 
@@ -122,6 +136,45 @@ mod tests {
     fn no_connection_offers_everything() {
         assert_eq!(cluster_tabs(None), ClusterTab::ALL);
         assert!(offers_cluster_ops(None));
+    }
+
+    /// The View menu of a hidden part must not list its panels: toggling
+    /// one renders nothing.
+    #[test]
+    fn the_view_menu_lists_no_panel_a_flag_hides() {
+        use crate::components::view_menu::ViewMenuFor;
+        use crate::state::connection::ActiveConnection;
+        use crate::state::workspace::Workspace;
+
+        #[component]
+        fn Menu(surface: Surface) -> Element {
+            use_context_provider(|| Signal::new(Workspace::default()));
+            use_context_provider(|| {
+                Signal::new(Some(ActiveConnection {
+                    name: "n".into(),
+                    sub: String::new(),
+                    display_name: String::new(),
+                    user: "nodedb".into(),
+                    role: String::new(),
+                    capabilities: nodedb(),
+                    current_database: "default".into(),
+                }))
+            });
+            rsx! { ViewMenuFor { surface, navigation: false } }
+        }
+        let render = |surface| {
+            let mut dom = VirtualDom::new_with_props(Menu, MenuProps { surface });
+            dom.rebuild_in_place();
+            dioxus_ssr::render(&dom)
+        };
+        let place = render(Surface::Cluster(ClusterTab::Placement));
+        assert!(place.contains("vShard details"), "{place}");
+        assert!(!place.contains("Rebalance preview"), "{place}");
+        let monitor = render(Surface::Cluster(ClusterTab::Monitoring));
+        assert!(monitor.contains("Nodes"), "{monitor}");
+        for chart in ["Queries", "p99 latency", "CPU usage", "Memory usage"] {
+            assert!(!monitor.contains(chart), "{chart}: {monitor}");
+        }
     }
 
     /// A profile saved before the flags existed came from the mock.

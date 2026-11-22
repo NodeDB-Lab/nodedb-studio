@@ -10,6 +10,8 @@ use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
 use crate::routes::Route;
+use crate::state::caps::cluster::offers_panel;
+use crate::state::gates::use_caps;
 use crate::state::panel_registry::DynamicPanels;
 use crate::state::workspace::{Surface, Workspace};
 
@@ -26,11 +28,14 @@ pub fn ViewMenu() -> Element {
 #[component]
 pub fn ViewMenuFor(surface: Surface, navigation: bool) -> Element {
     let mut workspace = use_context::<Signal<Workspace>>();
+    let caps = use_caps();
     let ws = workspace.read();
     let nav_visible = ws.nav_visible();
     let mut rows: Vec<(String, String, String, bool)> = surface
         .panels()
         .iter()
+        // A panel the server cannot fill is not offered, so not listed.
+        .filter(|p| offers_panel(surface, p.id, caps.as_ref()))
         .map(|p| {
             (
                 p.id.to_string(),
