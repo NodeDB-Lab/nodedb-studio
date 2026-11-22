@@ -136,7 +136,13 @@ pub(in crate::services::nodedb) fn placement(
     moving: &HashMap<u32, String>,
     observed_at: i64,
 ) -> Placement {
-    let down = |id: u64| link(seen, links, id).reached() == Some(false);
+    let replicas_where = |r: &RangeRow, reached: Option<bool>| -> Vec<String> {
+        r.replicas
+            .iter()
+            .filter(|id| link(seen, links, **id).reached() == reached)
+            .map(|id| node_name(*id))
+            .collect()
+    };
     let vshards = ranges
         .iter()
         .map(|r| VShard {
@@ -155,12 +161,8 @@ pub(in crate::services::nodedb) fn placement(
                 to: None,
                 phase: Some(phase.clone()),
             }),
-            unreachable: r
-                .replicas
-                .iter()
-                .filter(|id| down(**id))
-                .map(|id| node_name(*id))
-                .collect(),
+            unreachable: replicas_where(r, Some(false)),
+            unknown: replicas_where(r, None),
         })
         .collect();
     // One row per data group: every vShard of a group shares its replicas.
@@ -368,6 +370,38 @@ mod tests {
         assert_eq!(h[1].leader.as_deref(), Some("node 3"));
         assert!(h.iter().all(|g| g.state.is_none()));
         assert_eq!(h[1].applied_index, 11);
+    }
+
+    /// Node 4 is in no circuit list, and group 3 has no routing entry:
+    /// neither vShard may read Placed.
+    #[test]
+    fn a_vshard_with_an_unknown_replica_or_no_route_is_not_placed() {
+        use crate::models::cluster::place::ShardStatus;
+        let ranges = [
+            RangeRow {
+                vshard: 0,
+                group_id: 1,
+                leaseholder: 1,
+                replicas: vec![1, 2, 4],
+            },
+            RangeRow {
+                vshard: 1,
+                group_id: 3,
+                leaseholder: 0,
+                replicas: Vec::new(),
+            },
+            RangeRow {
+                vshard: 2,
+                group_id: 2,
+                leaseholder: 1,
+                replicas: vec![1, 2],
+            },
+        ];
+        let p = placement(&seen(), &[], &links(), &ranges, &HashMap::new(), 5);
+        let status = |n| p.vshard(n).map(|v| v.status());
+        assert_ne!(status(0), Some(ShardStatus::Placed));
+        assert_ne!(status(1), Some(ShardStatus::Placed));
+        assert_eq!(status(2), Some(ShardStatus::Placed));
     }
 
     #[test]

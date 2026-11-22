@@ -3,6 +3,7 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
+use crate::models::cluster::Link;
 use crate::models::cluster::place::{Placement, VShard, size_text};
 use crate::models::cluster::raft::PeerRole;
 use crate::routes::Route;
@@ -18,12 +19,12 @@ pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
     let v = &vshard;
     let status = v.status();
     let group = v.group.clone();
-    let members: Vec<(String, Option<PeerRole>, bool)> = placement
+    let members: Vec<(String, Option<PeerRole>, Link)> = placement
         .nodes
         .iter()
         .filter_map(|n| {
             n.role_in(&v.group)
-                .map(|r| (n.name.clone(), Some(r), v.unreachable.contains(&n.name)))
+                .map(|r| (n.name.clone(), Some(r), n.link.clone()))
         })
         .collect();
     let quorum = placement.quorum(&v.group).cloned();
@@ -69,12 +70,12 @@ pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
             }
             h4 { class: "inspector-section", "Group membership" }
             div { class: "cl-members",
-                for (name , role , down) in members {
+                for (name , role , link) in members {
                     span {
                         key: "{name}",
                         class: if role == Some(PeerRole::Leader) { "cl-member lead" } else { "cl-member" },
-                        title: if down { "This node does not answer" } else { "" },
-                        span { class: if down { "status-dot idle" } else { "status-dot ok" } }
+                        title: "Circuit from node {on}: {link.label()}",
+                        span { class: link.tone().dot() }
                         "{name}"
                         if let Some(r) = role {
                             span { class: "cl-member-role", "{r.label()}" }

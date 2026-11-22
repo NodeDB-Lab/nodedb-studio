@@ -30,12 +30,13 @@ pub fn vshards(groups: &[RaftGroup], moving: &[(String, Movement)]) -> Vec<VShar
             let g = groups.iter().find(|g| g.id == *group)?;
             let mut replicas: Vec<String> = g.peers().iter().map(|p| p.node.clone()).collect();
             replicas.sort();
-            let unreachable = g
-                .peers()
-                .iter()
-                .filter(|p| p.link.reached() == Some(false))
-                .map(|p| p.node.clone())
-                .collect();
+            let replicas_where = |reached: Option<bool>| -> Vec<String> {
+                g.peers()
+                    .iter()
+                    .filter(|p| p.link.reached() == reached)
+                    .map(|p| p.node.clone())
+                    .collect()
+            };
             Some(VShard {
                 number: *number,
                 database: Some(db.to_string()),
@@ -50,7 +51,8 @@ pub fn vshards(groups: &[RaftGroup], moving: &[(String, Movement)]) -> Vec<VShar
                     .iter()
                     .find(|(id, _)| id == group)
                     .map(|(_, m)| m.clone()),
-                unreachable,
+                unreachable: replicas_where(Some(false)),
+                unknown: replicas_where(None),
             })
         })
         .collect()

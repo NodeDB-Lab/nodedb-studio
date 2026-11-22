@@ -206,7 +206,7 @@ pub fn PlacementTab() -> Element {
                                                                     }
                                                                     span {
                                                                         class: if v.unreachable.contains(r) { "cl-replica down" } else { "cl-replica" },
-                                                                        title: if v.unreachable.contains(r) { "This node does not answer" } else { "" },
+                                                                        title: if v.unreachable.contains(r) { "The observer does not reach this node" } else if v.unknown.contains(r) { "The observer cannot say whether it reaches this node" } else { "" },
                                                                         "{r}"
                                                                     }
                                                                 }

@@ -41,8 +41,10 @@ pub struct VShard {
     pub capacity_bytes: Option<u64>,
     pub storage_class: Option<String>,
     pub movement: Option<Movement>,
-    /// Replicas on a node that does not answer.
+    /// Replicas on a node the observer does not reach.
     pub unreachable: Vec<String>,
+    /// Replicas on a node the observer cannot say it reaches.
+    pub unknown: Vec<String>,
 }
 
 /// How a vShard's replicas stand. Placement only: group quorum is read in
@@ -55,6 +57,9 @@ pub enum ShardStatus {
     ReplicaUnreachable,
     /// A replica move is running.
     Moving,
+    /// The observer cannot say: it lists no replica for the vShard, or it
+    /// cannot tell whether it reaches one.
+    Unknown,
 }
 
 impl ShardStatus {
@@ -63,6 +68,7 @@ impl ShardStatus {
             ShardStatus::Placed => "Placed",
             ShardStatus::ReplicaUnreachable => "Replica unreachable",
             ShardStatus::Moving => "Moving",
+            ShardStatus::Unknown => "Not known",
         }
     }
 
@@ -70,6 +76,7 @@ impl ShardStatus {
         match self {
             ShardStatus::Placed => Tone::Ok,
             ShardStatus::ReplicaUnreachable | ShardStatus::Moving => Tone::Warn,
+            ShardStatus::Unknown => Tone::Idle,
         }
     }
 }
@@ -89,6 +96,8 @@ impl VShard {
             ShardStatus::Moving
         } else if !self.unreachable.is_empty() {
             ShardStatus::ReplicaUnreachable
+        } else if self.replicas.is_empty() || !self.unknown.is_empty() {
+            ShardStatus::Unknown
         } else {
             ShardStatus::Placed
         }
@@ -277,6 +286,7 @@ mod tests {
             storage_class: Some("standard-ssd".into()),
             movement: None,
             unreachable: Vec::new(),
+            unknown: Vec::new(),
         }
     }
 
@@ -292,6 +302,12 @@ mod tests {
     fn status_separates_a_move_from_an_unreachable_replica() {
         let mut s = shard(1, "data-1", 10);
         assert_eq!(s.status(), ShardStatus::Placed);
+        s.unknown.push("node-4".into());
+        assert_eq!(s.status(), ShardStatus::Unknown);
+        s.unknown.clear();
+        s.replicas.clear();
+        assert_eq!(s.status(), ShardStatus::Unknown);
+        s.replicas.push("node-1".into());
         s.unreachable.push("node-5".into());
         assert_eq!(s.status(), ShardStatus::ReplicaUnreachable);
         s.movement = Some(Movement {
