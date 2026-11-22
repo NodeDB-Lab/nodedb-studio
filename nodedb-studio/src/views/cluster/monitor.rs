@@ -32,6 +32,7 @@ use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
 use crate::state::caps::cluster::shows_cluster_history;
 use crate::state::cluster::ClusterUi;
+use crate::state::connection::ActiveConnection;
 use crate::state::gates::use_caps;
 use crate::state::workspace::{Surface, Workspace};
 use crate::views::cluster::common::{Ctl, NotReported, SeenBy};
@@ -77,10 +78,18 @@ pub fn MonitoringTab() -> Element {
     let layout = use_context::<Signal<Workspace>>();
     let mut ui = use_context::<ClusterUi>().monitor;
     let history = shows_cluster_history(use_caps().as_ref());
-    // The read depends on these three and nothing else.
+    let active = try_use_context::<Signal<Option<ActiveConnection>>>();
+    // The read depends on these three and nothing else. Without history
+    // there is no chart to scope, so the read asks for the connected node:
+    // a node chosen on another connection must not reach this one.
     let key = use_memo(move || {
+        let caps = active.and_then(|s| s.read().as_ref().map(|c| c.capabilities));
         let u = ui.read();
-        (u.node.clone(), u.range, u.tick)
+        let node = u
+            .node
+            .clone()
+            .filter(|_| shows_cluster_history(caps.as_ref()));
+        (node, u.range, u.tick)
     });
 
     let mut telemetry = use_resource(move || {

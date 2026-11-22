@@ -222,6 +222,7 @@ fn Overview(group: RaftGroup, observer: Observer) -> Element {
 
 #[component]
 fn Configuration(group: RaftGroup) -> Element {
+    let ops = offers_cluster_ops(use_caps().as_ref());
     let g = &group;
     let reported = g.peers.is_some();
     let voters: Vec<String> = g.voters().iter().map(|p| p.node.clone()).collect();
@@ -253,7 +254,10 @@ fn Configuration(group: RaftGroup) -> Element {
             div { class: "kv-row", span { "Quorum" } span { class: "num", "{g.quorum()} of {g.voter_count} voters" } }
         }
         p { class: "inspector-note",
-            "A learner replicates the log and never votes. The highlighted voter is the leader. Membership changes start from Placement, as a reviewed replica move."
+            "A learner replicates the log and never votes. The highlighted voter is the leader."
+            if ops {
+                " Membership changes start from Placement, as a reviewed replica move."
+            }
         }
     }
 }
