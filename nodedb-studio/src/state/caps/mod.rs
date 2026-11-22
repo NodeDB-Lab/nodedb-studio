@@ -5,3 +5,5 @@
 //! whether the connected server can serve a part of a screen. The mock
 //! turns every flag on. The client-backed backend sets them for the server
 //! it talks to.
+
+pub mod cluster;

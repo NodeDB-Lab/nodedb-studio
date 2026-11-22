@@ -230,6 +230,7 @@ mod tests {
                 config: true,
                 credentials: true,
                 explain_analyze: true,
+                cluster_caps: crate::state::caps::cluster::ClusterCaps::all(),
             },
             databases: vec!["analytics".into(), "commerce".into()],
             default_database: "analytics".into(),

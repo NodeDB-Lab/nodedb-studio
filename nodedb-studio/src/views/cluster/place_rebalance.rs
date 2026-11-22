@@ -13,6 +13,7 @@ use crate::models::cluster::op::Impact;
 use crate::models::cluster::place::{MoveRequest, Placement, VShard, size_text};
 use crate::services::backend::Backend;
 use crate::state::cluster::ClusterUi;
+use crate::views::cluster::common::or_not_reported;
 use crate::views::cluster::place_tasks;
 use crate::views::events::common::StatusText;
 
@@ -33,7 +34,7 @@ pub fn Rebalance(placement: Placement, vshard: VShard) -> Element {
     let destinations: Vec<(String, String)> = placement
         .nodes
         .iter()
-        .filter(|n| n.role_in(&group).is_none() && n.state.reachable())
+        .filter(|n| n.role_in(&group).is_none() && n.link.reached() == Some(true))
         .map(|n| (n.node_id.clone(), n.name.clone()))
         .collect();
     let from = u
@@ -54,7 +55,7 @@ pub fn Rebalance(placement: Placement, vshard: VShard) -> Element {
             .map(|n| n.name.clone())
             .unwrap_or_else(|| id.to_string())
     };
-    let staged_rows: Vec<(MoveRequest, String, String, String, u64)> = u
+    let staged_rows: Vec<(MoveRequest, String, String, String, Option<u64>)> = u
         .staged
         .iter()
         .filter_map(|m| {
@@ -113,7 +114,7 @@ pub fn Rebalance(placement: Placement, vshard: VShard) -> Element {
             }
             div { class: "cl-readout",
                 span { class: "cl-readout-label", "Estimated bytes" }
-                span { class: "cl-readout-value", "{size_text(bytes)}" }
+                span { class: "cl-readout-value", {or_not_reported(bytes, size_text)} }
             }
             div { class: "cl-readout",
                 span { class: "cl-readout-label", "Estimated impact" }
@@ -177,7 +178,7 @@ pub fn Rebalance(placement: Placement, vshard: VShard) -> Element {
                             td { "{replica}" }
                             td { "{source}" }
                             td { "{dest}" }
-                            td { class: "num", "{size_text(b)}" }
+                            td { class: "num", {or_not_reported(b, size_text)} }
                             td { StatusText { tone: impact.tone(), text: impact.label().to_string() } }
                             td { class: "cl-x",
                                 button {

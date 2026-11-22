@@ -1,10 +1,12 @@
 //! Server telemetry: what each Origin node reports about itself over time.
 //! It is telemetry from the servers, not collection data. Every node row
 //! carries the time it was last observed, and a node that stopped reporting
-//! stays stale with that time. A stale value never reads as current.
+//! stays stale with that time. A stale value never reads as current. A
+//! value the server does not report is `None`, never a zero.
 
 use serde::{Deserialize, Serialize};
 
+use crate::models::cluster::Observer;
 use crate::models::cluster::place::GIB;
 
 /// A node whose last report is older than this is stale.
@@ -149,20 +151,41 @@ impl Freshness {
     }
 }
 
-/// The latest report of one node.
+/// The latest report of one node. `None`: not reported. NodeDB 0.6.2 has
+/// no statement for CPU, process memory, disk, or network.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct NodeTelemetry {
     pub node_id: String,
     pub node: String,
-    pub cpu_percent: f64,
-    pub memory_used_bytes: u64,
-    pub memory_total_bytes: u64,
-    pub disk_used_bytes: u64,
-    pub disk_total_bytes: u64,
-    pub net_in_mbs: f64,
-    pub net_out_mbs: f64,
+    pub cpu_percent: Option<f64>,
+    pub memory_used_bytes: Option<u64>,
+    pub memory_total_bytes: Option<u64>,
+    pub disk_used_bytes: Option<u64>,
+    pub disk_total_bytes: Option<u64>,
+    pub net_in_mbs: Option<f64>,
+    pub net_out_mbs: Option<f64>,
     /// When the node last reported, in seconds since the epoch.
     pub observed_at: i64,
+}
+
+/// What a reservation reading means. NodeDB 0.6.2 reserves while an
+/// operation holds memory (scans, aggregates, joins, spills, graph
+/// algorithms, writes, flushes, checkpoints, index builds) and while some
+/// indexes stay resident (spatial R-trees, graph CSR), and releases it
+/// after. A sample between operations reads 0, even on a busy node.
+pub const RESERVED_NOTE: &str = "Bytes reserved when the node answered. Engines reserve while an operation holds memory (scans, aggregates, joins, spills, graph algorithms, writes, flushes, checkpoints, index builds) and while some indexes stay resident (spatial R-trees, graph CSR), and release it after. A sample between operations reads 0, even on a busy node.";
+
+/// One engine's memory budget on the observer (`SHOW MEMORY`). It is a
+/// budget the engine reserves against, not the process's memory.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EngineBudget {
+    pub engine: String,
+    pub limit_bytes: u64,
+    /// Bytes reserved when the node answered. See `RESERVED_NOTE`.
+    pub reserved_bytes: u64,
+    pub peak_bytes: u64,
+    /// Reservations refused for lack of budget.
+    pub rejections: u64,
 }
 
 impl NodeTelemetry {
@@ -175,28 +198,27 @@ impl NodeTelemetry {
         }
     }
 
-    pub fn memory_percent(&self) -> u64 {
-        (self.memory_used_bytes * 100)
-            .checked_div(self.memory_total_bytes)
-            .unwrap_or(0)
+    pub fn memory_percent(&self) -> Option<u64> {
+        (self.memory_used_bytes? * 100).checked_div(self.memory_total_bytes?)
     }
 
-    pub fn disk_percent(&self) -> u64 {
-        (self.disk_used_bytes * 100)
-            .checked_div(self.disk_total_bytes)
-            .unwrap_or(0)
+    pub fn disk_percent(&self) -> Option<u64> {
+        (self.disk_used_bytes? * 100).checked_div(self.disk_total_bytes?)
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Telemetry {
-    /// The server's clock when it answered.
+    /// When the read was answered, in seconds since the epoch.
     pub observed_at: i64,
     pub range: TelemetryRange,
     /// The node the charts show: `None` is every node together.
     pub scope: Option<String>,
+    pub observer: Observer,
     pub series: Vec<MetricSeries>,
     pub nodes: Vec<NodeTelemetry>,
+    /// The observer's engine memory budgets.
+    pub budgets: Vec<EngineBudget>,
 }
 
 impl Telemetry {
@@ -226,13 +248,13 @@ mod tests {
         NodeTelemetry {
             node_id: "nd_01".into(),
             node: "node-1".into(),
-            cpu_percent: 58.0,
-            memory_used_bytes: 20 * GIB,
-            memory_total_bytes: 32 * GIB,
-            disk_used_bytes: 420 * GIB,
-            disk_total_bytes: 1024 * GIB,
-            net_in_mbs: 312.0,
-            net_out_mbs: 286.0,
+            cpu_percent: Some(58.0),
+            memory_used_bytes: Some(20 * GIB),
+            memory_total_bytes: Some(32 * GIB),
+            disk_used_bytes: Some(420 * GIB),
+            disk_total_bytes: Some(1024 * GIB),
+            net_in_mbs: Some(312.0),
+            net_out_mbs: Some(286.0),
             observed_at,
         }
     }
@@ -250,11 +272,29 @@ mod tests {
         );
     }
 
+    /// The note must not narrow reservations to flushes and checkpoints:
+    /// scans, aggregates and resident indexes reserve too.
+    #[test]
+    fn the_reserved_note_names_every_kind_of_reservation() {
+        for word in [
+            "scans",
+            "aggregates",
+            "spills",
+            "graph algorithms",
+            "resident",
+            "reads 0",
+        ] {
+            assert!(RESERVED_NOTE.contains(word), "{word}");
+        }
+    }
+
     #[test]
     fn percentages_are_whole() {
-        let n = node(0);
-        assert_eq!(n.memory_percent(), 62);
-        assert_eq!(n.disk_percent(), 41);
+        let mut n = node(0);
+        assert_eq!(n.memory_percent(), Some(62));
+        assert_eq!(n.disk_percent(), Some(41));
+        n.disk_used_bytes = None;
+        assert_eq!(n.disk_percent(), None);
     }
 
     #[test]

@@ -2,6 +2,70 @@
 
 use dioxus::prelude::*;
 
+use crate::models::cluster::{Observer, SEQUENCER_GROUP_ID};
+
+/// Why a panel names its node: one connection reaches one node.
+const SEEN_BY: &str = "Studio reads the cluster through the node it connected to. Roles, leaders, terms, node states and circuit states are that node's opinion, and another node can hold a different one during a change.";
+
+/// Whose view a panel shows.
+#[component]
+pub fn SeenBy(observer: Observer) -> Element {
+    rsx! {
+        span { class: "badge outline", title: SEEN_BY, "{observer.label()}" }
+    }
+}
+
+/// Where Placement's leader comes from. The Raft groups tab shows the
+/// leader the node's Raft knows: during a change the two can differ.
+pub fn routing_leader(node: &str) -> String {
+    format!(
+        "The group leader in node {node}'s routing table (SHOW RANGES leaseholder). The Raft groups tab shows the leader node {node}'s Raft knows; during a change the two can differ."
+    )
+}
+
+/// The scope of the Cluster page: every database. It looked like a select
+/// once, with no handler. It is a statement, not a control.
+#[component]
+pub fn ClusterScope() -> Element {
+    rsx! {
+        span { class: "cl-scope", title: "Cluster operations span every database",
+            span { class: "select-label", "Cluster scope · " }
+            "All databases"
+        }
+    }
+}
+
+/// A value the server does not report. Never a zero or a blank.
+#[component]
+pub fn NotReported(#[props(default)] why: String) -> Element {
+    rsx! {
+        span { class: "muted", title: "{why}", "Not reported" }
+    }
+}
+
+/// `value`, or Not reported when the server does not report it.
+pub fn or_not_reported<T>(value: Option<T>, show: impl FnOnce(T) -> String) -> Element {
+    match value.map(show) {
+        Some(text) => rsx! { "{text}" },
+        None => rsx! { NotReported {} },
+    }
+}
+
+/// A group id short enough for a table cell. NodeDB's sequencer id is a
+/// 20-digit number (SQL prints it as `-4294967295`), so the cell names the
+/// group and its title keeps the id.
+#[component]
+pub fn GroupId(id: String) -> Element {
+    let text = if id == SEQUENCER_GROUP_ID.to_string() {
+        "sequencer"
+    } else {
+        id.as_str()
+    };
+    rsx! {
+        span { title: "Group {id}", "{text}" }
+    }
+}
+
 /// A toolbar control: its label, then the control. The label names the
 /// control for assistive technology.
 #[component]
@@ -38,5 +102,35 @@ pub fn NameChips(names: Vec<String>, #[props(default)] highlight: Option<String>
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The scope reads as text: no button, no chevron, nothing to click.
+    #[test]
+    fn the_cluster_scope_is_text_not_a_control() {
+        let mut dom = VirtualDom::new(ClusterScope);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+        assert!(html.contains("All databases"), "{html}");
+        assert!(
+            !html.contains("<button") && !html.contains("<svg"),
+            "{html}"
+        );
+    }
+
+    /// Placement and Raft groups name a leader from two sources. Placement
+    /// must say which one it shows.
+    #[test]
+    fn the_placement_leader_names_its_source() {
+        let t = routing_leader("1");
+        assert!(
+            t.contains("routing table") && t.contains("SHOW RANGES"),
+            "{t}"
+        );
+        assert!(t.contains("can differ"), "{t}");
     }
 }

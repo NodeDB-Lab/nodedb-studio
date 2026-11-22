@@ -134,3 +134,7 @@
 }
 .cl-raw-toggle:hover { background: var(--surface-hover); }
 .cl-raw { max-height: 280px; overflow: auto; }
+
+/* The Cluster page scope: a statement, not a control. */
+.cl-scope { color: var(--text-secondary); white-space: nowrap; }
+.cl-scope .select-label { color: var(--text-tertiary); }

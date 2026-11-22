@@ -5,6 +5,12 @@
 //! The window, the node filter, and the refresh interval live in
 //! `ClusterUi`. A node that stopped reporting stays in the table as Stale
 //! with the time of its last report, and its chart line ends there.
+//!
+//! A server that keeps no history shows no charts and no time range: only
+//! the point-in-time facts the connected node reports, labelled as its own.
+//! A refresh is a click or the chosen interval (10 s or more, off by
+//! default). The timer stops when the tab unmounts, and a new read drops
+//! the one before it, so two reads never overlap.
 
 use std::rc::Rc;
 use std::time::Duration;
@@ -15,17 +21,22 @@ use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
 use crate::models::cluster::monitor::{
-    Freshness, Metric, NodeTelemetry, Telemetry, TelemetryRange, capacity_text,
+    EngineBudget, Freshness, Metric, NodeTelemetry, RESERVED_NOTE, Telemetry, TelemetryRange,
+    capacity_text,
 };
+use crate::models::cluster::place::size_text;
 use crate::models::feeds::Tone;
 use crate::models::format::{ago, clock_second};
 use crate::models::timeseries::axis::fixed;
 use crate::models::timeseries::dashboard::Refresh;
 use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
+use crate::state::caps::cluster::shows_cluster_history;
 use crate::state::cluster::ClusterUi;
+use crate::state::connection::ActiveConnection;
+use crate::state::gates::use_caps;
 use crate::state::workspace::{Surface, Workspace};
-use crate::views::cluster::common::Ctl;
+use crate::views::cluster::common::{Ctl, NotReported, SeenBy};
 use crate::views::cluster::metric_chart::MetricChart;
 use crate::views::events::common::StatusText;
 
@@ -43,6 +54,17 @@ fn summary(t: &Telemetry, metric: Metric) -> String {
     }
 }
 
+/// `20.4 GiB / 32.0 GiB (62%)`, or Not reported.
+fn used_of(used: Option<u64>, total: Option<u64>, percent: Option<u64>) -> Element {
+    match (used, total, percent) {
+        (Some(u), Some(t), Some(p)) => {
+            rsx! { "{capacity_text(u)} / {capacity_text(t)} ({p}%)" }
+        }
+        (Some(u), Some(t), None) => rsx! { "{capacity_text(u)} / {capacity_text(t)}" },
+        _ => rsx! { NotReported {} },
+    }
+}
+
 fn freshness_tone(f: Freshness) -> Tone {
     match f {
         Freshness::Ready => Tone::Ok,
@@ -56,10 +78,19 @@ pub fn MonitoringTab() -> Element {
     let conn = use_context::<Memo<Option<String>>>();
     let layout = use_context::<Signal<Workspace>>();
     let mut ui = use_context::<ClusterUi>().monitor;
-    // The read depends on these three and nothing else.
+    let history = shows_cluster_history(use_caps().as_ref());
+    let active = try_use_context::<Signal<Option<ActiveConnection>>>();
+    // The read depends on these three and nothing else. Without history
+    // there is no chart to scope, so the read asks for the connected node:
+    // a node chosen on another connection must not reach this one.
     let key = use_memo(move || {
+        let caps = active.and_then(|s| s.read().as_ref().map(|c| c.capabilities));
         let u = ui.read();
-        (u.node.clone(), u.range, u.tick)
+        let node = u
+            .node
+            .clone()
+            .filter(|_| shows_cluster_history(caps.as_ref()));
+        (node, u.range, u.tick)
     });
 
     let mut telemetry = use_resource(move || {
@@ -86,7 +117,7 @@ pub fn MonitoringTab() -> Element {
     let u = ui.read().clone();
     let nodes: Vec<NodeTelemetry> = data.as_ref().map(|t| t.nodes.clone()).unwrap_or_default();
     let visible = |id: &'static str| layout.read().is_visible(SURFACE, id);
-    let row = |a: Metric, b: Metric| visible(a.panel()) || visible(b.panel());
+    let row = |a: Metric, b: Metric| history && (visible(a.panel()) || visible(b.panel()));
     let charts = |a: Metric, b: Metric| {
         rsx! {
             if row(a, b) {
@@ -118,6 +149,7 @@ pub fn MonitoringTab() -> Element {
     rsx! {
         div { class: "page-body",
             div { class: "cl-bar",
+                if history {
                 Ctl { label: "Node", id: "mon-node",
                     select {
                         id: "mon-node",
@@ -147,6 +179,7 @@ pub fn MonitoringTab() -> Element {
                         }
                     }
                 }
+                }
                 Ctl { label: "Refresh", id: "mon-refresh",
                     select {
                         id: "mon-refresh",
@@ -172,6 +205,7 @@ pub fn MonitoringTab() -> Element {
                 div { class: "toolbar-spacer" }
                 span { class: "badge outline", title: "What the servers report about themselves. Not collection records.", "Server telemetry" }
                 if let Some(t) = data.as_ref() {
+                    SeenBy { observer: t.observer.clone() }
                     span { class: "cl-observed", "Observed {clock_second(t.observed_at, 0)} UTC" }
                 }
             }
@@ -186,14 +220,24 @@ pub fn MonitoringTab() -> Element {
             div { class: "workbench col",
                 {charts(Metric::Queries, Metric::P99Latency)}
                 {charts(Metric::Cpu, Metric::Memory)}
-                ResizeHandle { surface: SURFACE, target: "nodes", size: NODES_SIZE, side: Side::After }
+                if history {
+                    ResizeHandle { surface: SURFACE, target: "nodes", size: NODES_SIZE, side: Side::After }
+                }
+                // Without charts above it, the panel takes the page.
                 Panel {
                     surface: SURFACE,
                     id: "nodes",
                     title: "Nodes",
-                    size: NODES_SIZE,
+                    size: history.then_some(NODES_SIZE),
+                    class: if history { "" } else { "fill" },
                     if let Some(t) = data.as_ref() {
                         NodeTable { telemetry: t.clone() }
+                        if !history && t.nodes.iter().all(|n| n.cpu_percent.is_none()) {
+                            p { class: "inspector-note",
+                                "NodeDB 0.6.2 has no statement for CPU, process memory, disk, or network, and keeps no history to chart."
+                            }
+                        }
+                        Budgets { budgets: t.budgets.clone(), node: t.observer.node_id.clone() }
                     }
                 }
             }
@@ -242,10 +286,20 @@ fn NodeTable(telemetry: Telemetry) -> Element {
                                     onclick: move |_| ui.write().node = Some(id.clone()),
                                     td { class: "key", "{n.node}" }
                                     td { StatusText { tone: freshness_tone(f), text: f.label().to_string() } }
-                                    td { class: "num", "{fixed(n.cpu_percent, 0)}%" }
-                                    td { class: "num", "{capacity_text(n.memory_used_bytes)} / {capacity_text(n.memory_total_bytes)} ({n.memory_percent()}%)" }
-                                    td { class: "num", "{capacity_text(n.disk_used_bytes)} / {capacity_text(n.disk_total_bytes)} ({n.disk_percent()}%)" }
-                                    td { class: "num", "{fixed(n.net_in_mbs, 0)} MB/s / {fixed(n.net_out_mbs, 0)} MB/s" }
+                                    td { class: "num",
+                                        match n.cpu_percent {
+                                            Some(c) => rsx! { "{fixed(c, 0)}%" },
+                                            None => rsx! { NotReported {} },
+                                        }
+                                    }
+                                    td { class: "num", {used_of(n.memory_used_bytes, n.memory_total_bytes, n.memory_percent())} }
+                                    td { class: "num", {used_of(n.disk_used_bytes, n.disk_total_bytes, n.disk_percent())} }
+                                    td { class: "num",
+                                        match (n.net_in_mbs, n.net_out_mbs) {
+                                            (Some(i), Some(o)) => rsx! { "{fixed(i, 0)} MB/s / {fixed(o, 0)} MB/s" },
+                                            _ => rsx! { NotReported {} },
+                                        }
+                                    }
                                     td {
                                         "{clock_second(n.observed_at, 0)} UTC"
                                         if stale {
@@ -258,6 +312,45 @@ fn NodeTable(telemetry: Telemetry) -> Element {
                     }
                 }
             }
+        }
+    }
+}
+
+/// The observer's engine memory budgets: budgets engines reserve against,
+/// not the process's memory.
+#[component]
+fn Budgets(budgets: Vec<EngineBudget>, node: String) -> Element {
+    if budgets.is_empty() {
+        return rsx! {};
+    }
+    rsx! {
+        h4 { class: "inspector-section", "Engine memory budgets on node {node}" }
+        div { class: "dt-wrap",
+            table { class: "dt cl-table",
+                thead {
+                    tr {
+                        th { "Engine" }
+                        th { class: "num", "Budget" }
+                        th { class: "num", title: RESERVED_NOTE, "Reserved" }
+                        th { class: "num", "Peak" }
+                        th { class: "num", title: "Reservations refused for lack of budget", "Refused" }
+                    }
+                }
+                tbody {
+                    for b in budgets.iter() {
+                        tr { key: "{b.engine}",
+                            td { class: "key", "{b.engine}" }
+                            td { class: "num", "{size_text(b.limit_bytes)}" }
+                            td { class: "num", "{size_text(b.reserved_bytes)}" }
+                            td { class: "num", "{size_text(b.peak_bytes)}" }
+                            td { class: "num", "{b.rejections}" }
+                        }
+                    }
+                }
+            }
+        }
+        p { class: "inspector-note",
+            "Budgets the engines reserve against on node {node}, not the process's memory. A reservation lasts only while an operation or a resident index holds memory, so a busy node can read 0."
         }
     }
 }

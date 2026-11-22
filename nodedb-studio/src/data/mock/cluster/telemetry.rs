@@ -2,9 +2,9 @@
 //! a read always returns the same samples. node-5 stopped reporting at
 //! 13:36:02: its series end there and its row stays stale with that time.
 
-use crate::data::mock::cluster::members::{NOW, node_id, node_name};
+use crate::data::mock::cluster::members::{NOW, node_id, node_name, observer};
 use crate::models::cluster::monitor::{
-    Metric, MetricSeries, NodeTelemetry, Sample, Telemetry, TelemetryRange,
+    EngineBudget, Metric, MetricSeries, NodeTelemetry, Sample, Telemetry, TelemetryRange,
 };
 use crate::models::cluster::place::GIB;
 use crate::models::format::epoch;
@@ -182,13 +182,13 @@ pub fn telemetry(node: Option<&str>, range: TelemetryRange) -> Telemetry {
         .map(|p| NodeTelemetry {
             node_id: node_id(p.n),
             node: node_name(p.n),
-            cpu_percent: p.last_cpu,
-            memory_used_bytes: (p.memory_used_gib * GIB as f64) as u64,
-            memory_total_bytes: 32 * GIB,
-            disk_used_bytes: p.disk_gib * GIB,
-            disk_total_bytes: 1024 * GIB,
-            net_in_mbs: p.net.0,
-            net_out_mbs: p.net.1,
+            cpu_percent: Some(p.last_cpu),
+            memory_used_bytes: Some((p.memory_used_gib * GIB as f64) as u64),
+            memory_total_bytes: Some(32 * GIB),
+            disk_used_bytes: Some(p.disk_gib * GIB),
+            disk_total_bytes: Some(1024 * GIB),
+            net_in_mbs: Some(p.net.0),
+            net_out_mbs: Some(p.net.1),
             observed_at: p.observed_at,
         })
         .collect();
@@ -196,12 +196,34 @@ pub fn telemetry(node: Option<&str>, range: TelemetryRange) -> Telemetry {
         observed_at: NOW,
         range,
         scope: node.map(str::to_string),
+        observer: observer(),
         series: Metric::ALL
             .iter()
             .map(|m| series(&selected, *m, range))
             .collect(),
         nodes,
+        budgets: budgets(),
     }
+}
+
+/// node-1's engine budgets, in MiB: limit, reserved, peak, rejections.
+fn budgets() -> Vec<EngineBudget> {
+    const MIB: u64 = 1024 * 1024;
+    [
+        ("Vector", 128, 41, 77, 0),
+        ("DocumentSchemaless", 10, 3, 6, 0),
+        ("Columnar", 15, 12, 15, 4),
+        ("Query", 82, 9, 30, 0),
+    ]
+    .into_iter()
+    .map(|(engine, limit, reserved, peak, rejections)| EngineBudget {
+        engine: engine.to_string(),
+        limit_bytes: limit * MIB,
+        reserved_bytes: reserved * MIB,
+        peak_bytes: peak * MIB,
+        rejections,
+    })
+    .collect()
 }
 
 #[cfg(test)]

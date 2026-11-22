@@ -125,17 +125,26 @@ impl PlaceUi {
         let mut out: Vec<&VShard> = placement
             .vshards
             .iter()
-            .filter(|v| self.database.as_deref().is_none_or(|d| v.database == d))
-            .filter(|v| self.collection.as_deref().is_none_or(|c| v.collection == c))
+            .filter(|v| {
+                self.database
+                    .as_deref()
+                    .is_none_or(|d| v.database.as_deref() == Some(d))
+            })
+            .filter(|v| {
+                self.collection
+                    .as_deref()
+                    .is_none_or(|c| v.collection.as_deref() == Some(c))
+            })
             .filter(|v| {
                 needle.is_empty()
                     || [
-                        v.number.to_string(),
-                        v.group.clone(),
+                        Some(v.number.to_string()),
+                        Some(v.group.clone()),
                         v.leader.clone(),
                         v.source(),
                     ]
-                    .iter()
+                    .into_iter()
+                    .flatten()
                     .any(|f| f.to_lowercase().contains(&needle))
             })
             .collect();

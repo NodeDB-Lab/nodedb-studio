@@ -1,12 +1,13 @@
-//! Raft groups as an Origin cluster reports them: one group, its peers, and
-//! its log positions. Leadership, term, quorum, and every index belong to a
-//! group. Index lag counts entries and heartbeat age counts milliseconds:
-//! they are separate measures with separate fields and separate columns.
+//! Raft groups as one node of an Origin cluster reports them: one group, its
+//! peers, and its log positions. Leadership, term, quorum, and every index
+//! belong to a group, and every value is the observer's view of it. Index
+//! lag counts entries and heartbeat age counts milliseconds: they are
+//! separate measures with separate fields and separate columns.
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::cluster::GroupKind;
 use crate::models::cluster::op::{PermissionCheck, quorum_of};
+use crate::models::cluster::{GroupKind, Link, Observer};
 use crate::models::feeds::Tone;
 
 /// A peer's role in one group. A learner replicates but never votes.
@@ -30,51 +31,6 @@ impl PeerRole {
         match self {
             PeerRole::Leader | PeerRole::Voter => true,
             PeerRole::Learner => false,
-        }
-    }
-}
-
-/// Heartbeat above this age reads as delayed.
-pub const DELAYED_MS: u64 = 300;
-
-/// What the leader observes of one peer's heartbeat.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum PeerState {
-    Alive,
-    Delayed,
-    Unreachable,
-}
-
-impl PeerState {
-    pub fn label(self) -> &'static str {
-        match self {
-            PeerState::Alive => "Alive",
-            PeerState::Delayed => "Delayed",
-            PeerState::Unreachable => "Unreachable",
-        }
-    }
-
-    pub fn tone(self) -> Tone {
-        match self {
-            PeerState::Alive => Tone::Ok,
-            PeerState::Delayed => Tone::Warn,
-            PeerState::Unreachable => Tone::Idle,
-        }
-    }
-
-    pub fn reachable(self) -> bool {
-        match self {
-            PeerState::Alive | PeerState::Delayed => true,
-            PeerState::Unreachable => false,
-        }
-    }
-
-    /// The state a heartbeat age implies. No age is an unreachable peer.
-    pub fn from_age(age_ms: Option<u64>) -> Self {
-        match age_ms {
-            None => PeerState::Unreachable,
-            Some(a) if a >= DELAYED_MS => PeerState::Delayed,
-            Some(_) => PeerState::Alive,
         }
     }
 }
@@ -108,13 +64,9 @@ impl GroupHealth {
     }
 }
 
-/// One member of a group, as the group's leader observes it.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Peer {
-    pub node_id: String,
-    /// Display name, e.g. `node-4`.
-    pub node: String,
-    pub role: PeerRole,
+/// What a group's leader records of one peer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PeerProgress {
     /// The highest log index the leader knows this peer holds.
     pub match_index: u64,
     /// The highest index this peer has applied to its state machine.
@@ -123,10 +75,18 @@ pub struct Peer {
     pub heartbeat_age_ms: Option<u64>,
 }
 
-impl Peer {
-    pub fn state(&self) -> PeerState {
-        PeerState::from_age(self.heartbeat_age_ms)
-    }
+/// One member of a group.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Peer {
+    pub node_id: String,
+    /// Display name, e.g. `node-4`.
+    pub node: String,
+    pub role: PeerRole,
+    /// The leader's record of this peer. `None`: not reported. NodeDB 0.6.2
+    /// has no statement for the leader's progress of each peer.
+    pub progress: Option<PeerProgress>,
+    /// How the observer reaches this peer.
+    pub link: Link,
 }
 
 /// A snapshot of one group's state machine.
@@ -141,96 +101,121 @@ pub struct SnapshotInfo {
     pub node: String,
 }
 
-/// One Raft group.
+/// One Raft group, as the observer holds it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RaftGroup {
-    /// Group id, e.g. `data-12`.
+    /// Group id, e.g. `data-12`, or `2` on NodeDB.
     pub id: String,
     pub kind: GroupKind,
+    /// Display name of the leader the observer knows. `None`: it knows none.
+    pub leader: Option<String>,
+    /// The term, commit index and applied index the observer holds.
     pub term: u64,
     pub commit_index: u64,
-    /// The leader's applied index.
     pub applied_index: u64,
     /// The log index of the group's current membership configuration.
-    pub config_index: u64,
-    pub peers: Vec<Peer>,
-    pub snapshots: Vec<SnapshotInfo>,
+    /// `None`: not reported.
+    pub config_index: Option<u64>,
+    /// Voters, as the observer's Raft counts them.
+    pub voter_count: u32,
+    /// The members. `None`: not reported, as for the NodeDB sequencer
+    /// group, which has no routing entry.
+    pub peers: Option<Vec<Peer>>,
+    /// Whether `peers` lists the learners too. NodeDB lists voters only.
+    pub learners_reported: bool,
+    /// `None`: not reported. NodeDB 0.6.2 lists no snapshots.
+    pub snapshots: Option<Vec<SnapshotInfo>>,
 }
 
 impl RaftGroup {
+    /// The members, or none when they are not reported.
+    pub fn peers(&self) -> &[Peer] {
+        self.peers.as_deref().unwrap_or(&[])
+    }
+
     pub fn leader(&self) -> Option<&Peer> {
-        self.peers.iter().find(|p| p.role == PeerRole::Leader)
+        self.peers().iter().find(|p| p.role == PeerRole::Leader)
     }
 
     pub fn leader_name(&self) -> &str {
-        self.leader().map(|p| p.node.as_str()).unwrap_or("none")
+        self.leader.as_deref().unwrap_or("none")
     }
 
     pub fn voters(&self) -> Vec<&Peer> {
-        self.peers.iter().filter(|p| p.role.votes()).collect()
+        self.peers().iter().filter(|p| p.role.votes()).collect()
     }
 
     pub fn learners(&self) -> Vec<&Peer> {
-        self.peers.iter().filter(|p| !p.role.votes()).collect()
-    }
-
-    pub fn voter_count(&self) -> u32 {
-        self.voters().len() as u32
+        self.peers().iter().filter(|p| !p.role.votes()).collect()
     }
 
     pub fn quorum(&self) -> u32 {
-        quorum_of(self.voter_count())
+        quorum_of(self.voter_count)
     }
 
-    /// Voters whose heartbeat answers. The leader counts as itself.
-    pub fn reachable_voters(&self) -> u32 {
+    /// Voters the observer reaches. `None` when the members are not
+    /// reported, the observer cannot say for one of them, or the listed
+    /// voters disagree with `voter_count`. On NodeDB the list comes from
+    /// the routing table and the count from Raft: during a membership
+    /// change they differ, and either quorum would be a guess.
+    pub fn reachable_voters(&self) -> Option<u32> {
+        self.peers.as_ref()?;
+        if self.voters().len() != self.voter_count as usize {
+            return None;
+        }
         self.voters()
             .iter()
-            .filter(|p| p.role == PeerRole::Leader || p.state().reachable())
-            .count() as u32
+            .map(|p| p.link.reached())
+            .try_fold(0, |n, r| r.map(|up| n + u32::from(up)))
     }
 
-    pub fn health(&self) -> GroupHealth {
-        let (up, total) = (self.reachable_voters(), self.voter_count());
-        if up < self.quorum() {
+    /// The group's health from the observer's links. `None` when the
+    /// reachable voters are not known.
+    pub fn health(&self) -> Option<GroupHealth> {
+        let up = self.reachable_voters()?;
+        Some(if up < self.quorum() {
             GroupHealth::NoQuorum
-        } else if up < total {
+        } else if up < self.voter_count {
             GroupHealth::Degraded
         } else {
             GroupHealth::Healthy
-        }
+        })
     }
 
-    /// Committed entries the leader has not applied yet.
+    /// Committed entries the observer has not applied yet.
     pub fn pending_entries(&self) -> u64 {
         self.commit_index.saturating_sub(self.applied_index)
     }
 
-    /// Entries a peer's match index trails the commit index by.
-    pub fn match_lag(&self, peer: &Peer) -> u64 {
-        self.commit_index.saturating_sub(peer.match_index)
+    /// Entries a peer's match index trails the commit index by. `None`
+    /// when the leader's record of the peer is not reported.
+    pub fn match_lag(&self, peer: &Peer) -> Option<u64> {
+        peer.progress
+            .map(|p| self.commit_index.saturating_sub(p.match_index))
     }
 
     pub fn peer(&self, node_id: &str) -> Option<&Peer> {
-        self.peers.iter().find(|p| p.node_id == node_id)
+        self.peers().iter().find(|p| p.node_id == node_id)
     }
 
-    /// Voters other than the leader that answer: the members leadership can
-    /// move to.
+    /// Voters other than the leader that the observer reaches: the members
+    /// leadership can move to.
     pub fn transfer_targets(&self) -> Vec<&Peer> {
-        self.peers
+        self.peers()
             .iter()
-            .filter(|p| p.role == PeerRole::Voter && p.state().reachable())
+            .filter(|p| p.role == PeerRole::Voter && p.link.reached() == Some(true))
             .collect()
     }
 }
 
-/// Every group with the time it was observed and the revision a write must
-/// name.
+/// Every group the observer hosts, whose view it is, the time Studio read
+/// it, and the revision a write must name.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RaftGroups {
     pub observed_at: i64,
-    pub revision: u64,
+    /// `None`: the server numbers no revision.
+    pub revision: Option<u64>,
+    pub observer: Observer,
     pub groups: Vec<RaftGroup>,
 }
 
@@ -244,7 +229,7 @@ impl RaftGroups {
     pub fn default_group(&self) -> Option<&RaftGroup> {
         self.groups
             .iter()
-            .find(|g| g.health() != GroupHealth::Healthy)
+            .find(|g| g.health().is_some_and(|h| h != GroupHealth::Healthy))
             .or_else(|| self.groups.first())
     }
 }
@@ -282,15 +267,26 @@ impl TransferPreview {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::cluster::Circuit;
 
-    fn peer(node: &str, role: PeerRole, m: u64, hb: Option<u64>) -> Peer {
+    fn link(up: bool) -> Link {
+        Link::Circuit {
+            state: if up { Circuit::Closed } else { Circuit::Open },
+            failures: if up { 0 } else { 5 },
+        }
+    }
+
+    fn peer(node: &str, role: PeerRole, m: u64, up: bool) -> Peer {
         Peer {
             node_id: format!("id-{node}"),
             node: node.to_string(),
             role,
-            match_index: m,
-            applied_index: m,
-            heartbeat_age_ms: hb,
+            progress: Some(PeerProgress {
+                match_index: m,
+                applied_index: m,
+                heartbeat_age_ms: up.then_some(20),
+            }),
+            link: link(up),
         }
     }
 
@@ -298,68 +294,111 @@ mod tests {
         RaftGroup {
             id: "data-1".into(),
             kind: GroupKind::Data,
+            leader: peers
+                .iter()
+                .find(|p| p.role == PeerRole::Leader)
+                .map(|p| p.node.clone()),
             term: 5,
             commit_index: 100,
             applied_index: 97,
-            config_index: 3,
-            peers,
-            snapshots: Vec::new(),
+            config_index: Some(3),
+            voter_count: peers.iter().filter(|p| p.role.votes()).count() as u32,
+            peers: Some(peers),
+            learners_reported: true,
+            snapshots: Some(Vec::new()),
         }
     }
 
     #[test]
     fn a_missing_voter_degrades_while_a_quorum_answers() {
         let g = group(vec![
-            peer("a", PeerRole::Leader, 100, None),
-            peer("b", PeerRole::Voter, 100, Some(20)),
-            peer("c", PeerRole::Voter, 40, None),
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 100, true),
+            peer("c", PeerRole::Voter, 40, false),
         ]);
         assert_eq!(g.quorum(), 2);
-        assert_eq!(g.reachable_voters(), 2);
-        assert_eq!(g.health(), GroupHealth::Degraded);
+        assert_eq!(g.reachable_voters(), Some(2));
+        assert_eq!(g.health(), Some(GroupHealth::Degraded));
     }
 
     #[test]
     fn two_missing_voters_lose_the_quorum() {
         let g = group(vec![
-            peer("a", PeerRole::Leader, 100, None),
-            peer("b", PeerRole::Voter, 90, None),
-            peer("c", PeerRole::Voter, 40, None),
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 90, false),
+            peer("c", PeerRole::Voter, 40, false),
         ]);
-        assert_eq!(g.reachable_voters(), 1);
-        assert_eq!(g.health(), GroupHealth::NoQuorum);
+        assert_eq!(g.reachable_voters(), Some(1));
+        assert_eq!(g.health(), Some(GroupHealth::NoQuorum));
     }
 
     #[test]
     fn a_learner_never_counts_toward_the_voters() {
         let g = group(vec![
-            peer("a", PeerRole::Leader, 100, None),
-            peer("b", PeerRole::Voter, 100, Some(10)),
-            peer("c", PeerRole::Learner, 0, Some(10)),
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 100, true),
+            peer("c", PeerRole::Learner, 0, true),
         ]);
-        assert_eq!(g.voter_count(), 2);
+        assert_eq!(g.voter_count, 2);
         assert_eq!(g.learners().len(), 1);
-        assert_eq!(g.health(), GroupHealth::Healthy);
+        assert_eq!(g.health(), Some(GroupHealth::Healthy));
     }
 
     #[test]
     fn index_lag_and_pending_entries_are_separate_measures() {
         let g = group(vec![
-            peer("a", PeerRole::Leader, 100, None),
-            peer("b", PeerRole::Voter, 90, Some(500)),
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 90, true),
         ]);
         assert_eq!(g.pending_entries(), 3);
-        assert_eq!(g.match_lag(&g.peers[1]), 10);
-        assert_eq!(g.peers[1].state(), PeerState::Delayed);
+        assert_eq!(g.match_lag(&g.peers()[1]), Some(10));
+    }
+
+    /// The server's view of one node cannot say how a group does when it
+    /// does not list the members or cannot name a circuit.
+    #[test]
+    fn health_is_not_reported_without_every_voter_link() {
+        let mut g = group(vec![
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 100, true),
+        ]);
+        if let Some(p) = g.peers.as_mut() {
+            p[1].link = Link::NotReported;
+            p[1].progress = None;
+        }
+        assert_eq!(g.reachable_voters(), None);
+        assert_eq!(g.health(), None);
+        assert_eq!(g.match_lag(&g.peers()[1]), None);
+        g.peers = None;
+        assert_eq!(g.health(), None);
+        assert_eq!(g.quorum(), 2);
+    }
+
+    /// During a membership change the routing members and the Raft voter
+    /// count differ. Counting one against the other's quorum would give a
+    /// false Degraded or a false Healthy.
+    #[test]
+    fn health_is_not_reported_when_members_and_voter_count_disagree() {
+        let mut g = group(vec![
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 100, true),
+            peer("c", PeerRole::Voter, 100, true),
+        ]);
+        assert_eq!(g.health(), Some(GroupHealth::Healthy));
+        g.voter_count = 4;
+        assert_eq!(g.reachable_voters(), None);
+        assert_eq!(g.health(), None);
+        g.voter_count = 2;
+        assert_eq!(g.health(), None);
     }
 
     #[test]
     fn only_a_reachable_voter_is_a_transfer_target() {
         let g = group(vec![
-            peer("a", PeerRole::Leader, 100, None),
-            peer("b", PeerRole::Voter, 100, Some(10)),
-            peer("c", PeerRole::Voter, 40, None),
-            peer("d", PeerRole::Learner, 0, Some(10)),
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 100, true),
+            peer("c", PeerRole::Voter, 40, false),
+            peer("d", PeerRole::Learner, 0, true),
         ]);
         let names: Vec<_> = g
             .transfer_targets()
