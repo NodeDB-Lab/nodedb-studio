@@ -33,10 +33,19 @@ fn elsewhere(what: &str, node: &str, seen: &Seen) -> StudioError {
 }
 
 /// Studio's clock: no cluster statement reports a time.
-fn now() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
+fn now() -> Result<i64, StudioError> {
+    epoch_of(std::time::SystemTime::now())
+}
+
+/// Seconds since the epoch. A clock that cannot say is an error, never an
+/// epoch date shown as the time of a read.
+fn epoch_of(t: std::time::SystemTime) -> Result<i64, StudioError> {
+    t.duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|d| i64::try_from(d.as_secs()).ok())
+        .ok_or_else(|| StudioError::Refused {
+            reason: "This computer's clock reads before 1970, so Studio cannot time the read. Set the clock and read again.".to_string(),
+        })
 }
 
 const SHOW_CLUSTER: &str = "SHOW CLUSTER";
@@ -60,7 +69,7 @@ impl ClusterData for NodeDbConnectionService {
         let seen = self.seen().await?;
         let nodes = decode::nodes(&self.table(SHOW_NODES).await?)?;
         let links = decode::links(&self.table(SHOW_PEER_HEALTH).await?)?;
-        let at = format!("{} UTC", clock_second(now(), 0));
+        let at = format!("{} UTC", clock_second(now()?, 0));
         Ok(assemble::members(&seen, &nodes, &links, at))
     }
 
@@ -88,7 +97,7 @@ impl ClusterData for NodeDbConnectionService {
             groups.push(assemble::raft_group(&seen, row, members, &links));
         }
         Ok(RaftGroups {
-            observed_at: now(),
+            observed_at: now()?,
             revision: None,
             observer: assemble::observer(&seen),
             groups,
@@ -136,7 +145,7 @@ impl ClusterData for NodeDbConnectionService {
             &links,
             &ranges,
             &moving,
-            now(),
+            now()?,
         ))
     }
 
@@ -169,7 +178,7 @@ impl ClusterData for NodeDbConnectionService {
             return Err(elsewhere("the telemetry", id, &seen));
         }
         let budgets = decode::budgets(&self.table(SHOW_MEMORY).await?)?;
-        let at = now();
+        let at = now()?;
         Ok(Telemetry {
             observed_at: at,
             range,
@@ -205,6 +214,20 @@ mod tests {
     use crate::models::cluster::raft::PeerRole;
     use crate::models::cluster::{GroupKind, Link, NodeState};
     use crate::services::nodedb::service::live;
+
+    /// A clock before the epoch is an error, never a 1970 date.
+    #[test]
+    fn a_clock_before_the_epoch_is_an_error_not_1970() {
+        use std::time::{Duration, UNIX_EPOCH};
+        assert_eq!(
+            epoch_of(UNIX_EPOCH + Duration::from_secs(90)).ok(),
+            Some(90)
+        );
+        assert!(matches!(
+            epoch_of(UNIX_EPOCH - Duration::from_secs(1)),
+            Err(StudioError::Refused { .. })
+        ));
+    }
 
     /// No session exists, so a method that answered would have sent
     /// nothing: every operation is refused before any statement.
