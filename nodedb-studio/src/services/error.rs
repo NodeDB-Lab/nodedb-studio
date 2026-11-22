@@ -134,8 +134,10 @@ impl StudioError {
     /// `true` means the condition is transient, not that re-sending is safe.
     /// The client marks `DeadlineExceeded`, `SyncConnectionFailed`,
     /// `NotLeader` and `NodeUnreachable` retriable, and each can arrive after
-    /// a write committed. A Retry that re-issues a non-idempotent write must
-    /// not rely on this flag alone.
+    /// a write committed. NDB-1701 can too (see `studio_retries`). Only a
+    /// read may offer Retry on this flag. A write that fails with one of
+    /// these has an unknown outcome: read the object back before anything
+    /// is sent again.
     pub fn is_retriable(&self) -> bool {
         match self {
             StudioError::NotConnected
@@ -173,9 +175,8 @@ impl StudioError {
     }
 }
 
-/// Transient refusals the client does not mark retriable. Each is refused
-/// before anything runs, so a later Retry click can succeed and cannot apply
-/// a write twice.
+/// Transient refusals the client does not mark retriable, so that a read
+/// can offer Retry on them.
 fn studio_retries(details: &ErrorDetails) -> bool {
     matches!(
         details,
@@ -183,11 +184,15 @@ fn studio_retries(details: &ErrorDetails) -> bool {
         ErrorDetails::ServerOverload
         // A rate limiter refused; the window refills.
         | ErrorDetails::RateExceeded { .. }
-        // NDB-1701. In a cluster this node's authorization state or read
-        // index is behind, as during a leader change, and nothing ran
-        // (server `Error::AuthorizationStateBehind`,
-        // `LinearizableReadRefused`). Only reads offer Retry: no write path
-        // reads this flag.
+        // NDB-1701: this node's authorization state or read index is behind,
+        // as during a leader change (server `AuthorizationStateBehind`,
+        // `LinearizableReadRefused`). A read that gets it ran nothing. A
+        // WRITE can get it AFTER it committed: authorization DDL during a
+        // metadata leader change (`committed_but_pending` in
+        // `auth_lease/barrier.rs`). So only a read may offer Retry on it,
+        // and a write that gets it has an unknown outcome and must be read
+        // back. `retriable_does_not_mean_a_write_may_be_sent_again` keeps
+        // the flag on read paths.
         | ErrorDetails::StaleReadNotLeader { .. }
     )
 }
@@ -499,6 +504,46 @@ mod tests {
                 "{code}: the client now retries it; remove it from studio_retries"
             );
         }
+    }
+
+    /// NDB-1701 is retriable, and a write can get it after it committed.
+    /// The flag is safe only where a Retry restarts a read: the `retriable`
+    /// prop of an async view. Any other use outside `services/` fails here.
+    #[test]
+    fn retriable_does_not_mean_a_write_may_be_sent_again() {
+        let e = StudioError::from(NodeDbError::from_wire(
+            ErrorCode::STALE_READ_NOT_LEADER,
+            "authorization state is not current on this node: the authorization change is committed; retry",
+        ));
+        assert!(e.is_retriable());
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut stack = vec![root];
+        let mut misuse = Vec::new();
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for path in entries.flatten().map(|e| e.path()) {
+                if path.is_dir() {
+                    if !path.ends_with("services") {
+                        stack.push(path);
+                    }
+                } else if path.extension().is_some_and(|x| x == "rs") {
+                    let text = std::fs::read_to_string(&path).unwrap_or_default();
+                    for (n, line) in text.lines().enumerate() {
+                        let code = line.split("//").next().unwrap_or("");
+                        if code.contains("is_retriable()") && !code.contains("retriable:") {
+                            misuse.push(format!("{}:{}", path.display(), n + 1));
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            misuse.is_empty(),
+            "is_retriable() outside a read's Retry prop:\n{}",
+            misuse.join("\n")
+        );
     }
 
     #[test]
