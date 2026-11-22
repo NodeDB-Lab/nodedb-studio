@@ -267,6 +267,7 @@ impl ConnectionService for NodeDbConnectionService {
                 credentials: false,
                 // A parse error: 0.6.2 has no EXPLAIN ANALYZE.
                 explain_analyze: false,
+                cluster_caps: crate::state::caps::cluster::ClusterCaps::nodedb_0_6(),
             },
             current_database: database,
         })

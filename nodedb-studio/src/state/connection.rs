@@ -64,6 +64,9 @@ pub struct Capabilities {
     /// The server runs EXPLAIN ANALYZE: the Plan view's Analyze mode.
     #[serde(default = "yes")]
     pub explain_analyze: bool,
+    /// The parts of the Cluster page the server can serve.
+    #[serde(default = "crate::state::caps::cluster::ClusterCaps::all")]
+    pub cluster_caps: crate::state::caps::cluster::ClusterCaps,
 }
 
 fn yes() -> bool {
@@ -233,6 +236,7 @@ mod tests {
             config: true,
             credentials: true,
             explain_analyze: true,
+            cluster_caps: crate::state::caps::cluster::ClusterCaps::all(),
         }
     }
 
