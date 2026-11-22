@@ -23,7 +23,7 @@ use crate::state::caps::cluster::offers_cluster_ops;
 use crate::state::cluster::ClusterUi;
 use crate::state::gates::use_caps;
 use crate::state::workspace::Surface;
-use crate::views::cluster::common::{GroupId, NotReported, SeenBy, or_not_reported};
+use crate::views::cluster::common::{ClusterScope, GroupId, NotReported, SeenBy, or_not_reported};
 use crate::views::cluster::node_details::NodeDetails;
 use crate::views::cluster::reads::{settled_observer, use_hosted_groups};
 use crate::views::events::common::StatusText;
@@ -161,11 +161,7 @@ pub fn NodesTab() -> Element {
                             }
                         },
                         div { class: "toolbar nowrap",
-                            button { class: "select", title: "Cluster operations span every database",
-                                span { class: "select-label", "Cluster scope ·" }
-                                span { "All databases" }
-                                Ico { icon: Icon::ChevronDown, size: 16 }
-                            }
+                            ClusterScope {}
                             div { class: "search-field grow",
                                 Ico { icon: Icon::Search, size: 16 }
                                 input {

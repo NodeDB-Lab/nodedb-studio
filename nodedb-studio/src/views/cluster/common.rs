@@ -23,6 +23,18 @@ pub fn routing_leader(node: &str) -> String {
     )
 }
 
+/// The scope of the Cluster page: every database. It looked like a select
+/// once, with no handler. It is a statement, not a control.
+#[component]
+pub fn ClusterScope() -> Element {
+    rsx! {
+        span { class: "cl-scope", title: "Cluster operations span every database",
+            span { class: "select-label", "Cluster scope · " }
+            "All databases"
+        }
+    }
+}
+
 /// A value the server does not report. Never a zero or a blank.
 #[component]
 pub fn NotReported(#[props(default)] why: String) -> Element {
@@ -96,6 +108,19 @@ pub fn NameChips(names: Vec<String>, #[props(default)] highlight: Option<String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The scope reads as text: no button, no chevron, nothing to click.
+    #[test]
+    fn the_cluster_scope_is_text_not_a_control() {
+        let mut dom = VirtualDom::new(ClusterScope);
+        dom.rebuild_in_place();
+        let html = dioxus_ssr::render(&dom);
+        assert!(html.contains("All databases"), "{html}");
+        assert!(
+            !html.contains("<button") && !html.contains("<svg"),
+            "{html}"
+        );
+    }
 
     /// Placement and Raft groups name a leader from two sources. Placement
     /// must say which one it shows.
