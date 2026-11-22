@@ -25,6 +25,7 @@ use crate::state::gates::use_caps;
 use crate::state::workspace::Surface;
 use crate::views::cluster::common::{GroupId, NotReported, SeenBy, or_not_reported};
 use crate::views::cluster::node_details::NodeDetails;
+use crate::views::cluster::reads::use_hosted_groups;
 use crate::views::events::common::StatusText;
 
 const SURFACE: Surface = Surface::Cluster(ClusterTab::Nodes);
@@ -104,7 +105,6 @@ pub fn NodesTab() -> Element {
     let state = resource_state(&members);
     let list = state.loaded().cloned();
 
-    // A memo, so the groups read re-runs only when the selection changes.
     // Reading the resource and the chosen id inside subscribes it to both.
     let selected_id = use_memo(move || {
         let chosen = sel.read().node.clone();
@@ -117,15 +117,9 @@ pub fn NodesTab() -> Element {
         l.members.iter().find(|m| m.id == id).cloned()
     });
 
-    let mut groups = use_resource(move || {
+    let mut groups = use_hosted_groups(conn, members, selected_id, move |id| {
         let backend = backend.clone();
-        let id = selected_id();
-        async move {
-            match id {
-                Some(id) => backend.hosted_groups(&id).await,
-                None => Ok(Vec::new()),
-            }
-        }
+        async move { backend.hosted_groups(&id).await }
     });
     let group_state = resource_state(&groups);
     let group_list: Vec<HostedGroup> = group_state.loaded().cloned().unwrap_or_default();

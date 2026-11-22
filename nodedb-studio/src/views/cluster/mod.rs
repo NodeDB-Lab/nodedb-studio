@@ -17,5 +17,6 @@ pub mod raft;
 pub mod raft_details;
 pub mod raft_review;
 pub mod raft_tasks;
+pub mod reads;
 
 pub use page::ClusterPage;
