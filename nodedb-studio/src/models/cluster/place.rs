@@ -33,7 +33,9 @@ pub struct VShard {
     pub database: Option<String>,
     pub collection: Option<String>,
     pub group: String,
-    /// The group's leader, by display name. `None`: the observer knows none.
+    /// The group's leader, by display name, from the observer's routing
+    /// table (NodeDB `SHOW RANGES` `leaseholder`), not from its Raft.
+    /// `None`: the routing table names none.
     pub leader: Option<String>,
     /// Display names of the nodes that hold a replica.
     pub replicas: Vec<String>,

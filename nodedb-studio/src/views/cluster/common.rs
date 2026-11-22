@@ -15,6 +15,14 @@ pub fn SeenBy(observer: Observer) -> Element {
     }
 }
 
+/// Where Placement's leader comes from. The Raft groups tab shows the
+/// leader the node's Raft knows: during a change the two can differ.
+pub fn routing_leader(node: &str) -> String {
+    format!(
+        "The group leader in node {node}'s routing table (SHOW RANGES leaseholder). The Raft groups tab shows the leader node {node}'s Raft knows; during a change the two can differ."
+    )
+}
+
 /// A value the server does not report. Never a zero or a blank.
 #[component]
 pub fn NotReported(#[props(default)] why: String) -> Element {
@@ -82,5 +90,22 @@ pub fn NameChips(names: Vec<String>, #[props(default)] highlight: Option<String>
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Placement and Raft groups name a leader from two sources. Placement
+    /// must say which one it shows.
+    #[test]
+    fn the_placement_leader_names_its_source() {
+        let t = routing_leader("1");
+        assert!(
+            t.contains("routing table") && t.contains("SHOW RANGES"),
+            "{t}"
+        );
+        assert!(t.contains("can differ"), "{t}");
     }
 }

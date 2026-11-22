@@ -9,7 +9,7 @@ use crate::models::cluster::raft::PeerRole;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;
 use crate::state::cluster::ClusterUi;
-use crate::views::cluster::common::{NotReported, or_not_reported};
+use crate::views::cluster::common::{NotReported, or_not_reported, routing_leader};
 use crate::views::events::common::{StatusBadge, StatusText};
 
 #[component]
@@ -45,7 +45,7 @@ pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
                 div { class: "kv-row", span { "Collection" } span { {or_not_reported(v.collection.clone(), |c| c)} } }
                 div { class: "kv-row", span { "vShard" } span { class: "num", "{v.number}" } }
                 div { class: "kv-row", span { "Group" } span { class: "mono", "{v.group}" } }
-                div { class: "kv-row", span { title: "The leader node {on} knows", "Leader" } span { "{v.leader.as_deref().unwrap_or(\"none\")}" } }
+                div { class: "kv-row", span { title: routing_leader(&on), "Routing leader" } span { "{v.leader.as_deref().unwrap_or(\"none\")}" } }
                 div { class: "kv-row", span { "Replicas" } span { "{v.replicas.join(\" / \")}" } }
                 div { class: "kv-row", span { "Storage class" } span { class: "mono", {or_not_reported(v.storage_class.clone(), |c| c)} } }
                 div { class: "kv-row", span { "Capacity" } span { class: "num", {or_not_reported(v.capacity_bytes, size_text)} } }

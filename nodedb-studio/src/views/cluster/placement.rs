@@ -23,7 +23,7 @@ use crate::state::caps::cluster::offers_cluster_ops;
 use crate::state::cluster::{ClusterUi, pick_vshard};
 use crate::state::gates::use_caps;
 use crate::state::workspace::{Surface, Workspace};
-use crate::views::cluster::common::{SeenBy, or_not_reported};
+use crate::views::cluster::common::{SeenBy, or_not_reported, routing_leader};
 use crate::views::cluster::place_details::{NodesHealth, VShardDetails};
 use crate::views::cluster::place_rebalance::Rebalance;
 use crate::views::cluster::place_review::PlanSheet;
@@ -66,6 +66,10 @@ pub fn PlacementTab() -> Element {
         .map(|p| format!("Observed {} UTC", clock_second(p.observed_at, 0)))
         .unwrap_or_default();
     let observer = settled_observer(&placement, |p| p.observer.clone());
+    let on = observer
+        .as_ref()
+        .map(|o| o.node_id.clone())
+        .unwrap_or_default();
     // NodeDB ties no vShard to a collection: then the filters and the
     // column have nothing to show.
     let sources = list
@@ -169,7 +173,7 @@ pub fn PlacementTab() -> Element {
                                             }
                                             th { class: "num", "vShard" }
                                             th { "Group" }
-                                            th { "Leader" }
+                                            th { title: routing_leader(&on), "Routing leader" }
                                             th { "Replicas" }
                                             th { class: "num", "Size" }
                                             th { "Status" }
