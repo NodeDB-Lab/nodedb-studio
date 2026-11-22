@@ -21,6 +21,22 @@ fn number<T: FromStr>(text: &str, column: &str) -> Result<T, StudioError> {
         .map_err(|_| malformed(format!("{column} is not a number: `{text}`")))
 }
 
+/// The rows as a map by key. A key the server sends twice is an error
+/// naming it: a map would keep one row and drop the other.
+fn unique<K, V>(rows: Vec<(K, V)>, what: &str) -> Result<HashMap<K, V>, StudioError>
+where
+    K: std::hash::Hash + Eq + std::fmt::Display,
+{
+    let mut map = HashMap::with_capacity(rows.len());
+    for (k, v) in rows {
+        if map.contains_key(&k) {
+            return Err(malformed(format!("{what} lists `{k}` twice")));
+        }
+        map.insert(k, v);
+    }
+    Ok(map)
+}
+
 fn int<T: FromStr>(row: &Row<'_>, column: &str) -> Result<T, StudioError> {
     number(row.field(column)?, column)
 }
@@ -49,13 +65,13 @@ fn id_list(text: &str, column: &str) -> Result<Vec<u64>, StudioError> {
 pub(in crate::services::nodedb) fn properties(
     table: &Table,
 ) -> Result<HashMap<String, String>, StudioError> {
-    decode_rows(table, &["property", "value"], |r| {
+    let rows = decode_rows(table, &["property", "value"], |r| {
         Ok((
             r.field("property")?.to_string(),
             r.field("value")?.to_string(),
         ))
-    })
-    .map(|rows| rows.into_iter().collect())
+    })?;
+    unique(rows, "the property list")
 }
 
 fn property<'a>(
@@ -111,16 +127,16 @@ pub(in crate::services::nodedb) fn nodes(table: &Table) -> Result<Vec<NodeRow>, 
 /// `SHOW PEER HEALTH`: the observer's circuit to each peer. The observer
 /// itself is never listed.
 pub(in crate::services::nodedb) fn links(table: &Table) -> Result<HashMap<u64, Link>, StudioError> {
-    decode_rows(table, &["node_id", "circuit", "failures"], |r| {
+    let rows = decode_rows(table, &["node_id", "circuit", "failures"], |r| {
         Ok((
-            int(&r, "node_id")?,
+            int::<u64>(&r, "node_id")?,
             Link::Circuit {
                 state: Circuit::parse(r.field("circuit")?),
                 failures: int(&r, "failures")?,
             },
         ))
-    })
-    .map(|rows| rows.into_iter().collect())
+    })?;
+    unique(rows, "SHOW PEER HEALTH")
 }
 
 /// One `SHOW RAFT GROUPS` row: a group the observer hosts, as it holds it.
@@ -207,11 +223,12 @@ pub(in crate::services::nodedb) fn migrations(
         };
         Ok((int(&r, "vshard_id")?, r.field("phase")?.to_string(), active))
     })?;
-    Ok(rows
+    let active = rows
         .into_iter()
         .filter(|(_, _, active)| *active)
         .map(|(v, phase, _)| (v, phase))
-        .collect())
+        .collect::<Vec<(u32, String)>>();
+    unique(active, "SHOW MIGRATIONS")
 }
 
 /// `SHOW MEMORY`: the observer's engine budgets. `utilization_percent` is
@@ -415,6 +432,39 @@ mod tests {
             &[&["7", "copy", "120", "maybe"]],
         );
         assert!(migrations(&bad).is_err());
+    }
+
+    /// A key the server sends twice is a malformed result, never a row
+    /// dropped without a word.
+    #[test]
+    fn a_duplicate_key_row_is_malformed() {
+        let props = table(
+            &["property", "value"],
+            &[&["node_id", "1"], &["node_id", "2"]],
+        );
+        assert!(matches!(
+            properties(&props),
+            Err(StudioError::MalformedRows { .. })
+        ));
+        let peers = table(
+            &["node_id", "address", "node_state", "circuit", "failures"],
+            &[
+                &["2", "a", "active", "closed", "0"],
+                &["2", "a", "active", "OPEN", "5"],
+            ],
+        );
+        assert!(matches!(
+            links(&peers),
+            Err(StudioError::MalformedRows { .. })
+        ));
+        let moving = table(
+            &["vshard_id", "phase", "elapsed_ms", "active"],
+            &[&["7", "copy", "1", "yes"], &["7", "cutover", "2", "yes"]],
+        );
+        assert!(matches!(
+            migrations(&moving),
+            Err(StudioError::MalformedRows { .. })
+        ));
     }
 
     #[test]
