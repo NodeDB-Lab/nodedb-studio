@@ -4,7 +4,9 @@
 //! Four panels. vShards and Rebalance preview stack on the left. vShard
 //! details and Nodes health stack on the right. The selection and the staged
 //! plan live in `ClusterUi`. A plan never applies from here: Review plan
-//! opens a sheet with the impact preview first.
+//! opens a sheet with the impact preview first. The routing, leaders and
+//! node states are the connected node's view. On a server without
+//! membership operations the Rebalance panel and the review do not show.
 
 use std::rc::Rc;
 
@@ -17,8 +19,11 @@ use crate::models::cluster::place::size_text;
 use crate::models::format::clock_second;
 use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
+use crate::state::caps::cluster::offers_cluster_ops;
 use crate::state::cluster::{ClusterUi, pick_vshard};
+use crate::state::gates::use_caps;
 use crate::state::workspace::{Surface, Workspace};
+use crate::views::cluster::common::{SeenBy, or_not_reported};
 use crate::views::cluster::place_details::{NodesHealth, VShardDetails};
 use crate::views::cluster::place_rebalance::Rebalance;
 use crate::views::cluster::place_review::PlanSheet;
@@ -36,6 +41,7 @@ pub fn PlacementTab() -> Element {
     let layout = use_context::<Signal<Workspace>>();
     let mut ui = use_context::<ClusterUi>().place;
     let epoch = use_memo(move || ui.read().epoch);
+    let ops = offers_cluster_ops(use_caps().as_ref());
 
     let mut placement = use_resource(move || {
         let backend = backend.clone();
@@ -58,6 +64,13 @@ pub fn PlacementTab() -> Element {
         .as_ref()
         .map(|p| format!("Observed {} UTC", clock_second(p.observed_at, 0)))
         .unwrap_or_default();
+    let observer = list.as_ref().map(|p| p.observer.clone());
+    // NodeDB ties no vShard to a collection: then the filters and the
+    // column have nothing to show.
+    let sources = list
+        .as_ref()
+        .is_some_and(|p| p.vshards.iter().any(|v| v.source().is_some()));
+    let show_source = sources && u.collection.is_none();
     let side_style = region_style(&layout.read(), SURFACE, "side", SIDE_SIZE);
     let side_shown = {
         let ws = layout.read();
@@ -74,11 +87,15 @@ pub fn PlacementTab() -> Element {
                         title: "vShards",
                         class: "fill",
                         actions: rsx! {
+                            if let Some(o) = observer.clone() {
+                                SeenBy { observer: o }
+                            }
                             if !observed.is_empty() {
                                 span { "{observed}" }
                             }
                         },
                         div { class: "toolbar nowrap",
+                            if sources {
                             div { class: "cl-ctl",
                                 label { r#for: "place-db", "Database" }
                                 select {
@@ -113,6 +130,7 @@ pub fn PlacementTab() -> Element {
                                     }
                                 }
                             }
+                            }
                             div { class: "search-field grow",
                                 Ico { icon: Icon::Search, size: 16 }
                                 input {
@@ -145,7 +163,7 @@ pub fn PlacementTab() -> Element {
                                 table { class: "dt cl-table",
                                     thead {
                                         tr {
-                                            if u.collection.is_none() {
+                                            if show_source {
                                                 th { "Collection" }
                                             }
                                             th { class: "num", "vShard" }
@@ -174,12 +192,12 @@ pub fn PlacementTab() -> Element {
                                                             w.from = None;
                                                             w.to = None;
                                                         },
-                                                        if u.collection.is_none() {
-                                                            td { "{v.source()}" }
+                                                        if show_source {
+                                                            td { {or_not_reported(v.source(), |s| s)} }
                                                         }
                                                         td { class: "num key", "{v.number}" }
                                                         td { "{v.group}" }
-                                                        td { "{v.leader}" }
+                                                        td { "{v.leader.as_deref().unwrap_or(\"none\")}" }
                                                         td {
                                                             for (i , r) in v.replicas.iter().enumerate() {
                                                                 span { key: "{r}",
@@ -194,7 +212,7 @@ pub fn PlacementTab() -> Element {
                                                                 }
                                                             }
                                                         }
-                                                        td { class: "num", "{size_text(v.size_bytes)}" }
+                                                        td { class: "num", {or_not_reported(v.size_bytes, size_text)} }
                                                         td { StatusText { tone: status.tone(), text: status.label().to_string() } }
                                                     }
                                                 }
@@ -209,14 +227,16 @@ pub fn PlacementTab() -> Element {
                             div { class: "dt-footer", "{visible.len()} vShards shown" }
                         }
                     }
-                    ResizeHandle { surface: SURFACE, target: "rebalance", size: REBALANCE_SIZE, side: Side::After }
-                    Panel {
-                        surface: SURFACE,
-                        id: "rebalance",
-                        title: "Rebalance preview",
-                        size: REBALANCE_SIZE,
-                        if let (Some(p), Some(v)) = (list.clone(), selected.clone()) {
-                            Rebalance { placement: p, vshard: v }
+                    if ops {
+                        ResizeHandle { surface: SURFACE, target: "rebalance", size: REBALANCE_SIZE, side: Side::After }
+                        Panel {
+                            surface: SURFACE,
+                            id: "rebalance",
+                            title: "Rebalance preview",
+                            size: REBALANCE_SIZE,
+                            if let (Some(p), Some(v)) = (list.clone(), selected.clone()) {
+                                Rebalance { placement: p, vshard: v }
+                            }
                         }
                     }
                 }
@@ -244,7 +264,7 @@ pub fn PlacementTab() -> Element {
                         }
                     }
                 }
-                if let (Some(r), Some(p)) = (u.review.clone(), list.clone()) {
+                if let (true, Some(r), Some(p)) = (ops, u.review.clone(), list.clone()) {
                     PlanSheet { review: r, placement: p }
                 }
             }

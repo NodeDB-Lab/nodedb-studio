@@ -2,6 +2,35 @@
 
 use dioxus::prelude::*;
 
+use crate::models::cluster::Observer;
+
+/// Why a panel names its node: one connection reaches one node.
+const SEEN_BY: &str = "Studio reads the cluster through the node it connected to. Roles, leaders, terms, node states and circuit states are that node's opinion, and another node can hold a different one during a change.";
+
+/// Whose view a panel shows.
+#[component]
+pub fn SeenBy(observer: Observer) -> Element {
+    rsx! {
+        span { class: "badge outline", title: SEEN_BY, "{observer.label()}" }
+    }
+}
+
+/// A value the server does not report. Never a zero or a blank.
+#[component]
+pub fn NotReported(#[props(default)] why: String) -> Element {
+    rsx! {
+        span { class: "muted", title: "{why}", "Not reported" }
+    }
+}
+
+/// `value`, or Not reported when the server does not report it.
+pub fn or_not_reported<T>(value: Option<T>, show: impl FnOnce(T) -> String) -> Element {
+    match value.map(show) {
+        Some(text) => rsx! { "{text}" },
+        None => rsx! { NotReported {} },
+    }
+}
+
 /// A toolbar control: its label, then the control. The label names the
 /// control for assistive technology.
 #[component]

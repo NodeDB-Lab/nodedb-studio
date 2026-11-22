@@ -92,7 +92,11 @@ pub fn PlanSheet(review: PlanReview, placement: Placement) -> Element {
                                         span {
                                             "vShards {shards}"
                                             if let Some(q) = q {
-                                                " · {q.reachable} of {q.voters} voters reachable, quorum {q.quorum}"
+                                                if let Some(up) = q.reachable {
+                                                    " · {up} of {q.voters} voters reachable, quorum {q.quorum}"
+                                                } else {
+                                                    " · {q.voters} voters, quorum {q.quorum}"
+                                                }
                                             }
                                         }
                                     }

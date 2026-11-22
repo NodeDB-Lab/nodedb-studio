@@ -4,7 +4,8 @@
 //! Two panels. The selection lives in `ClusterUi`, above the panels and the
 //! router, so hiding a panel or leaving the tab keeps it. Leadership, term,
 //! and every index belong to the selected group: nothing here names a
-//! cluster-wide leader.
+//! cluster-wide leader. Every value is the connected node's view, and the
+//! panels say so.
 
 use std::rc::Rc;
 
@@ -19,6 +20,7 @@ use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
 use crate::state::cluster::ClusterUi;
 use crate::state::workspace::Surface;
+use crate::views::cluster::common::{NotReported, SeenBy};
 use crate::views::cluster::raft_details::RaftDetails;
 use crate::views::cluster::raft_review::TransferSheet;
 use crate::views::events::common::{NoticeLine, StatusText};
@@ -82,6 +84,11 @@ pub fn RaftTab() -> Element {
         .as_ref()
         .map(|l| format!("Observed {} UTC", clock_second(l.observed_at, 0)))
         .unwrap_or_default();
+    let observer = list.as_ref().map(|l| l.observer.clone());
+    let on = observer
+        .as_ref()
+        .map(|o| o.node_id.clone())
+        .unwrap_or_default();
 
     rsx! {
         div { class: "page-body",
@@ -92,6 +99,9 @@ pub fn RaftTab() -> Element {
                     title: "Raft groups",
                     size: GROUPS_SIZE,
                     actions: rsx! {
+                        if let Some(o) = observer.clone() {
+                            SeenBy { observer: o }
+                        }
                         if !observed.is_empty() {
                             span { "{observed}" }
                         }
@@ -132,10 +142,10 @@ pub fn RaftTab() -> Element {
                                         thead {
                                             tr {
                                                 th { "Group" }
-                                                th { "Leader" }
+                                                th { title: "The leader node {on} knows", "Leader" }
                                                 th { class: "num", "Voters" }
-                                                th { class: "num", "Reachable" }
-                                                th { "State" }
+                                                th { class: "num", title: "Voters node {on} reaches: its own circuit to each", "Reachable" }
+                                                th { title: "Quorum from node {on}'s circuits", "State" }
                                             }
                                         }
                                         tbody {
@@ -143,7 +153,6 @@ pub fn RaftTab() -> Element {
                                                 {
                                                     let id = g.id.clone();
                                                     let is_selected = selected.as_ref().is_some_and(|s| s.id == g.id);
-                                                    let health = g.health();
                                                     rsx! {
                                                         tr {
                                                             key: "{g.id}",
@@ -157,9 +166,19 @@ pub fn RaftTab() -> Element {
                                                             },
                                                             td { class: "key", "{g.id}" }
                                                             td { "{g.leader_name()}" }
-                                                            td { class: "num", "{g.voter_count()}" }
-                                                            td { class: "num", "{g.reachable_voters()} of {g.voter_count()}" }
-                                                            td { StatusText { tone: health.tone(), text: health.label().to_string() } }
+                                                            td { class: "num", "{g.voter_count}" }
+                                                            td { class: "num",
+                                                                match g.reachable_voters() {
+                                                                    Some(up) => rsx! { "{up} of {g.voter_count}" },
+                                                                    None => rsx! { NotReported { why: "Node {on} does not list this group's members or cannot say whether it reaches one" } },
+                                                                }
+                                                            }
+                                                            td {
+                                                                match g.health() {
+                                                                    Some(h) => rsx! { StatusText { tone: h.tone(), text: h.label().to_string() } },
+                                                                    None => rsx! { NotReported {} },
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -171,7 +190,7 @@ pub fn RaftTab() -> Element {
                                     }
                                 }
                                 div { class: "dt-footer",
-                                    "{l.groups.len()} groups · each has its own leader, term, and quorum"
+                                    "{l.groups.len()} groups node {on} hosts · each has its own leader, term, and quorum"
                                 }
                             }
                         }
@@ -184,8 +203,8 @@ pub fn RaftTab() -> Element {
                     title: "Raft group details",
                     class: "fill",
                     NoticeLine { notice, on_dismiss: move |_| ui.write().notice = None }
-                    if let Some(g) = selected {
-                        RaftDetails { group: g }
+                    if let (Some(g), Some(o)) = (selected, observer) {
+                        RaftDetails { group: g, observer: o }
                     } else if !state.is_loading() {
                         div { class: "async-empty", "Select a Raft group to see its peers." }
                     }

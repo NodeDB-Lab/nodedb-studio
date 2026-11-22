@@ -2,7 +2,7 @@
 //! disks. A vShard's leader, replicas, and unreachable replicas come from its
 //! group, so placement and Raft groups never disagree.
 
-use crate::data::mock::cluster::members::{OBSERVED, cluster_members, node_id};
+use crate::data::mock::cluster::members::{OBSERVED, cluster_members, node_id, observer};
 use crate::models::cluster::place::{GIB, GroupQuorum, Movement, Placement, PlacementNode, VShard};
 use crate::models::cluster::raft::{PeerRole, RaftGroup};
 
@@ -28,24 +28,24 @@ pub fn vshards(groups: &[RaftGroup], moving: &[(String, Movement)]) -> Vec<VShar
         .iter()
         .filter_map(|(number, db, coll, group, gib)| {
             let g = groups.iter().find(|g| g.id == *group)?;
-            let mut replicas: Vec<String> = g.peers.iter().map(|p| p.node.clone()).collect();
+            let mut replicas: Vec<String> = g.peers().iter().map(|p| p.node.clone()).collect();
             replicas.sort();
             let unreachable = g
-                .peers
+                .peers()
                 .iter()
-                .filter(|p| !p.state().reachable())
+                .filter(|p| p.link.reached() == Some(false))
                 .map(|p| p.node.clone())
                 .collect();
             Some(VShard {
                 number: *number,
-                database: db.to_string(),
-                collection: coll.to_string(),
+                database: Some(db.to_string()),
+                collection: Some(coll.to_string()),
                 group: group.to_string(),
-                leader: g.leader_name().to_string(),
+                leader: g.leader.clone(),
                 replicas,
-                size_bytes: gib * GIB,
-                capacity_bytes: 64 * GIB,
-                storage_class: "standard-ssd".to_string(),
+                size_bytes: Some(gib * GIB),
+                capacity_bytes: Some(64 * GIB),
+                storage_class: Some("standard-ssd".to_string()),
                 movement: moving
                     .iter()
                     .find(|(id, _)| id == group)
@@ -57,7 +57,11 @@ pub fn vshards(groups: &[RaftGroup], moving: &[(String, Movement)]) -> Vec<VShar
 }
 
 /// The placement read: vShards, node disks and roles, and group quorums.
-pub fn placement(groups: &[RaftGroup], moving: &[(String, Movement)], revision: u64) -> Placement {
+pub fn placement(
+    groups: &[RaftGroup],
+    moving: &[(String, Movement)],
+    revision: Option<u64>,
+) -> Placement {
     let vs = vshards(groups, moving);
     let members = cluster_members().members;
     let nodes = members
@@ -72,10 +76,11 @@ pub fn placement(groups: &[RaftGroup], moving: &[(String, Movement)], revision: 
             PlacementNode {
                 node_id: m.id.clone(),
                 name: m.name.clone(),
-                state: m.state,
+                state: m.state.clone(),
+                link: m.link.clone(),
                 vshards: vs.iter().filter(|v| v.replicas.contains(&m.name)).count() as u32,
-                disk_used_bytes: DISK_GIB.get(i).copied().unwrap_or(0) * GIB,
-                disk_total_bytes: 1024 * GIB,
+                disk_used_bytes: DISK_GIB.get(i).map(|g| g * GIB),
+                disk_total_bytes: Some(1024 * GIB),
                 roles,
             }
         })
@@ -84,7 +89,7 @@ pub fn placement(groups: &[RaftGroup], moving: &[(String, Movement)], revision: 
         .iter()
         .map(|g| GroupQuorum {
             group: g.id.clone(),
-            voters: g.voter_count(),
+            voters: g.voter_count,
             reachable: g.reachable_voters(),
             quorum: g.quorum(),
         })
@@ -92,6 +97,7 @@ pub fn placement(groups: &[RaftGroup], moving: &[(String, Movement)], revision: 
     Placement {
         observed_at: OBSERVED,
         revision,
+        observer: observer(),
         vshards: vs,
         nodes,
         quorums,

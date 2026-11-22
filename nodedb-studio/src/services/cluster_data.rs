@@ -107,8 +107,8 @@ mod tests {
         // Every vShard names a group that exists, and its replicas are the group's.
         for v in &placement.vshards {
             let g = groups.group(&v.group).expect("group of vshard");
-            assert_eq!(v.replicas.len(), g.peers.len(), "vShard {}", v.number);
-            assert_eq!(v.leader, g.leader_name());
+            assert_eq!(v.replicas.len(), g.peers().len(), "vShard {}", v.number);
+            assert_eq!(v.leader, g.leader);
         }
     }
 
@@ -128,12 +128,13 @@ mod tests {
         assert!(out.operation.starts_with("op_"));
         let after = svc.raft_groups().await.expect("groups");
         assert!(after.revision > groups.revision);
+        assert_eq!(after.observer, groups.observer);
         assert_eq!(after.group("data-11").expect("g").leader_name(), "node-2");
         let hosted = svc.hosted_groups("nd_02").await.expect("hosted");
         assert!(
             hosted
                 .iter()
-                .any(|g| g.group == "data-11" && g.leader == "node-2")
+                .any(|g| g.group == "data-11" && g.leader.as_deref() == Some("node-2"))
         );
         let log = svc
             .cluster_activity(&ActivityQuery::default())

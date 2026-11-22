@@ -4,7 +4,7 @@
 //! Every write names the revision it read and is refused when it changed.
 
 use crate::data::mock::cluster::activity::{event, seeded_events};
-use crate::data::mock::cluster::members::{OBSERVED, cluster_members, node_name};
+use crate::data::mock::cluster::members::{OBSERVED, cluster_members, node_name, observer};
 use crate::data::mock::cluster::placement::placement;
 use crate::data::mock::cluster::raft::{hosted_groups, seeded_groups};
 use crate::models::cluster::HostedGroup;
@@ -16,7 +16,7 @@ use crate::models::cluster::place::{
     MoveRequest, Movement, Placement, PlannedMove, RebalancePlan, size_text,
 };
 use crate::models::cluster::raft::{
-    Peer, PeerRole, RaftGroup, RaftGroups, SnapshotInfo, TransferPreview,
+    Peer, PeerProgress, PeerRole, RaftGroup, RaftGroups, SnapshotInfo, TransferPreview,
 };
 use crate::services::error::StudioError;
 
@@ -84,7 +84,8 @@ impl ClusterStore {
     pub fn raft_groups(&self) -> RaftGroups {
         RaftGroups {
             observed_at: self.clock,
-            revision: self.revision,
+            revision: Some(self.revision),
+            observer: observer(),
             groups: self.groups.clone(),
         }
     }
@@ -94,7 +95,7 @@ impl ClusterStore {
     }
 
     pub fn placement(&self) -> Placement {
-        placement(&self.groups, &self.moving, self.revision)
+        placement(&self.groups, &self.moving, Some(self.revision))
     }
 
     pub fn activity(&self, q: &ActivityQuery) -> ActivityLog {
@@ -159,7 +160,8 @@ impl ClusterStore {
                 ),
             });
         }
-        let lag = g.match_lag(to);
+        let lag = g.match_lag(to).unwrap_or(0);
+        let up = g.reachable_voters().unwrap_or(0);
         let mut effects = vec![
             format!(
                 "{} takes leadership of {group} in term {}.",
@@ -176,11 +178,10 @@ impl ClusterStore {
                 to.node
             ));
         }
-        if g.reachable_voters() < g.voter_count() {
+        if up < g.voter_count {
             warnings.push(format!(
-                "{group} has {} of {} voters reachable. A second loss during the transfer stops it from committing.",
-                g.reachable_voters(),
-                g.voter_count()
+                "{group} has {up} of {} voters reachable. A second loss during the transfer stops it from committing.",
+                g.voter_count
             ));
         }
         Ok(TransferPreview {
@@ -192,8 +193,8 @@ impl ClusterStore {
             to_id: to.node_id.clone(),
             to: to.node.clone(),
             target_lag: lag,
-            voters_reachable: g.reachable_voters(),
-            voters_total: g.voter_count(),
+            voters_reachable: up,
+            voters_total: g.voter_count,
             effects,
             warnings,
             permission: self.permission(),
@@ -220,12 +221,15 @@ impl ClusterStore {
         let op = self.operation();
         if let Some(g) = self.groups.iter_mut().find(|g| g.id == group) {
             g.term += 1;
-            for p in &mut g.peers {
+            g.leader = Some(preview.to.clone());
+            for p in g.peers.iter_mut().flatten() {
                 if p.node_id == preview.from_id {
                     p.role = PeerRole::Voter;
                 } else if p.node_id == preview.to_id {
                     p.role = PeerRole::Leader;
-                    p.heartbeat_age_ms = Some(0);
+                    if let Some(x) = p.progress.as_mut() {
+                        x.heartbeat_age_ms = Some(0);
+                    }
                 }
             }
         }
@@ -265,13 +269,13 @@ impl ClusterStore {
         }
         let g = self.group(group)?;
         let leader = g.leader().map(|p| p.node.clone()).unwrap_or_default();
-        let n = g.snapshots.len() as u32 + 1;
+        let taken = g.snapshots.clone().unwrap_or_default();
+        let n = taken.len() as u32 + 1;
         let snap = SnapshotInfo {
             id: format!("snap_{group}_{n}"),
             index: g.applied_index,
             taken_at: self.clock + 14,
-            size_bytes: g
-                .snapshots
+            size_bytes: taken
                 .first()
                 .map(|s| s.size_bytes + 40 * 1024 * 1024)
                 .unwrap_or(64 * 1024 * 1024),
@@ -279,7 +283,9 @@ impl ClusterStore {
         };
         let op = self.operation();
         if let Some(g) = self.groups.iter_mut().find(|g| g.id == group) {
-            g.snapshots.insert(0, snap.clone());
+            g.snapshots
+                .get_or_insert_with(Vec::new)
+                .insert(0, snap.clone());
         }
         let mut e = event(
             0,
@@ -333,13 +339,13 @@ impl ClusterStore {
                 .iter()
                 .find(|n| n.id == m.to_id)
                 .ok_or_else(|| missing("node", &m.to_id))?;
-            if !to.state.reachable() {
+            if to.link.reached() != Some(true) {
                 return Err(StudioError::Rejected {
                     reason: format!("{} does not answer: it cannot receive a replica", to.name),
                 });
             }
             // The replica's place among the group's members, by node id.
-            let mut ids: Vec<&String> = g.peers.iter().map(|p| &p.node_id).collect();
+            let mut ids: Vec<&String> = g.peers().iter().map(|p| &p.node_id).collect();
             ids.sort();
             let slot = ids.iter().position(|id| **id == from.node_id).unwrap_or(0) + 1;
             planned.push(PlannedMove {
@@ -348,16 +354,15 @@ impl ClusterStore {
                 replica: format!("Replica {slot}"),
                 source: from.node.clone(),
                 destination: to.name.clone(),
-                estimated_bytes: placement.group_bytes(&g.id),
+                estimated_bytes: placement.group_bytes(&g.id).unwrap_or(0),
                 impact: Impact::Unknown,
                 vshards: placement.group_vshards(&g.id),
             });
-            if g.reachable_voters() < g.voter_count() && from.state().reachable() {
+            let up = g.reachable_voters().unwrap_or(0);
+            if up < g.voter_count && from.link.reached() == Some(true) {
                 warnings.push(format!(
-                    "{} has {} of {} voters reachable. Removing a reachable replica leaves less margin.",
-                    g.id,
-                    g.reachable_voters(),
-                    g.voter_count()
+                    "{} has {up} of {} voters reachable. Removing a reachable replica leaves less margin.",
+                    g.id, g.voter_count
                 ));
             }
         }
@@ -390,21 +395,25 @@ impl ClusterStore {
                 .ok_or_else(|| missing("node", &m.destination))?;
             bytes += m.estimated_bytes;
             if let Some(g) = self.groups.iter_mut().find(|g| g.id == m.group) {
-                g.peers.push(Peer {
+                g.peers.get_or_insert_with(Vec::new).push(Peer {
                     node_id: dest.id.clone(),
                     node: dest.name.clone(),
                     role: PeerRole::Learner,
-                    match_index: 0,
-                    applied_index: 0,
-                    heartbeat_age_ms: Some(24),
+                    progress: Some(PeerProgress {
+                        match_index: 0,
+                        applied_index: 0,
+                        heartbeat_age_ms: Some(24),
+                    }),
+                    link: dest.link.clone(),
                 });
             }
             self.moving.push((
                 m.group.clone(),
                 Movement {
-                    operation: op.clone(),
-                    from: m.source.clone(),
-                    to: m.destination.clone(),
+                    operation: Some(op.clone()),
+                    from: Some(m.source.clone()),
+                    to: Some(m.destination.clone()),
+                    phase: None,
                 },
             ));
             let mut e = event(
@@ -463,17 +472,23 @@ mod tests {
         node_id(n)
     }
 
+    fn g_voters(s: &ClusterStore, group: &str) -> u32 {
+        s.raft_groups().group(group).map_or(0, |g| g.voter_count)
+    }
+
     #[test]
     fn a_transfer_moves_leadership_and_logs_it() {
         let mut s = ClusterStore::seeded();
-        let before = s.raft_groups();
-        let out = s
-            .transfer("data-11", &nd(2), before.revision)
-            .expect("transfer");
+        let before = s
+            .raft_groups()
+            .revision
+            .expect("the mock numbers revisions");
+        let out = s.transfer("data-11", &nd(2), before).expect("transfer");
         assert_eq!(out.operation, "op_73");
         let g = s.raft_groups();
         let g11 = g.group("data-11").expect("group");
         assert_eq!(g11.leader_name(), "node-2");
+        assert_eq!(g11.leader().map(|p| p.node.as_str()), Some("node-2"));
         assert_eq!(g11.term, 88);
         // Other groups keep their leaders.
         assert_eq!(g.group("data-12").expect("group").leader_name(), "node-2");
@@ -493,7 +508,7 @@ mod tests {
     #[test]
     fn a_stale_preview_never_applies() {
         let mut s = ClusterStore::seeded();
-        let first = s.raft_groups().revision;
+        let first = s.raft_groups().revision.expect("revision");
         s.transfer("data-11", &nd(2), first).expect("first");
         let err = s.transfer("data-11", &nd(1), first).expect_err("stale");
         assert!(matches!(err, StudioError::StaleRevision { .. }), "{err}");
@@ -546,6 +561,7 @@ mod tests {
         assert_eq!(m.vshards, vec![14, 17, 21]);
         assert_eq!(m.impact, Impact::Unknown);
         assert_eq!(m.estimated_bytes, 51 * crate::models::cluster::place::GIB);
+        assert_eq!(g_voters(&s, "data-12"), 3);
         let out = s.apply_rebalance(&plan).expect("applied");
         assert_eq!(out.operation, "op_73");
         let p = s.placement();
@@ -556,7 +572,8 @@ mod tests {
         let g = s.raft_groups();
         let g12 = g.group("data-12").expect("group");
         assert_eq!(g12.learners().len(), 1);
-        assert_eq!(g12.voter_count(), 3);
+        assert_eq!(g12.voter_count, 3);
+        assert_eq!(g12.voters().len(), 3);
         assert!(s.vshard_numbers().contains(&17));
     }
 
@@ -600,7 +617,11 @@ mod tests {
         let snap = s.create_snapshot("data-13").expect("snapshot");
         assert_eq!(snap.index, 733_950);
         assert_eq!(
-            s.raft_groups().group("data-13").expect("g").snapshots[0].id,
+            s.raft_groups()
+                .group("data-13")
+                .and_then(|g| g.snapshots.clone())
+                .expect("snapshots")[0]
+                .id,
             snap.id
         );
         assert_eq!(
@@ -660,7 +681,7 @@ mod tests {
         let s = ClusterStore::seeded();
         for m in cluster_members().members {
             assert_eq!(
-                s.hosted(&m.id).len() as u32,
+                Some(s.hosted(&m.id).len() as u32),
                 m.hosted_groups,
                 "{} hosted_groups",
                 m.id

@@ -3,22 +3,13 @@
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::cluster::NodeState;
 use crate::models::cluster::place::{Placement, VShard, size_text};
 use crate::models::cluster::raft::PeerRole;
-use crate::models::feeds::Tone;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;
 use crate::state::cluster::ClusterUi;
+use crate::views::cluster::common::{NotReported, or_not_reported};
 use crate::views::events::common::{StatusBadge, StatusText};
-
-fn node_tone(state: NodeState) -> Tone {
-    match state {
-        NodeState::Online => Tone::Ok,
-        NodeState::CatchingUp => Tone::Warn,
-        NodeState::Unreachable => Tone::Idle,
-    }
-}
 
 #[component]
 pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
@@ -36,6 +27,12 @@ pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
         })
         .collect();
     let quorum = placement.quorum(&v.group).cloned();
+    let on = placement.observer.node_id.clone();
+    let used = match (v.size_bytes, v.used_percent()) {
+        (Some(b), Some(pct)) => Some(format!("{} ({pct}%)", size_text(b))),
+        (Some(b), None) => Some(size_text(b)),
+        (None, _) => None,
+    };
     rsx! {
         div { class: "inspector cl-details",
             div { class: "inspector-head",
@@ -43,19 +40,30 @@ pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
                 StatusBadge { tone: status.tone(), text: status.label().to_string() }
             }
             div { class: "kv",
-                div { class: "kv-row", span { "Database" } span { "{v.database}" } }
-                div { class: "kv-row", span { "Collection" } span { "{v.collection}" } }
+                div { class: "kv-row", span { "Database" } span { {or_not_reported(v.database.clone(), |d| d)} } }
+                div { class: "kv-row", span { "Collection" } span { {or_not_reported(v.collection.clone(), |c| c)} } }
                 div { class: "kv-row", span { "vShard" } span { class: "num", "{v.number}" } }
                 div { class: "kv-row", span { "Group" } span { class: "mono", "{v.group}" } }
-                div { class: "kv-row", span { "Leader" } span { "{v.leader}" } }
+                div { class: "kv-row", span { title: "The leader node {on} knows", "Leader" } span { "{v.leader.as_deref().unwrap_or(\"none\")}" } }
                 div { class: "kv-row", span { "Replicas" } span { "{v.replicas.join(\" / \")}" } }
-                div { class: "kv-row", span { "Storage class" } span { class: "mono", "{v.storage_class}" } }
-                div { class: "kv-row", span { "Capacity" } span { class: "num", "{size_text(v.capacity_bytes)}" } }
-                div { class: "kv-row", span { "Size (used)" } span { class: "num", "{size_text(v.size_bytes)} ({v.used_percent()}%)" } }
+                div { class: "kv-row", span { "Storage class" } span { class: "mono", {or_not_reported(v.storage_class.clone(), |c| c)} } }
+                div { class: "kv-row", span { "Capacity" } span { class: "num", {or_not_reported(v.capacity_bytes, size_text)} } }
+                div { class: "kv-row", span { "Size (used)" } span { class: "num", {or_not_reported(used, |u| u)} } }
                 if let Some(m) = v.movement.as_ref() {
                     div { class: "kv-row",
                         span { "Move" }
-                        span { "{m.from} → {m.to} · " span { class: "mono", "{m.operation}" } }
+                        span {
+                            {or_not_reported(m.from.clone(), |f| f)}
+                            " → "
+                            {or_not_reported(m.to.clone(), |t| t)}
+                            if let Some(phase) = m.phase.as_ref() {
+                                " · {phase}"
+                            }
+                            if let Some(op) = m.operation.as_ref() {
+                                " · "
+                                span { class: "mono", "{op}" }
+                            }
+                        }
                     }
                 }
             }
@@ -76,7 +84,10 @@ pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
             }
             if let Some(q) = quorum {
                 p { class: "inspector-note",
-                    "{q.group} has {q.reachable} of {q.voters} voters reachable. Quorum is {q.quorum}. Node health and group quorum are separate facts."
+                    match q.reachable {
+                        Some(up) => rsx! { "Node {on} reaches {up} of the {q.voters} voters of {q.group}. Quorum is {q.quorum}. Node health and group quorum are separate facts." },
+                        None => rsx! { "Quorum of {q.group} is {q.quorum} of {q.voters} voters. Node {on} cannot say how many it reaches." },
+                    }
                 }
             }
             div { class: "inspector-actions",
@@ -100,13 +111,15 @@ pub fn VShardDetails(placement: Placement, vshard: VShard) -> Element {
 #[component]
 pub fn NodesHealth(placement: Placement, group: Option<String>) -> Element {
     let quorum = group.as_ref().and_then(|g| placement.quorum(g)).cloned();
+    let on = placement.observer.node_id.clone();
     rsx! {
         div { class: "dt-wrap",
             table { class: "dt cl-table",
                 thead {
                     tr {
                         th { "Node" }
-                        th { "Health" }
+                        th { title: "The state node {on} holds for the member", "Node state" }
+                        th { title: "Node {on}'s circuit breaker to the member", "Circuit from node {on}" }
                         th { class: "num", "Disk used" }
                         if let Some(g) = group.as_ref() {
                             th { title: "Role in {g}", "Role" }
@@ -117,8 +130,15 @@ pub fn NodesHealth(placement: Placement, group: Option<String>) -> Element {
                     for n in placement.nodes.iter() {
                         tr { key: "{n.node_id}",
                             td { class: "key", "{n.name}" }
-                            td { StatusText { tone: node_tone(n.state), text: n.state.label().to_string() } }
-                            td { class: "num", "{size_text(n.disk_used_bytes)} ({n.disk_percent()}%)" }
+                            td { StatusText { tone: n.state.tone(), text: n.state.label().to_string() } }
+                            td { StatusText { tone: n.link.tone(), text: n.link.label() } }
+                            td { class: "num",
+                                match (n.disk_used_bytes, n.disk_percent()) {
+                                    (Some(b), Some(pct)) => rsx! { "{size_text(b)} ({pct}%)" },
+                                    (Some(b), None) => rsx! { "{size_text(b)}" },
+                                    (None, _) => rsx! { NotReported { why: "NodeDB 0.6.2 reports no disk use" } },
+                                }
+                            }
                             if let Some(g) = group.as_ref() {
                                 td {
                                     match n.role_in(g) {
@@ -135,7 +155,10 @@ pub fn NodesHealth(placement: Placement, group: Option<String>) -> Element {
         if let Some(q) = quorum {
             div { class: "dt-footer",
                 span { class: "mono", "{q.group}" }
-                " · Reachable voters {q.reachable} / {q.voters} · Quorum {q.quorum}"
+                match q.reachable {
+                    Some(up) => rsx! { " · Voters node {on} reaches {up} / {q.voters} · Quorum {q.quorum}" },
+                    None => rsx! { " · Voters {q.voters} · Quorum {q.quorum}" },
+                }
             }
         }
     }

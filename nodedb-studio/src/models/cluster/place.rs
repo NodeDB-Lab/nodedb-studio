@@ -2,39 +2,44 @@
 //! replicas, and the plan that moves a replica. A replica move changes the
 //! membership of the vShard's group, so it reaches every vShard of that
 //! group. Node health (a node answers) and group quorum (voters answer) are
-//! separate facts and sit in separate columns.
+//! separate facts and sit in separate columns. Every value is one node's
+//! view: the observer's.
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::cluster::NodeState;
 use crate::models::cluster::op::{Impact, PermissionCheck};
 use crate::models::cluster::raft::PeerRole;
+use crate::models::cluster::{Link, NodeState, Observer};
 use crate::models::feeds::Tone;
 
 pub const GIB: u64 = 1024 * 1024 * 1024;
 
-/// A replica move that has started and not finished.
+/// A replica move that has started and not finished. `None` is a fact the
+/// server does not report: NodeDB names only the vShard and its phase.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Movement {
-    pub operation: String,
-    pub from: String,
-    pub to: String,
+    pub operation: Option<String>,
+    pub from: Option<String>,
+    pub to: Option<String>,
+    pub phase: Option<String>,
 }
 
-/// One vShard.
+/// One vShard. `None` is a fact the server does not report: NodeDB hashes
+/// rows of every collection across every vShard, so a vShard has no
+/// database or collection, and it reports no size.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VShard {
     pub number: u32,
-    pub database: String,
-    pub collection: String,
+    pub database: Option<String>,
+    pub collection: Option<String>,
     pub group: String,
-    /// The group's leader, by display name.
-    pub leader: String,
+    /// The group's leader, by display name. `None`: the observer knows none.
+    pub leader: Option<String>,
     /// Display names of the nodes that hold a replica.
     pub replicas: Vec<String>,
-    pub size_bytes: u64,
-    pub capacity_bytes: u64,
-    pub storage_class: String,
+    pub size_bytes: Option<u64>,
+    pub capacity_bytes: Option<u64>,
+    pub storage_class: Option<String>,
     pub movement: Option<Movement>,
     /// Replicas on a node that does not answer.
     pub unreachable: Vec<String>,
@@ -70,9 +75,13 @@ impl ShardStatus {
 }
 
 impl VShard {
-    /// `analytics.orders`.
-    pub fn source(&self) -> String {
-        format!("{}.{}", self.database, self.collection)
+    /// `analytics.orders`. `None` when either is not reported.
+    pub fn source(&self) -> Option<String> {
+        Some(format!(
+            "{}.{}",
+            self.database.as_ref()?,
+            self.collection.as_ref()?
+        ))
     }
 
     pub fn status(&self) -> ShardStatus {
@@ -85,11 +94,10 @@ impl VShard {
         }
     }
 
-    /// Whole percent of the capacity in use.
-    pub fn used_percent(&self) -> u64 {
-        (self.size_bytes * 100)
-            .checked_div(self.capacity_bytes)
-            .unwrap_or(0)
+    /// Whole percent of the capacity in use. `None` when either is not
+    /// reported or the capacity is zero.
+    pub fn used_percent(&self) -> Option<u64> {
+        (self.size_bytes? * 100).checked_div(self.capacity_bytes?)
     }
 }
 
@@ -99,19 +107,19 @@ pub struct PlacementNode {
     pub node_id: String,
     pub name: String,
     pub state: NodeState,
+    pub link: Link,
     /// Replicas of vShards the node holds.
     pub vshards: u32,
-    pub disk_used_bytes: u64,
-    pub disk_total_bytes: u64,
+    /// `None`: not reported. NodeDB 0.6.2 reports no disk use.
+    pub disk_used_bytes: Option<u64>,
+    pub disk_total_bytes: Option<u64>,
     /// The node's role in each group it belongs to.
     pub roles: Vec<(String, PeerRole)>,
 }
 
 impl PlacementNode {
-    pub fn disk_percent(&self) -> u64 {
-        (self.disk_used_bytes * 100)
-            .checked_div(self.disk_total_bytes)
-            .unwrap_or(0)
+    pub fn disk_percent(&self) -> Option<u64> {
+        (self.disk_used_bytes? * 100).checked_div(self.disk_total_bytes?)
     }
 
     pub fn role_in(&self, group: &str) -> Option<PeerRole> {
@@ -124,14 +132,17 @@ impl PlacementNode {
 pub struct GroupQuorum {
     pub group: String,
     pub voters: u32,
-    pub reachable: u32,
+    /// Voters the observer reaches. `None`: it cannot say.
+    pub reachable: Option<u32>,
     pub quorum: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Placement {
     pub observed_at: i64,
-    pub revision: u64,
+    /// `None`: the server numbers no revision.
+    pub revision: Option<u64>,
+    pub observer: Observer,
     pub vshards: Vec<VShard>,
     pub nodes: Vec<PlacementNode>,
     pub quorums: Vec<GroupQuorum>,
@@ -147,7 +158,11 @@ impl Placement {
     }
 
     pub fn databases(&self) -> Vec<String> {
-        let mut out: Vec<String> = self.vshards.iter().map(|v| v.database.clone()).collect();
+        let mut out: Vec<String> = self
+            .vshards
+            .iter()
+            .filter_map(|v| v.database.clone())
+            .collect();
         out.sort();
         out.dedup();
         out
@@ -158,8 +173,8 @@ impl Placement {
         let mut out: Vec<String> = self
             .vshards
             .iter()
-            .filter(|v| database.is_none_or(|d| v.database == d))
-            .map(|v| v.collection.clone())
+            .filter(|v| database.is_none_or(|d| v.database.as_deref() == Some(d)))
+            .filter_map(|v| v.collection.clone())
             .collect();
         out.sort();
         out.dedup();
@@ -167,7 +182,8 @@ impl Placement {
     }
 
     /// Bytes one replica of `group` holds: every vShard the group owns.
-    pub fn group_bytes(&self, group: &str) -> u64 {
+    /// `None` when a vShard's size is not reported.
+    pub fn group_bytes(&self, group: &str) -> Option<u64> {
         self.vshards
             .iter()
             .filter(|v| v.group == group)
@@ -251,14 +267,14 @@ mod tests {
     fn shard(n: u32, group: &str, size: u64) -> VShard {
         VShard {
             number: n,
-            database: "analytics".into(),
-            collection: "orders".into(),
+            database: Some("analytics".into()),
+            collection: Some("orders".into()),
             group: group.into(),
-            leader: "node-1".into(),
+            leader: Some("node-1".into()),
             replicas: vec!["node-1".into()],
-            size_bytes: size * GIB,
-            capacity_bytes: 64 * GIB,
-            storage_class: "standard-ssd".into(),
+            size_bytes: Some(size * GIB),
+            capacity_bytes: Some(64 * GIB),
+            storage_class: Some("standard-ssd".into()),
             movement: None,
             unreachable: Vec::new(),
         }
@@ -279,9 +295,10 @@ mod tests {
         s.unreachable.push("node-5".into());
         assert_eq!(s.status(), ShardStatus::ReplicaUnreachable);
         s.movement = Some(Movement {
-            operation: "op_1".into(),
-            from: "node-5".into(),
-            to: "node-1".into(),
+            operation: Some("op_1".into()),
+            from: Some("node-5".into()),
+            to: Some("node-1".into()),
+            phase: None,
         });
         assert_eq!(s.status(), ShardStatus::Moving);
     }
@@ -290,7 +307,10 @@ mod tests {
     fn a_group_move_carries_every_vshard_of_the_group() {
         let p = Placement {
             observed_at: 0,
-            revision: 1,
+            revision: Some(1),
+            observer: Observer {
+                node_id: "nd_01".into(),
+            },
             vshards: vec![
                 shard(1, "data-1", 10),
                 shard(2, "data-1", 5),
@@ -299,16 +319,22 @@ mod tests {
             nodes: Vec::new(),
             quorums: Vec::new(),
         };
-        assert_eq!(p.group_bytes("data-1"), 15 * GIB);
+        assert_eq!(p.group_bytes("data-1"), Some(15 * GIB));
         assert_eq!(p.group_vshards("data-1"), vec![1, 2]);
         assert_eq!(p.databases(), vec!["analytics".to_string()]);
     }
 
     #[test]
     fn used_percent_is_whole_and_safe_on_zero_capacity() {
-        assert_eq!(shard(1, "g", 24).used_percent(), 37);
+        assert_eq!(shard(1, "g", 24).used_percent(), Some(37));
         let mut s = shard(1, "g", 24);
-        s.capacity_bytes = 0;
-        assert_eq!(s.used_percent(), 0);
+        s.capacity_bytes = Some(0);
+        assert_eq!(s.used_percent(), None);
+        s.size_bytes = None;
+        s.capacity_bytes = Some(GIB);
+        assert_eq!(s.used_percent(), None);
+        assert_eq!(s.source().as_deref(), Some("analytics.orders"));
+        s.database = None;
+        assert_eq!(s.source(), None);
     }
 }

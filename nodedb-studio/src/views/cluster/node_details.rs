@@ -1,43 +1,53 @@
-//! The Node details inspector: the selected member and its selected group.
+//! The Node details inspector: the selected member and its selected group,
+//! as the observer sees the member.
 
 use dioxus::prelude::*;
 
 use crate::components::icon::{Ico, Icon};
-use crate::models::cluster::{ClusterMember, HostedGroup, NodeState};
+use crate::models::cluster::{ClusterMember, HostedGroup, Observer};
 use crate::models::format::thousands;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;
 use crate::state::cluster::ClusterUi;
-
-fn state_badge(state: NodeState) -> (&'static str, &'static str) {
-    match state {
-        NodeState::Online => ("badge green", "status-dot ok"),
-        NodeState::CatchingUp => ("badge amber", "status-dot warn"),
-        NodeState::Unreachable => ("badge gray", "status-dot idle"),
-    }
-}
+use crate::views::cluster::common::{SeenBy, or_not_reported};
+use crate::views::events::common::{StatusBadge, StatusText};
 
 #[component]
-pub fn NodeDetails(member: ClusterMember, group: Option<HostedGroup>) -> Element {
+pub fn NodeDetails(
+    member: ClusterMember,
+    observer: Observer,
+    group: Option<HostedGroup>,
+) -> Element {
     let nav = use_navigator();
     let mut raft = use_context::<ClusterUi>().raft;
-    let (badge, dot) = state_badge(member.state);
+    let on = &observer.node_id;
     rsx! {
         div { class: "inspector",
             div { class: "inspector-head",
                 h3 { class: "inspector-title", "{member.name}" }
-                span { class: "{badge}", span { class: "{dot}" } "{member.state.label()}" }
+                StatusBadge { tone: member.state.tone(), text: member.state.label().to_string() }
             }
             div { class: "kv",
                 div { class: "kv-row", span { "Node ID" } span { class: "mono", "{member.id}" } }
-                div { class: "kv-row", span { "Endpoint" } span { class: "mono", "{member.endpoint}" } }
-                div { class: "kv-row", span { "Zone" } span { "{member.zone}" } }
+                div { class: "kv-row", span { "Peer address" } span { class: "mono", "{member.address}" } }
+                div { class: "kv-row",
+                    span { title: "The state node {on} holds for this member", "Node state" }
+                    StatusText { tone: member.state.tone(), text: member.state.label().to_string() }
+                }
+                div { class: "kv-row",
+                    span { title: "Node {on}'s circuit breaker to this member", "Circuit from node {on}" }
+                    StatusText { tone: member.link.tone(), text: member.link.label() }
+                }
+                div { class: "kv-row", span { "Zone" } span { {or_not_reported(member.zone.clone(), |z| z)} } }
                 div { class: "kv-row", span { "Kind" } span { "{member.kind.label()}" } }
-                div { class: "kv-row", span { "Last heartbeat" } span { "{member.last_heartbeat}" } }
-                div { class: "kv-row", span { "Hosted groups" } span { class: "num", "{member.hosted_groups}" } }
+                div { class: "kv-row", span { "Last heartbeat" } span { {or_not_reported(member.last_heartbeat.clone(), |h| h)} } }
+                div { class: "kv-row",
+                    span { "Hosted groups" }
+                    span { class: "num", {or_not_reported(member.hosted_groups, |n| n.to_string())} }
+                }
             }
             if let Some(g) = group.as_ref() {
-                h4 { class: "inspector-section", "Selected group" }
+                h4 { class: "inspector-section", "Selected group, as {member.name} sees it" }
                 div { class: "kv",
                     div { class: "kv-row", span { "Group" } span { "{g.group}" } }
                     div { class: "kv-row", span { "Role" } span { "{g.role_here.label()}" } }
@@ -46,7 +56,10 @@ pub fn NodeDetails(member: ClusterMember, group: Option<HostedGroup>) -> Element
                     div { class: "kv-row", span { "Applied index" } span { class: "num", "{thousands(g.applied_index)}" } }
                 }
             }
-            p { class: "inspector-note", "Observed on {member.name}." }
+            p { class: "inspector-note",
+                SeenBy { observer: observer.clone() }
+                " A peer that stops answering opens the circuit first and turns draining later. Neither means the node is gone."
+            }
             div { class: "inspector-actions",
                 button {
                     class: "btn",

@@ -1,5 +1,6 @@
 //! Cluster → Nodes: configured members, the Raft groups the selected member
-//! hosts, and that member's details.
+//! hosts, and that member's details. The members are the connected node's
+//! view: its node states and its circuits to each peer, side by side.
 //!
 //! Three panels: Nodes and Replication groups stacked on the left, Node
 //! details on the right. The selection lives here, above the panels, so
@@ -12,31 +13,48 @@ use dioxus::prelude::*;
 use crate::components::async_view::{AsyncView, resource_state};
 use crate::components::icon::{Ico, Icon};
 use crate::components::panel::{Panel, PanelSize, ResizeHandle, Side};
-use crate::models::cluster::{ClusterMember, HostedGroup, NodeState};
+use crate::models::cluster::{ClusterMember, ClusterMembers, GroupRole, HostedGroup};
+use crate::models::feeds::Tone;
 use crate::models::format::ago;
 use crate::routes::Route;
 use crate::routes::tabs::ClusterTab;
 use crate::services::backend::Backend;
+use crate::state::caps::cluster::offers_cluster_ops;
 use crate::state::cluster::ClusterUi;
+use crate::state::gates::use_caps;
 use crate::state::workspace::Surface;
+use crate::views::cluster::common::{NotReported, SeenBy, or_not_reported};
 use crate::views::cluster::node_details::NodeDetails;
+use crate::views::events::common::StatusText;
 
 const SURFACE: Surface = Surface::Cluster(ClusterTab::Nodes);
 const GROUPS_SIZE: PanelSize = PanelSize::height(300.0, 160.0, 560.0);
 const DETAILS_SIZE: PanelSize = PanelSize::width(360.0, 280.0, 560.0);
 
-/// Members whose name, endpoint, or zone contains `filter`, ignoring case.
+/// Members whose name, address, or zone contains `filter`, ignoring case.
 fn matching<'a>(members: &'a [ClusterMember], filter: &str) -> Vec<&'a ClusterMember> {
     let needle = filter.trim().to_lowercase();
     members
         .iter()
         .filter(|m| {
             needle.is_empty()
-                || [&m.name, &m.endpoint, &m.zone]
-                    .iter()
+                || [Some(&m.name), Some(&m.address), m.zone.as_ref()]
+                    .into_iter()
+                    .flatten()
                     .any(|f| f.to_lowercase().contains(&needle))
         })
         .collect()
+}
+
+/// The member to show: the chosen one while it is listed, else the
+/// observer, whose own groups Studio can read, else the first.
+pub fn pick_member(list: &ClusterMembers, chosen: Option<&str>) -> Option<String> {
+    let listed = |id: &str| list.members.iter().any(|m| m.id == id);
+    chosen
+        .filter(|id| listed(id))
+        .or_else(|| Some(list.observer.node_id.as_str()).filter(|id| listed(id)))
+        .or_else(|| list.members.first().map(|m| m.id.as_str()))
+        .map(str::to_string)
 }
 
 /// The group to show in details: the chosen one while the member still
@@ -47,21 +65,17 @@ pub fn effective_group<'a>(
 ) -> Option<&'a HostedGroup> {
     chosen
         .and_then(|id| groups.iter().find(|g| g.group == id))
-        .or_else(|| {
-            groups
-                .iter()
-                .find(|g| g.role_here == crate::models::cluster::GroupRole::Leader)
-        })
+        .or_else(|| groups.iter().find(|g| g.role_here == GroupRole::Leader))
         .or_else(|| groups.first())
 }
 
-fn state_marker(state: NodeState) -> Element {
-    match state {
-        NodeState::Online => rsx! { span { class: "status-dot ok" } },
-        NodeState::CatchingUp => {
+fn state_marker(tone: Tone) -> Element {
+    match tone {
+        Tone::Ok => rsx! { span { class: "status-dot ok" } },
+        Tone::Warn | Tone::Err => {
             rsx! { span { class: "state-icon warn", Ico { icon: Icon::CircleAlert, size: 16 } } }
         }
-        NodeState::Unreachable => {
+        Tone::Idle => {
             rsx! { span { class: "state-icon muted", Ico { icon: Icon::Ban, size: 16 } } }
         }
     }
@@ -76,6 +90,7 @@ pub fn NodesTab() -> Element {
     // The selection lives above the page, so another tab can point at a node.
     let ui = use_context::<ClusterUi>();
     let (mut sel, mut raft) = (ui.nodes, ui.raft);
+    let ops = offers_cluster_ops(use_caps().as_ref());
 
     let mut members = {
         let backend = backend.clone();
@@ -89,16 +104,13 @@ pub fn NodesTab() -> Element {
     let state = resource_state(&members);
     let list = state.loaded().cloned();
 
-    // The chosen member while it is still listed, else the first one. A
-    // memo, so the groups read re-runs only when the selection changes.
+    // A memo, so the groups read re-runs only when the selection changes.
     // Reading the resource and the chosen id inside subscribes it to both.
     let selected_id = use_memo(move || {
         let chosen = sel.read().node.clone();
         let read = members.read();
         let list = read.as_ref().and_then(|r| r.as_ref().ok())?;
-        chosen
-            .filter(|id| list.members.iter().any(|m| &m.id == id))
-            .or_else(|| list.members.first().map(|m| m.id.clone()))
+        pick_member(list, chosen.as_deref())
     });
     let selected: Option<ClusterMember> = list.as_ref().and_then(|l| {
         let id = selected_id.read().clone()?;
@@ -125,7 +137,12 @@ pub fn NodesTab() -> Element {
         .unwrap_or_default();
     let counts = list
         .as_ref()
-        .map(|l| (l.members.len(), l.reachable()))
+        .map(|l| (l.members.len(), l.active()))
+        .unwrap_or_default();
+    let observer = list.as_ref().map(|l| l.observer.clone());
+    let on = observer
+        .as_ref()
+        .map(|o| o.node_id.clone())
         .unwrap_or_default();
     let selected_name = selected
         .as_ref()
@@ -142,6 +159,9 @@ pub fn NodesTab() -> Element {
                         title: "Nodes",
                         class: "fill",
                         actions: rsx! {
+                            if let Some(o) = observer.clone() {
+                                SeenBy { observer: o }
+                            }
                             if !observed.is_empty() {
                                 span { "Observed {observed}" }
                             }
@@ -166,12 +186,14 @@ pub fn NodesTab() -> Element {
                                 Ico { icon: Icon::RefreshCw, size: 16 }
                                 "Refresh"
                             }
-                            button {
-                                class: "btn",
-                                disabled: true,
-                                title: "Membership changes need a permission check and an impact preview, which are not designed yet",
-                                "Manage membership"
-                                Ico { icon: Icon::ChevronDown, size: 16 }
+                            if ops {
+                                button {
+                                    class: "btn",
+                                    disabled: true,
+                                    title: "Membership changes need a permission check and an impact preview, which are not designed yet",
+                                    "Manage membership"
+                                    Ico { icon: Icon::ChevronDown, size: 16 }
+                                }
                             }
                         }
                         AsyncView {
@@ -188,9 +210,10 @@ pub fn NodesTab() -> Element {
                                     thead {
                                         tr {
                                             th { "Node" }
-                                            th { "Endpoint" }
+                                            th { title: "The address peers reach the member at. On NodeDB this is the Raft transport, not a client endpoint.", "Peer address" }
+                                            th { title: "The state node {on} holds for the member", "Node state" }
+                                            th { title: "Node {on}'s circuit breaker to the member", "Circuit from node {on}" }
                                             th { "Zone" }
-                                            th { "State" }
                                             th { "Last seen" }
                                         }
                                     }
@@ -210,10 +233,11 @@ pub fn NodesTab() -> Element {
                                                             w.group = None;
                                                         },
                                                         td { class: "key", "{m.name}" }
-                                                        td { class: "mono", "{m.endpoint}" }
-                                                        td { "{m.zone}" }
-                                                        td { span { class: "status", {state_marker(m.state)} "{m.state.label()}" } }
-                                                        td { "{ago(m.last_seen_secs)}" }
+                                                        td { class: "mono", "{m.address}" }
+                                                        td { span { class: "status", {state_marker(m.state.tone())} "{m.state.label()}" } }
+                                                        td { StatusText { tone: m.link.tone(), text: m.link.label() } }
+                                                        td { {or_not_reported(m.zone.clone(), |z| z)} }
+                                                        td { {or_not_reported(m.last_seen_secs, ago)} }
                                                     }
                                                 }
                                             }
@@ -222,7 +246,7 @@ pub fn NodesTab() -> Element {
                                 }
                             }
                             div { class: "dt-footer",
-                                "{counts.0} configured nodes · {counts.1} reachable"
+                                "{counts.0} members · {counts.1} active, as node {on} holds them"
                             }
                         }
                     }
@@ -232,7 +256,7 @@ pub fn NodesTab() -> Element {
                         id: "groups",
                         title: "Replication groups",
                         size: GROUPS_SIZE,
-                        div { class: "panel-subtitle", "Groups hosted on {selected_name}" }
+                        div { class: "panel-subtitle", "Groups hosted on {selected_name}, as {selected_name} sees them" }
                         AsyncView {
                             loading: group_state.is_loading(),
                             empty: group_state.is_empty() && selected.is_some(),
@@ -258,7 +282,6 @@ pub fn NodesTab() -> Element {
                                             {
                                                 let id = g.group.clone();
                                                 let is_selected = group.as_ref().is_some_and(|s| s.group == g.group);
-                                                let dot = if g.state.healthy() { "status-dot ok" } else { "status-dot warn" };
                                                 rsx! {
                                                     tr {
                                                         key: "{g.group}",
@@ -268,8 +291,15 @@ pub fn NodesTab() -> Element {
                                                         td { class: "key", "{g.group}" }
                                                         td { "{g.kind.label()}" }
                                                         td { "{g.role_here.label()}" }
-                                                        td { "{g.leader}" }
-                                                        td { span { class: "status", span { class: "{dot}" } "{g.state.label()}" } }
+                                                        td { "{g.leader.as_deref().unwrap_or(\"none\")}" }
+                                                        td {
+                                                            match g.state {
+                                                                Some(st) => rsx! {
+                                                                    StatusText { tone: if st.healthy() { Tone::Ok } else { Tone::Warn }, text: st.label() }
+                                                                },
+                                                                None => rsx! { NotReported { why: "NodeDB reports no member's lag behind its leader" } },
+                                                            }
+                                                        }
                                                     }
                                                 }
                                             }
@@ -301,8 +331,8 @@ pub fn NodesTab() -> Element {
                     id: "details",
                     title: "Node details",
                     size: DETAILS_SIZE,
-                    if let Some(m) = selected {
-                        NodeDetails { member: m, group }
+                    if let (Some(m), Some(o)) = (selected, observer) {
+                        NodeDetails { member: m, observer: o, group }
                     }
                 }
             }
@@ -317,7 +347,7 @@ mod tests {
     use crate::services::cluster_data::ClusterData;
 
     #[tokio::test]
-    async fn filter_matches_name_endpoint_and_zone() {
+    async fn filter_matches_name_address_and_zone() {
         let svc = MockConnectionService::ready();
         let list = svc.cluster_members().await.expect("members");
         assert_eq!(matching(&list.members, "").len(), list.members.len());
@@ -336,5 +366,17 @@ mod tests {
         assert_eq!(pick(Some("sequencer-0")).as_deref(), Some("sequencer-0"));
         // A group this member does not host falls back, never shows stale.
         assert_eq!(pick(Some("data-99")).as_deref(), Some("data-12"));
+    }
+
+    #[tokio::test]
+    async fn the_default_member_is_the_observer() {
+        let svc = MockConnectionService::ready();
+        let mut list = svc.cluster_members().await.expect("members");
+        assert_eq!(pick_member(&list, None).as_deref(), Some("nd_01"));
+        assert_eq!(pick_member(&list, Some("nd_03")).as_deref(), Some("nd_03"));
+        list.observer.node_id = "nd_04".into();
+        assert_eq!(pick_member(&list, Some("gone")).as_deref(), Some("nd_04"));
+        list.observer.node_id = "unlisted".into();
+        assert_eq!(pick_member(&list, None).as_deref(), Some("nd_01"));
     }
 }
