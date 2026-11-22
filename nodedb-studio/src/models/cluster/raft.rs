@@ -154,9 +154,15 @@ impl RaftGroup {
     }
 
     /// Voters the observer reaches. `None` when the members are not
-    /// reported or the observer cannot say for one of them.
+    /// reported, the observer cannot say for one of them, or the listed
+    /// voters disagree with `voter_count`. On NodeDB the list comes from
+    /// the routing table and the count from Raft: during a membership
+    /// change they differ, and either quorum would be a guess.
     pub fn reachable_voters(&self) -> Option<u32> {
         self.peers.as_ref()?;
+        if self.voters().len() != self.voter_count as usize {
+            return None;
+        }
         self.voters()
             .iter()
             .map(|p| p.link.reached())
@@ -366,6 +372,24 @@ mod tests {
         g.peers = None;
         assert_eq!(g.health(), None);
         assert_eq!(g.quorum(), 2);
+    }
+
+    /// During a membership change the routing members and the Raft voter
+    /// count differ. Counting one against the other's quorum would give a
+    /// false Degraded or a false Healthy.
+    #[test]
+    fn health_is_not_reported_when_members_and_voter_count_disagree() {
+        let mut g = group(vec![
+            peer("a", PeerRole::Leader, 100, true),
+            peer("b", PeerRole::Voter, 100, true),
+            peer("c", PeerRole::Voter, 100, true),
+        ]);
+        assert_eq!(g.health(), Some(GroupHealth::Healthy));
+        g.voter_count = 4;
+        assert_eq!(g.reachable_voters(), None);
+        assert_eq!(g.health(), None);
+        g.voter_count = 2;
+        assert_eq!(g.health(), None);
     }
 
     #[test]
