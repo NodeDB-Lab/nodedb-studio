@@ -25,7 +25,7 @@ use crate::state::gates::use_caps;
 use crate::state::workspace::Surface;
 use crate::views::cluster::common::{GroupId, NotReported, SeenBy, or_not_reported};
 use crate::views::cluster::node_details::NodeDetails;
-use crate::views::cluster::reads::use_hosted_groups;
+use crate::views::cluster::reads::{settled_observer, use_hosted_groups};
 use crate::views::events::common::StatusText;
 
 const SURFACE: Surface = Surface::Cluster(ClusterTab::Nodes);
@@ -133,7 +133,7 @@ pub fn NodesTab() -> Element {
         .as_ref()
         .map(|l| (l.members.len(), l.active()))
         .unwrap_or_default();
-    let observer = list.as_ref().map(|l| l.observer.clone());
+    let observer = settled_observer(&members, |l| l.observer.clone());
     let on = observer
         .as_ref()
         .map(|o| o.node_id.clone())
@@ -196,7 +196,10 @@ pub fn NodesTab() -> Element {
                             error: state.error_message(),
                             retriable: state.is_retriable(),
                             on_retry: move |_| members.restart(),
-                            empty_message: "This cluster reports no configured members.",
+                            empty_message: match observer.as_ref() {
+                                Some(o) => format!("Node {} reports no configured members.", o.node_id),
+                                None => "The connected node reports no configured members.".to_string(),
+                            },
                         }
                         if let Some(l) = list.as_ref() {
                             div { class: "dt-wrap",

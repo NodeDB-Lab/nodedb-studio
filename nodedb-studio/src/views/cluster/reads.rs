@@ -4,7 +4,7 @@ use std::future::Future;
 
 use dioxus::prelude::*;
 
-use crate::models::cluster::{ClusterMembers, HostedGroup};
+use crate::models::cluster::{ClusterMembers, HostedGroup, Observer};
 use crate::services::error::StudioError;
 
 /// The groups the selected member hosts, as it sees them.
@@ -39,6 +39,36 @@ where
     })
 }
 
+/// The node a settled read answered for, empty or not. `AsyncState`
+/// drops an empty value, so a panel that took its observer from the loaded
+/// value lost its "As seen by" label exactly when it said the list was
+/// empty. `None` while a read runs or after it failed.
+pub fn settled_observer<T>(
+    resource: &Resource<Result<T, StudioError>>,
+    observer: impl FnOnce(&T) -> Observer,
+) -> Option<Observer> {
+    if *resource.state().read() == UseResourceState::Pending {
+        return None;
+    }
+    observer_of(resource.read().as_ref(), observer)
+}
+
+fn observer_of<T>(
+    value: Option<&Result<T, StudioError>>,
+    observer: impl FnOnce(&T) -> Observer,
+) -> Option<Observer> {
+    value.and_then(|r| r.as_ref().ok()).map(observer)
+}
+
+/// `Node 1 hosts no Raft group.`, or the server-neutral sentence before
+/// the observer is known.
+pub fn empty_groups(observer: Option<&Observer>) -> String {
+    match observer {
+        Some(o) => format!("Node {} hosts no Raft group.", o.node_id),
+        None => "The connected node hosts no Raft group.".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::{Cell, RefCell};
@@ -47,7 +77,8 @@ mod tests {
     use dioxus_core::NoOpMutations;
 
     use super::*;
-    use crate::models::cluster::Observer;
+    use crate::models::cluster::raft::RaftGroups;
+    use crate::services::async_state::AsyncState;
 
     type MembersRead = Resource<Result<ClusterMembers, StudioError>>;
 
@@ -133,5 +164,27 @@ mod tests {
         dom.in_runtime(|| conn.set(Some("cluster-b".to_string())));
         settle(&mut dom).await;
         assert!(probe.reads.get() >= 3, "a connection switch");
+    }
+
+    /// An empty group list still names whose list it is.
+    #[test]
+    fn an_empty_read_keeps_its_observer() {
+        let empty = RaftGroups {
+            observed_at: 0,
+            revision: None,
+            observer: Observer {
+                node_id: "2".into(),
+            },
+            groups: Vec::new(),
+        };
+        // The loaded value is gone in the Empty state: that lost the badge.
+        let state = AsyncState::from_value(Some(Ok(empty.clone())));
+        assert!(state.is_empty() && state.loaded().is_none());
+        let seen = observer_of(Some(&Ok(empty)), |g| g.observer.clone());
+        assert_eq!(seen.as_ref().map(|o| o.node_id.as_str()), Some("2"));
+        assert_eq!(empty_groups(seen.as_ref()), "Node 2 hosts no Raft group.");
+        let failed: Option<&Result<RaftGroups, StudioError>> =
+            Some(&Err(StudioError::NotConnected));
+        assert_eq!(observer_of(failed, |g| g.observer.clone()), None);
     }
 }

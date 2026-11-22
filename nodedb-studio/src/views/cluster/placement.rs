@@ -27,6 +27,7 @@ use crate::views::cluster::common::{SeenBy, or_not_reported};
 use crate::views::cluster::place_details::{NodesHealth, VShardDetails};
 use crate::views::cluster::place_rebalance::Rebalance;
 use crate::views::cluster::place_review::PlanSheet;
+use crate::views::cluster::reads::settled_observer;
 use crate::views::events::common::{NoticeLine, StatusText};
 
 const SURFACE: Surface = Surface::Cluster(ClusterTab::Placement);
@@ -64,7 +65,7 @@ pub fn PlacementTab() -> Element {
         .as_ref()
         .map(|p| format!("Observed {} UTC", clock_second(p.observed_at, 0)))
         .unwrap_or_default();
-    let observer = list.as_ref().map(|p| p.observer.clone());
+    let observer = settled_observer(&placement, |p| p.observer.clone());
     // NodeDB ties no vShard to a collection: then the filters and the
     // column have nothing to show.
     let sources = list
@@ -156,7 +157,7 @@ pub fn PlacementTab() -> Element {
                             error: state.error_message(),
                             retriable: state.is_retriable(),
                             on_retry: move |_| placement.restart(),
-                            empty_message: "No vShard is placed. Create a collection to place one.",
+                            empty_message: "The connected node's routing table lists no vShard.",
                         }
                         if list.is_some() {
                             div { class: "dt-wrap",

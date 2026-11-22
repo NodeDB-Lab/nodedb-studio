@@ -23,6 +23,7 @@ use crate::state::workspace::Surface;
 use crate::views::cluster::common::{GroupId, NotReported, SeenBy};
 use crate::views::cluster::raft_details::RaftDetails;
 use crate::views::cluster::raft_review::TransferSheet;
+use crate::views::cluster::reads::{empty_groups, settled_observer};
 use crate::views::events::common::{NoticeLine, StatusText};
 
 const SURFACE: Surface = Surface::Cluster(ClusterTab::RaftGroups);
@@ -84,7 +85,7 @@ pub fn RaftTab() -> Element {
         .as_ref()
         .map(|l| format!("Observed {} UTC", clock_second(l.observed_at, 0)))
         .unwrap_or_default();
-    let observer = list.as_ref().map(|l| l.observer.clone());
+    let observer = settled_observer(&groups, |l| l.observer.clone());
     let on = observer
         .as_ref()
         .map(|o| o.node_id.clone())
@@ -131,7 +132,7 @@ pub fn RaftTab() -> Element {
                         error: state.error_message(),
                         retriable: state.is_retriable(),
                         on_retry: move |_| groups.restart(),
-                        empty_message: "This cluster reports no Raft group.",
+                        empty_message: empty_groups(observer.as_ref()),
                     }
                     if let Some(l) = list.as_ref() {
                         {
